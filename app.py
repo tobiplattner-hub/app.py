@@ -19,7 +19,6 @@ st.markdown("""
 # 2. Verbindung zum Google Sheet
 # Kopiere deinen Google Sheet Link hier rein:
 url = "https://docs.google.com/spreadsheets/d/1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo/edit?usp=sharing"
-
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Funktion zum Laden der Preisliste
