@@ -4,35 +4,61 @@ from datetime import date
 # 1. Seiteneinstellungen
 st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# 2. Login-Funktion
-def check_password():
-    def password_entered():
-        if st.session_state["username"] == "LS25-Team" and st.session_state["password"] == "unser-hof-2025":
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-            del st.session_state["username"]
-        else:
-            st.session_state["password_correct"] = False
-    if "password_correct" not in st.session_state:
-        st.title("🔐 LS25 Hof-Login")
-        st.text_input("Benutzername", on_change=password_entered, key="username")
-        st.text_input("Passwort", type="password", on_change=password_entered, key="password")
-        return False
-    return st.session_state.get("password_correct", False)
+# 2. Login-Funktion (NUR MIT BENUTZERNAME)
+def check_user():
+    if "user_correct" not in st.session_state:
+        st.session_state["user_correct"] = False
 
-if check_password():
+    if not st.session_state["user_correct"]:
+        st.title("🔐 LS25 Hof-Login")
+        # Hier den Benutzernamen abfragen
+        username = st.text_input("Bitte Benutzernamen eingeben:", key="login_name")
+        
+        if st.button("Einloggen"):
+            # HIER kannst du den erlaubten Namen ändern
+            if username == "LS25-Team": 
+                st.session_state["user_correct"] = True
+                st.rerun()
+            else:
+                st.error("Unbekannter Benutzername.")
+        return False
+    return True
+
+# 3. Hauptprogramm
+if check_user():
     # --- SESSION STATE FÜR DIE RECHNUNG ---
     if "rechnungs_posten" not in st.session_state:
         st.session_state.rechnungs_posten = []
 
-    # Navigation
+    # Navigation in der Seitenleiste
     bereich = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Mehrfach-Rechnung"])
+    
+    # Logout-Button ganz unten in der Sidebar
+    if st.sidebar.button("Abmelden"):
+        st.session_state["user_correct"] = False
+        st.rerun()
 
+    # --- BEREICH: ERNTE & FELDER ---
     if bereich == "💰 Ernte & Felder":
         st.title("🚜 Ernte- & Feld-Manager")
-        st.info("Hier kannst du deine Silostände und Feldverbräuche berechnen.")
-        # Platz für deinen Ernte-Code...
+        
+        col_ernte, col_feld = st.columns(2)
+        
+        with col_ernte:
+            st.header("Erlös-Rechner")
+            menge = st.number_input("Liter im Silo:", value=10000, step=1000)
+            preis_pro_1000 = st.number_input("Preis pro 1.000L (€):", value=1200)
+            erloes = (menge / 1000) * preis_pro_1000
+            st.metric("Dein Erlös", f"{erloes:,.2f} €")
 
+        with col_feld:
+            st.header("Verbrauchs-Rechner")
+            hektar = st.number_input("Feldgröße in Hektar:", value=1.0, step=0.1)
+            st.write(f"🧪 Düngerbedarf: **{int(hektar * 160)} L**")
+            st.write(f"🌾 Saatgutbedarf: **{int(hektar * 150)} L**")
+            st.warning(f"⚪ Kalkbedarf: **{int(hektar * 2000)} L**")
+
+    # --- BEREICH: MEHRFACH-RECHNUNG ---
     elif bereich == "📋 Mehrfach-Rechnung":
         st.title("📄 Rechnungs-Ersteller")
         
@@ -56,13 +82,13 @@ if check_password():
         # Kundendaten & Rabatt
         c1, c2 = st.columns(2)
         kunde = c1.text_input("Empfänger:", value="Hof Name")
-        rabatt = c2.slider("Rabatt (%)", 0, 50, 0)
+        rabatt = c2.slider("Rabatt auf Gesamtsumme (%)", 0, 50, 0)
 
         # Die Rechnungsvorschau
         if st.session_state.rechnungs_posten:
             st.divider()
             with st.container(border=True):
-                # Header
+                # Header mit Logo
                 h1, h2 = st.columns([1, 1])
                 try:
                     h1.image("logo.png", width=150)
@@ -74,7 +100,7 @@ if check_password():
                 
                 st.write("---")
                 
-                # Tabelle manuell mit Markdown bauen
+                # Tabelle manuell bauen
                 tabelle = "| Beschreibung | Menge | Preis/h | Gesamt |\n| :--- | :--- | :--- | :--- |\n"
                 summe_netto = 0
                 for p in st.session_state.rechnungs_posten:
