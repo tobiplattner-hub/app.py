@@ -1,176 +1,127 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 from datetime import date
+import pandas as pd
 import os
 
-# 1. Seiteneinstellungen & Druck-Design
+# 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# CSS für den "Nur-Rechnung-Drucken" Effekt
+# --- CSS für sauberen Druck ---
 st.markdown("""
     <style>
     @media print {
-        /* Blendet alles aus außer den Bereich mit der ID 'print-area' */
-        header, [data-testid="stSidebar"], .stButton, .stExpander, footer, .stTabs {
-            display: none !important;
-        }
-        .main .block-container {
-            padding-top: 0rem !important;
-        }
-        .print-only {
-            display: block !important;
-        }
+        header, [data-testid="stSidebar"], .stButton, .stExpander, footer { display: none !important; }
+        .main .block-container { padding-top: 0rem !important; }
     }
-    .print-only { display: none; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Login-Funktion
-def check_user():
-    if "user_correct" not in st.session_state:
-        st.session_state["user_correct"] = False
-    if not st.session_state["user_correct"]:
-        st.title("🔐 LS25 Hof-Login")
-        username = st.text_input("Benutzername:", key="login_name")
-        if st.button("Einloggen"):
-            if username == "LS25-Team": 
-                st.session_state["user_correct"] = True
-                st.rerun()
-            else:
-                st.error("Unbekannter Benutzername.")
-        return False
-    return True
+# 2. Verbindung zum Google Sheet
+# ERSETZE DIESEN LINK DURCH DEINEN KOPIERTEN LINK:
+URL = "https://docs.google.com/spreadsheets/d/1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo/edit?usp=sharing"
 
-if check_user():
-    # --- INITIALISIERUNG ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Preisliste laden
+@st.cache_data(ttl=10) # Schaut alle 10 Sekunden nach Updates
+def load_data():
+    prices = conn.read(spreadsheet=URL, worksheet="Preisliste")
+    archive = conn.read(spreadsheet=URL, worksheet="Archiv")
+    return prices, archive
+
+# 3. Login
+if "user_correct" not in st.session_state:
+    st.session_state["user_correct"] = False
+
+if not st.session_state["user_correct"]:
+    st.title("🔐 LS25 Hof-Login")
+    username = st.text_input("Benutzername:")
+    if st.button("Einloggen"):
+        if username == "LS25-Team":
+            st.session_state["user_correct"] = True
+            st.rerun()
+        else:
+            st.error("Falscher Name")
+    st.stop()
+
+# --- DATEN LADEN ---
+try:
+    df_preise, df_archiv = load_data()
+    preis_dict = dict(zip(df_preise['Geraet'], df_preise['Preis']))
+except Exception as e:
+    st.error(f"Verbindung zum Google Sheet fehlgeschlagen. Link prüfen! Fehler: {e}")
+    st.stop()
+
+# --- NAVIGATION ---
+menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungen", "📂 Archiv (Team)"])
+
+# --- BEREICH: RECHNUNGEN ---
+if menu == "📋 Rechnungen":
+    st.title("📄 Team-Abrechnung")
+    
     if "rechnungs_posten" not in st.session_state:
         st.session_state.rechnungs_posten = []
-    
-    # Grund-Preisliste falls noch nicht vorhanden
-    if "preisliste" not in st.session_state:
-        st.session_state.preisliste = {
-            "Traktor (Mittel)": 120.0,
-            "Traktor (Groß)": 160.0,
-            "Mähdrescher": 280.0
-        }
 
-    menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "⚙️ Preisliste bearbeiten"])
-
-    # --- BEREICH 1: ERNTE & FELDER (KALK ETC.) ---
-    if menu == "💰 Ernte & Felder":
-        st.title("🚜 Ernte- & Feld-Manager")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.header("💰 Erlös-Rechner")
-            frucht_daten = {"Weizen": 1100, "Gerste": 1000, "Raps": 2100, "Mais": 1050, "Sojabohnen": 3200}
-            frucht = st.selectbox("Fruchtart:", list(frucht_daten.keys()))
-            menge = st.number_input("Liter im Silo:", value=20000, step=1000)
-            erloes = (menge / 1000) * frucht_daten[frucht]
-            st.metric("Voraussichtlicher Erlös", f"{erloes:,.2f} €")
-            
-        with col2:
-            st.header("🧪 Verbrauchs-Rechner")
-            hektar = st.number_input("Feldgröße (Hektar):", value=1.0, step=0.1, min_value=0.1)
-            st.write(f"💧 Dünger: **{int(hektar * 160)} L**")
-            st.write(f"🌾 Saatgut: **{int(hektar * 150)} L**")
-            st.warning(f"⚪ Kalk: **{int(hektar * 2000)} L**")
-
-    # --- BEREICH 2: PREISLISTE BEARBEITEN (MANUELL HINZUFÜGEN) ---
-    elif menu == "⚙️ Preisliste bearbeiten":
-        st.title("⚙️ Maschinen-Verleih Preisliste")
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([2, 1, 1])
+        auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()))
+        std = c2.number_input("Stunden:", min_value=0.5, value=1.0, step=0.5)
+        e_preis = c3.number_input("Preis (€):", value=float(preis_dict.get(auswahl, 0)))
         
-        # Neue Maschine hinzufügen
-        with st.expander("🆕 Neue Maschine zur Liste hinzufügen"):
-            neuer_name = st.text_input("Name der Maschine:")
-            neuer_preis = st.number_input("Stundensatz (€):", min_value=0.0, value=50.0)
-            if st.button("Maschine speichern"):
-                if neuer_name:
-                    st.session_state.preisliste[neuer_name] = neuer_preis
-                    st.success(f"{neuer_name} wurde zur Auswahl hinzugefügt!")
-                    st.rerun()
+        if st.button("Hinzufügen"):
+            st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_preis, "gesamt": std * e_preis})
+            st.rerun()
 
-        st.write("---")
-        st.subheader("Bestehende Preise ändern")
-        for geraet in list(st.session_state.preisliste.keys()):
-            col_g, col_p, col_d = st.columns([3, 2, 1])
-            with col_g: st.write(f"**{geraet}**")
-            with col_p: 
-                new_p = st.number_input("€/h", value=float(st.session_state.preisliste[geraet]), key=f"p_{geraet}")
-                st.session_state.preisliste[geraet] = new_p
-            with col_d:
-                if st.button("🗑️", key=f"del_{geraet}"):
-                    del st.session_state.preisliste[geraet]
-                    st.rerun()
+    kunde = st.text_input("Kunde:", value="Hof Bergmann")
+    rabatt = st.slider("Rabatt (%)", 0, 50, 0)
 
-    # --- BEREICH 3: RECHNUNGS-ERSTELLER ---
-    elif menu == "📋 Rechnungs-Ersteller":
-        st.title("📄 Rechnungs-Erstellung")
-        
+    if st.session_state.rechnungs_posten:
+        # Rechnungs-Vorschau
+        summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
+        endbetrag = summe * (1 - rabatt/100)
+
         with st.container(border=True):
-            st.subheader("➕ Posten hinzufügen")
-            c_a, c_b, c_c = st.columns([2, 1, 1])
-            with c_a:
-                auswahl = st.selectbox("Gerät wählen:", options=list(st.session_state.preisliste.keys()))
-            with c_b:
-                std = st.number_input("Stunden:", min_value=0.0, value=1.0, step=0.5)
-            with c_c:
-                p_vorschlag = st.session_state.preisliste[auswahl]
-                e_preis = st.number_input("Einzelpreis (€):", value=float(p_vorschlag))
+            col_l, col_r = st.columns([1,1])
+            with col_l:
+                if os.path.exists("logo.png"): st.image("logo.png", width=150)
+                else: st.write("### 🚜 LU-BETRIEB")
+            with col_r:
+                st.write(f"**Datum:** {date.today().strftime('%d.%m.%Y')}\n\n**Kunde:** {kunde}")
             
-            if st.button("Hinzufügen"):
-                st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_preis, "gesamt": std * e_preis})
-                st.rerun()
+            st.write("---")
+            for p in st.session_state.rechnungs_posten:
+                st.write(f"{p['name']} | {p['std']}h x {p['preis']}€ = **{p['gesamt']:.2f}€**")
+            st.write("---")
+            st.write(f"### Gesamtbetrag: {endbetrag:.2f} €")
 
-        kunde = st.text_input("Empfänger / Hof:", value="Hof Bergmann")
-        rabatt = st.slider("Rabatt (%)", 0, 50, 0)
-
-        if st.session_state.rechnungs_posten:
-            st.info("💡 Klicke unten auf 'Rechnung drucken' und wähle 'Als PDF speichern'.")
+        if st.button("✅ Rechnung abschließen & Speichern"):
+            # Daten für Google Sheet Archiv vorbereiten
+            neuer_eintrag = pd.DataFrame([{
+                "Datum": str(date.today()),
+                "Kunde": kunde,
+                "Summe": f"{endbetrag:.2f}€",
+                "Details": ", ".join([p['name'] for p in st.session_state.rechnungs_posten])
+            }])
             
-            # --- DER RECHNUNGS-BLOCK (Was gedruckt wird) ---
-            st.markdown('<div id="print-area">', unsafe_allow_html=True)
-            with st.container(border=True):
-                col_l, col_r = st.columns([1, 1])
-                with col_l:
-                    if os.path.exists("logo.png"):
-                        st.image("logo.png", width=160)
-                    else:
-                        st.write("### 🚜 LU-BETRIEB")
-                with col_r:
-                    st.write(f"**Datum:** {date.today().strftime('%d.%m.%Y')}")
-                    st.write(f"**Kunde:** {kunde}")
+            # Im Archiv-Blatt speichern
+            updated_df = pd.concat([df_archiv, neuer_eintrag], ignore_index=True)
+            conn.update(spreadsheet=URL, worksheet="Archiv", data=updated_df)
+            
+            st.success("Rechnung wurde im Google Sheet archiviert!")
+            st.session_state.rechnungs_posten = []
+            st.cache_data.clear() # Cache leeren, damit andere es sofort sehen
+            st.rerun()
 
-                st.write("## RECHNUNG")
-                st.write("---")
-                
-                tabelle = "| Beschreibung | Menge | Preis/h | Gesamt |\n| :--- | :--- | :--- | :--- |\n"
-                summe_n = 0
-                for p in st.session_state.rechnungs_posten:
-                    tabelle += f"| {p['name']} | {p['std']} h | {p['preis']:.2f} € | {p['gesamt']:.2f} € |\n"
-                    summe_n += p['gesamt']
-                st.markdown(tabelle)
-                
-                abzug = summe_n * (rabatt / 100)
-                total = summe_n - abzug
-                
-                st.write("---")
-                e1, e2 = st.columns([2, 1])
-                with e2:
-                    st.write(f"Netto: {summe_n:.2f} €")
-                    if rabatt > 0: st.write(f"Rabatt: -{abzug:.2f} €")
-                    st.write(f"### Gesamt: {total:.2f} €")
-            st.markdown('</div>', unsafe_allow_html=True)
+# --- BEREICH: ARCHIV ---
+elif menu == "📂 Archiv (Team)":
+    st.title("📂 Alle Rechnungen")
+    st.write("Hier sehen alle Teammitglieder die letzten Buchungen:")
+    st.table(df_archiv.tail(10)) # Zeigt die letzten 10 Rechnungen
 
-            # --- AKTIONEN ---
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                # Dieser Button nutzt JavaScript, um den Druckdialog zu öffnen
-                st.button("🖨️ Rechnung drucken / PDF", on_click=lambda: st.write('<script>window.print();</script>', unsafe_allow_html=True))
-                st.caption("Alternativ: Strg + P drücken")
-            with col_btn2:
-                if st.button("🗑️ Rechnung leeren"):
-                    st.session_state.rechnungs_posten = []
-                    st.rerun()
-
-    if st.sidebar.button("Abmelden"):
-        st.session_state["user_correct"] = False
-        st.rerun()
+# --- BEREICH: ERNTE ---
+elif menu == "💰 Ernte & Felder":
+    st.title("🚜 Ernte & Kalk")
+    hektar = st.number_input("Hektar:", value=1.0)
+    st.write(f"⚪ Kalkbedarf: **{int(hektar * 2000)} L**")
+    st.info("Diese Daten sind aktuell nur für dich lokal berechnet.")
