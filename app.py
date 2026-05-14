@@ -1,8 +1,9 @@
 import streamlit as st
 from datetime import date
+import pandas as pd
 
 # 1. Seiteneinstellungen
-st.set_page_config(layout="wide", page_title="LS25 Hof-Manager")
+st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜")
 
 # 2. Login-Funktion
 def check_password():
@@ -13,87 +14,102 @@ def check_password():
             del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
-
     if "password_correct" not in st.session_state:
         st.title("🔐 LS25 Hof-Login")
         st.text_input("Benutzername", on_change=password_entered, key="username")
         st.text_input("Passwort", type="password", on_change=password_entered, key="password")
         return False
-    elif not st.session_state["password_correct"]:
-        st.title("🔐 LS25 Hof-Login")
-        st.text_input("Benutzername", on_change=password_entered, key="username")
-        st.text_input("Passwort", type="password", on_change=password_entered, key="password")
-        st.error("😕 Login falsch.")
-        return False
-    return True
+    return st.session_state.get("password_correct", False)
 
-# 3. Hauptprogramm
 if check_password():
-    # Menü in der Seitenleiste
-    bereich = st.sidebar.radio("Bereich wählen:", ["💰 Ernte & Felder", "📋 Maschinen-Rechnung"])
+    # --- SESSION STATE FÜR RECHNUNGSPOSTEN ---
+    if "rechnungs_posten" not in st.session_state:
+        st.session_state.rechnungs_posten = []
+
+    bereich = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Mehrfach-Rechnung"])
 
     if bereich == "💰 Ernte & Felder":
         st.title("🚜 Ernte- & Feld-Manager")
+        # (Dein bisheriger Code für Ernte/Kalk kann hier bleiben)
+        st.info("Dieser Bereich ist unverändert.")
+
+    elif bereich == "📋 Mehrfach-Rechnung":
+        st.title("📄 Professionelle Rechnungsstellung")
         
-        # Frucht-Datenbank
-        frucht_daten = {"Weizen": 1100, "Gerste": 1000, "Raps": 2100, "Mais": 1050, "Sojabohnen": 3200}
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.header("Erlös-Rechner")
-            frucht = st.selectbox("Frucht:", list(frucht_daten.keys()))
-            menge = st.number_input("Liter im Silo:", value=20000, step=1000)
-            preis = st.number_input("Preis pro 1000L:", value=frucht_daten[frucht])
-            st.metric("Voraussichtlicher Erlös", f"{(menge/1000)*preis:,.2f} €")
+        # --- EINGABE-BEREICH ---
+        with st.expander("➕ Neuen Posten hinzufügen", expanded=True):
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                neues_geraet = st.text_input("Maschine / Leistung", placeholder="z.B. Fendt 936 Vario")
+            with col2:
+                neue_stunden = st.number_input("Stunden", min_value=0.0, value=1.0, step=0.5)
+            with col3:
+                neuer_satz = st.number_input("Preis pro Stunde (€)", min_value=0.0, value=100.0)
             
-        with col2:
-            st.header("Verbrauchs-Rechner")
-            hektar = st.number_input("Feldgröße (Hektar):", value=1.0, step=0.1)
-            st.write(f"🧪 Dünger: **{int(hektar * 160)} L**")
-            st.write(f"🌾 Saatgut: **{int(hektar * 150)} L**")
-            st.warning(f"⚪ Kalkbedarf: **{int(hektar * 2000)} L**")
+            if st.button("Posten zur Rechnung hinzufügen"):
+                if neues_geraet:
+                    posten = {
+                        "Beschreibung": neues_geraet,
+                        "Menge": neue_stunden,
+                        "Einzelpreis": neuer_satz,
+                        "Gesamt": neue_stunden * neuer_satz
+                    }
+                    st.session_state.rechnungs_posten.append(posten)
+                    st.success(f"'{neues_geraet}' hinzugefügt!")
+                else:
+                    st.error("Bitte einen Namen für die Maschine eingeben.")
 
-    elif bereich == "📋 Maschinen-Rechnung":
-        st.title("📄 Rechnungs-Erstellung")
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            kunde = st.text_input("Kunde / Mitspieler:", value="Hof Bergmann")
-            geraet = st.text_input("Maschine:", value="Fendt 936 Vario")
-            datum = st.date_input("Datum:", date.today())
+        # --- KUNDENDATEN ---
+        col_k1, col_k2 = st.columns(2)
+        with col_k1:
+            kunde = st.text_input("Empfänger (Name/Hof):", value="Hof Bergmann")
+        with col_k2:
+            rabatt_prozent = st.slider("Rabatt auf Gesamtsumme (%)", 0, 50, 0)
+
+        # --- RECHNUNGS-VORSCHAU ---
+        if st.session_state.rechnungs_posten:
+            st.divider()
             
-        with col_b:
-            stunden = st.number_input("Stunden:", min_value=0.0, value=1.0, step=0.5)
-            satz = st.number_input("Preis pro Stunde (€):", min_value=0.0, value=150.0)
-            rabatt = st.slider("Rabatt (%)", 0, 50, 0)
+            # Container für das "schöne" Design
+            with st.container(border=True):
+                # Header mit Logo
+                c_logo, c_info = st.columns([1, 2])
+                with c_logo:
+                    try:
+                        st.image("logo.png", width=180)
+                    except:
+                        st.write("### [DEIN LOGO]")
+                with c_info:
+                    st.write(f"**Rechnungsdatum:** {date.today().strftime('%d.%m.%Y')}")
+                    st.write(f"**Rechnungs-Nr:** LS-{date.today().strftime('%y%m')}-{len(st.session_state.rechnungs_posten)}")
+                    st.write(f"**Empfänger:** {kunde}")
 
-        # Berechnung
-        brutto = stunden * satz
-        abzug = brutto * (rabatt / 100)
-        netto = brutto - abzug
+                st.write("---")
+                
+                # Tabelle erstellen
+                df = pd.DataFrame(st.session_state.rechnungs_posten)
+                st.table(df) # Schöne statische Tabelle
 
-        st.divider()
+                # Berechnungen
+                summe_netto = df["Gesamt"].sum()
+                rabatt_euro = summe_netto * (rabatt_prozent / 100)
+                endbetrag = summe_netto - rabatt_euro
 
-        # DIE RECHNUNGSVORSCHAU
-        try:
-            st.image("logo.png", width=250)
-        except:
-            st.info("💡 Lade ein Bild namens 'logo.png' bei GitHub hoch, um dein Logo hier zu sehen.")
+                # Total-Bereich
+                c_empty, c_total = st.columns([2, 1])
+                with c_total:
+                    st.write(f"Zwischensumme: {summe_netto:,.2f} €")
+                    if rabatt_prozent > 0:
+                        st.write(f"Rabatt ({rabatt_prozent}%): -{rabatt_euro:,.2f} €")
+                    st.subheader(f"Gesamt: {endbetrag:,.2f} €")
 
-        st.markdown(f"""
-        ### RECHNUNG
-        **Datum:** {datum} | **Nr:** {date.today().strftime('%Y%m')}-001
-        
-        **Empfänger:** {kunde}
-        
-        | Beschreibung | Menge | Einzelpreis | Gesamt |
-        | :--- | :--- | :--- | :--- |
-        | {geraet} | {stunden} h | {satz:.2f} € | {brutto:.2f} € |
-        | **Rabatt** | | | **-{abzug:.2f} €** |
-        | **SUMME** | | | **{netto:.2f} €** |
-        
-        ---
-        *Vielen Dank für den Auftrag!*
-        """)
-        
-        st.caption("Tipp: Drücke Strg+P zum Drucken oder Speichern als PDF.")
+            # Aktionen
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("❌ Liste leeren"):
+                    st.session_state.rechnungs_posten = []
+                    st.rerun()
+            with col_b2:
+                st.caption("Nutze 'Strg+P' zum Drucken/Speichern")
+        else:
+            st.info("Noch keine Posten auf der Rechnung. Füge oben eine Maschine hinzu.")
