@@ -22,7 +22,7 @@ st.markdown("""
     }
     .print-only { display: none; }
     </style>
-    """, unsafe_allow_value=True)
+    """, unsafe_allow_html=True)
 
 # 2. Login-Funktion
 def check_user():
