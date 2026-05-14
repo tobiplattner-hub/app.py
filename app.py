@@ -1,13 +1,12 @@
 import streamlit as st
+from datetime import date
 
 # 1. Seiteneinstellungen
 st.set_page_config(layout="wide", page_title="LS25 Hof-Manager")
 
 # 2. Login-Funktion
 def check_password():
-    """Gibt True zurück, wenn der Benutzer das richtige Passwort eingegeben hat."""
     def password_entered():
-        # HIER kannst du Benutzername und Passwort ändern
         if st.session_state["username"] == "LS25-Team" and st.session_state["password"] == "unser-hof-2025":
             st.session_state["password_correct"] = True
             del st.session_state["password"]
@@ -24,57 +23,77 @@ def check_password():
         st.title("🔐 LS25 Hof-Login")
         st.text_input("Benutzername", on_change=password_entered, key="username")
         st.text_input("Passwort", type="password", on_change=password_entered, key="password")
-        st.error("😕 Benutzername oder Passwort falsch.")
+        st.error("😕 Login falsch.")
         return False
-    else:
-        return True
+    return True
 
-# 3. Hauptprogramm (wird nur ausgeführt, wenn Login korrekt)
+# 3. Hauptprogramm
 if check_password():
-    st.balloons() # Kleiner Effekt beim erfolgreichen Login
-    st.success("Willkommen zurück auf dem Hof!")
-    st.title("🚜 Mein ultimativer LS25 Hof-Manager")
+    # Menü in der Seitenleiste
+    bereich = st.sidebar.radio("Bereich wählen:", ["💰 Ernte & Felder", "📋 Maschinen-Rechnung"])
 
-    # Datenbank für Preise
-    frucht_datenbank = {
-        "Weizen": 1100, "Gerste": 1000, "Hafer": 1200, "Raps": 2100,
-        "Sonnenblumen": 1900, "Sojabohnen": 3200, "Mais": 1050, 
-        "Kartoffeln": 350, "Zuckerrüben": 280, "Reis": 1500,
-        "Langkornreis": 1700
-    }
-
-    spalte_links, spalte_rechts = st.columns(2)
-
-    with spalte_links:
-        st.header("💰 Ernte- & Preisrechner")
-        ausgewaehlte_frucht = st.selectbox("Fruchtsorte auswählen:", options=list(frucht_datenbank.keys()))
-        standard_preis = frucht_datenbank[ausgewaehlte_frucht]
+    if bereich == "💰 Ernte & Felder":
+        st.title("🚜 Ernte- & Feld-Manager")
         
-        menge = st.number_input("Menge im Silo (Liter):", min_value=0, value=25000, step=1000)
-        aktueller_preis = st.number_input(f"Preis für {ausgewaehlte_frucht} (pro 1.000L):", min_value=0, value=standard_preis)
+        # Frucht-Datenbank
+        frucht_daten = {"Weizen": 1100, "Gerste": 1000, "Raps": 2100, "Mais": 1050, "Sojabohnen": 3200}
         
-        gesamterloes = (menge / 1000) * aktueller_preis
-        st.metric(label=f"Erlös für {ausgewaehlte_frucht}", value=f"{gesamterloes:,.2f} €")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.header("Erlös-Rechner")
+            frucht = st.selectbox("Frucht:", list(frucht_daten.keys()))
+            menge = st.number_input("Liter im Silo:", value=20000, step=1000)
+            preis = st.number_input("Preis pro 1000L:", value=frucht_daten[frucht])
+            st.metric("Voraussichtlicher Erlös", f"{(menge/1000)*preis:,.2f} €")
+            
+        with col2:
+            st.header("Verbrauchs-Rechner")
+            hektar = st.number_input("Feldgröße (Hektar):", value=1.0, step=0.1)
+            st.write(f"🧪 Dünger: **{int(hektar * 160)} L**")
+            st.write(f"🌾 Saatgut: **{int(hektar * 150)} L**")
+            st.warning(f"⚪ Kalkbedarf: **{int(hektar * 2000)} L**")
 
-    with spalte_rechts:
-        st.header("🌱 Feld- & Verbrauchsrechner")
-        feld_groesse = st.number_input("Feldgröße in Hektar (händisch):", min_value=0.0, value=2.5, step=0.1, format="%.2f")
+    elif bereich == "📋 Maschinen-Rechnung":
+        st.title("📄 Rechnungs-Erstellung")
         
-        st.write("---")
-        # Berechnung Verbrauch
-        duenger = feld_groesse * 160
-        saatgut = feld_groesse * 150
-        kalk = feld_groesse * 2000
-        
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.info(f"🧪 Dünger:\n**{int(duenger)} L**")
-        with c2:
-            st.info(f"🌾 Saatgut:\n**{int(saatgut)} L**")
-        with c3:
-            st.warning(f"⚪ Kalk:\n**{int(kalk)} L**")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            kunde = st.text_input("Kunde / Mitspieler:", value="Hof Bergmann")
+            geraet = st.text_input("Maschine:", value="Fendt 936 Vario")
+            datum = st.date_input("Datum:", date.today())
+            
+        with col_b:
+            stunden = st.number_input("Stunden:", min_value=0.0, value=1.0, step=0.5)
+            satz = st.number_input("Preis pro Stunde (€):", min_value=0.0, value=150.0)
+            rabatt = st.slider("Rabatt (%)", 0, 50, 0)
 
-    st.divider()
-    if st.button("Abmelden"):
-        st.session_state["password_correct"] = False
-        st.rerun()
+        # Berechnung
+        brutto = stunden * satz
+        abzug = brutto * (rabatt / 100)
+        netto = brutto - abzug
+
+        st.divider()
+
+        # DIE RECHNUNGSVORSCHAU
+        try:
+            st.image("logo.png", width=250)
+        except:
+            st.info("💡 Lade ein Bild namens 'logo.png' bei GitHub hoch, um dein Logo hier zu sehen.")
+
+        st.markdown(f"""
+        ### RECHNUNG
+        **Datum:** {datum} | **Nr:** {date.today().strftime('%Y%m')}-001
+        
+        **Empfänger:** {kunde}
+        
+        | Beschreibung | Menge | Einzelpreis | Gesamt |
+        | :--- | :--- | :--- | :--- |
+        | {geraet} | {stunden} h | {satz:.2f} € | {brutto:.2f} € |
+        | **Rabatt** | | | **-{abzug:.2f} €** |
+        | **SUMME** | | | **{netto:.2f} €** |
+        
+        ---
+        *Vielen Dank für den Auftrag!*
+        """)
+        
+        st.caption("Tipp: Drücke Strg+P zum Drucken oder Speichern als PDF.")
