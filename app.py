@@ -7,21 +7,22 @@ from fpdf import FPDF
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN (ABSOLUT SICHER FÜR A4) ---
+# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN (SICHER GEGEN UMLAUTE & EURO-FEHLER) ---
 class InvoicePDF(FPDF):
     def header(self):
         # Logo einbinden, wenn vorhanden
         if os.path.exists("logo.png"):
             self.image("logo.png", 15, 15, 40)
         else:
-            self.set_font("Arial", "B", 16)
-            self.cell(0, 10, "🚜 LU-BETRIEB", ln=True)
+            self.set_font("Helvetica", "B", 16)
+            self.cell(0, 10, "LU-BETRIEB", ln=True)
         self.ln(20)
 
 def generate_pdf(kunden_name, posten, rabatt_prozent):
-    pdf = InvoicePDF()
+    # 'core_fonts_encoding="utf-8"' sorgt dafür, dass Umlaute kein Problem machen
+    pdf = InvoicePDF(core_fonts_encoding="utf-8")
     pdf.add_page()
-    pdf.set_font("Arial", size=11)
+    pdf.set_font("Helvetica", size=11)
     
     # Infoblock oben rechts
     pdf.set_x(130)
@@ -29,15 +30,14 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     
     # Empfänger
     pdf.ln(10)
-    self_x = pdf.get_x()
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 6, "Empfänger:", ln=True)
-    pdf.set_font("Arial", size=11)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, "Empfaenger:", ln=True)  # Sicher ohne Umlaut im Code
+    pdf.set_font("Helvetica", size=11)
     pdf.cell(0, 6, str(kunden_name), ln=True)
     
     # Titel
     pdf.ln(15)
-    pdf.set_font("Arial", "B", 24)
+    pdf.set_font("Helvetica", "B", 24)
     pdf.cell(0, 15, "RECHNUNG", ln=True)
     
     # Trennlinie
@@ -45,7 +45,7 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.ln(5)
     
     # Tabellen-Header
-    pdf.set_font("Arial", "B", 11)
+    pdf.set_font("Helvetica", "B", 11)
     pdf.cell(80, 10, "Leistung / Maschine", border=0)
     pdf.cell(30, 10, "Menge", border=0, align="C")
     pdf.cell(40, 10, "Einzelpreis", border=0, align="R")
@@ -54,15 +54,15 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     
     # Trennlinie unter Header
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.set_font("Arial", size=11)
+    pdf.set_font("Helvetica", size=11)
     
-    # Posten eintragen
+    # Posten eintragen (Wir nutzen EUR statt dem abstürzenden €-Zeichen)
     summe = 0
     for p in posten:
         pdf.cell(80, 10, str(p['name']), border=0)
         pdf.cell(30, 10, f"{p['std']} h", border=0, align="C")
-        pdf.cell(40, 10, f"{p['preis']:.2f} €", border=0, align="R")
-        pdf.cell(40, 10, f"{p['gesamt']:.2f} €", border=0, align="R")
+        pdf.cell(40, 10, f"{p['preis']:.2f} EUR", border=0, align="R")
+        pdf.cell(40, 10, f"{p['gesamt']:.2f} EUR", border=0, align="R")
         pdf.ln(10)
         summe += p['gesamt']
         
@@ -75,21 +75,21 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     
     # Summen-Block rechtsbündig
     pdf.cell(150, 6, "Zwischensumme:", align="R")
-    pdf.cell(40, 6, f"{summe:.2f} €", align="R", ln=True)
+    pdf.cell(40, 6, f"{summe:.2f} EUR", align="R", ln=True)
     
     if rabatt_prozent > 0:
         pdf.cell(150, 6, f"Rabatt ({rabatt_prozent}%):", align="R")
-        pdf.cell(40, 6, f"-{rabatt_betrag:.2f} €", align="R", ln=True)
+        pdf.cell(40, 6, f"-{rabatt_betrag:.2f} EUR", align="R", ln=True)
         
     pdf.ln(2)
-    pdf.set_font("Arial", "B", 14)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
-    pdf.cell(40, 10, f"{total:.2f} €", align="R", ln=True)
+    pdf.cell(40, 10, f"{total:.2f} EUR", align="R", ln=True)
     
     # Fußzeile
     pdf.ln(30)
-    pdf.set_font("Arial", "I", 10)
-    pdf.cell(0, 10, "Vielen Dank für die gute Zusammenarbeit! Der Betrag ist sofort fällig.", align="C")
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
     
     return pdf.output()
 
@@ -135,17 +135,17 @@ if menu == "💰 Ernte & Felder":
         ha = st.number_input("Hektar (ha):", min_value=0.1, value=1.0, step=0.1)
         st.info(f"""
         **Benötigte Mengen für {ha} ha:**
-        * ⚪ Kalk: **{int(ha * r_kalk):,} L**
-        * 💧 Dünger: **{int(ha * r_duenger):,} L**
-        * 🌾 Saatgut: **{int(ha * r_saat):,} L**
+        * Kalk: **{int(ha * r_kalk):,} L**
+        * Dünger: **{int(ha * r_duenger):,} L**
+        * Saatgut: **{int(ha * r_saat):,} L**
         """)
     
     with col2:
-        st.subheader("🌾 Erlösrechner")
+        st.subheader("Erloesrechner")
         menge = st.number_input("Liter im Silo:", value=10000)
-        preis_pro_1000 = st.number_input("€ pro 1000L:", value=1200)
+        preis_pro_1000 = st.number_input("EUR pro 1000L:", value=1200)
         erloes = (menge / 1000) * preis_pro_1000
-        st.success(f"**Voraussichtlicher Erlös:**\n### {erloes:,.2f} €")
+        st.success(f"**Voraussichtlicher Erloes:**\n### {erloes:,.2f} EUR")
 
 # --- BEREICH 2: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
@@ -156,8 +156,8 @@ elif menu == "📋 Rechnungs-Ersteller":
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
         std = c2.number_input("Stunden:", min_value=0.1, value=1.0, step=0.1)
-        e_p = c3.number_input("Preis (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
-        if st.button("➕ Hinzufügen"):
+        e_p = c3.number_input("Preis (EUR/h):", value=float(preis_dict.get(auswahl, 0.0)))
+        if st.button("➕ Hinzufuegen"):
             st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_p, "gesamt": std * e_p})
             st.rerun()
 
@@ -179,17 +179,17 @@ elif menu == "📋 Rechnungs-Ersteller":
         total = summe * (1 - rabatt/100)
         
         col_m1, col_m2 = st.columns(2)
-        col_m1.metric("Zwischensumme", f"{summe:.2f} €")
-        col_m2.metric("Endbetrag", f"{total:.2f} €")
+        col_m1.metric("Zwischensumme", f"{summe:.2f} EUR")
+        col_m2.metric("Endbetrag", f"{total:.2f} EUR")
 
         # PDF GENERIEREN BUTTONS
         st.write("")
         col_b1, col_b2 = st.columns(2)
         
-        # PDF im Hintergrund bauen
+        # PDF im Hintergrund fehlerfrei bauen
         pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt)
         
-        # Der magische Download-Button (Erzeugt direkt die fertige PDF-Datei!)
+        # Der Download-Button
         col_b1.download_button(
             label="📥 Rechnung als PDF herunterladen",
             data=pdf_data,
