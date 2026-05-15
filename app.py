@@ -164,7 +164,7 @@ m_details = st.sidebar.text_input("Verwendungszweck:")
 m_monat = st.sidebar.selectbox("In-Game Monat:", LISTE_MONATE, key="sb_m")
 m_jahr = st.sidebar.number_input("In-Game Jahr:", min_value=1, value=1, key="sb_j")
 
-if st.sidebar.button("💾 Buchung speichern", use_container_width=True):
+if st.sidebar.button("💾 Buchung保存", use_container_width=True):
     if m_details.strip():
         in_game_datum_str = f"J{m_jahr}-{m_monat}"
         if m_typ == "Einnahme":
@@ -294,7 +294,6 @@ elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Materialeinkauf & Externe Dienstleistungen")
     
     st.subheader("📦 Aktueller Hof-Bestand (Wird live für alle Spieler synchronisiert)")
-    # Das ursprüngliche 5-Spalten Desktop Layout für die Bestände
     c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
     
     v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500)
@@ -307,7 +306,6 @@ elif menu == "🛒 Material & Aufträge":
         st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
         st.rerun()
 
-    # Optische Bestandsampel in 5 Spalten
     c_s1, c_s2, c_s3, c_s4, c_s5 = st.columns(5)
     def status_box(col, label, menge, limit):
         if menge < limit: col.error(f"🚨 {label}\n\n{fmt_int(menge)} L (Wenig!)")
@@ -386,7 +384,7 @@ elif menu == "🛒 Material & Aufträge":
                 st._global_finanzen["naechste_bestellung_id"] += 1
                 st.rerun()
 
-# --- SEITE 4 (KLASSISCHES DESKTOP LAYOUT + REICHWEITENRECHNER) ---
+# --- SEITE 4 (KLASSISCHES DESKTOP LAYOUT + FIX FÜR KEYERROR) ---
 elif menu == "🏭 Produktionen":
     st.title("🏭 Produktions-Kapazitäten & Jahresplaner")
     
@@ -412,7 +410,6 @@ elif menu == "🏭 Produktionen":
         anzahl_fabriken = c_f1.number_input("Anzahl aktiver Linien:", min_value=1, value=1, step=1)
         monate = c_f2.slider("Betriebsmonate pro Jahr:", 1, 12, 12)
         
-        # HIER IST DAS GEWÜNSCHTE FELD IM DESKTOP-LAYOUT
         aktueller_lagerbestand = st.number_input(f"📦 Aktueller Lagerbestand für '{in_name}' (Liter):", min_value=0, value=0, step=1000)
         
         if st.button("💾 Produktion für den Server speichern", type="primary", use_container_width=True):
@@ -429,26 +426,29 @@ elif menu == "🏭 Produktionen":
         st.write("---")
         st.subheader("🏭 Aktive Produktionen in der Übersicht")
         
-        # Umrechnung in die klassische, breite Tabelle für Desktop-Ansichten
         tabelle_daten = []
         for idx, item in enumerate(st._global_hof_store):
-            # Reichweitenberechnung
-            monatlicher_verbrauch = item["basis_monat_input"] * item["linien"]
-            if monatlicher_verbrauch > 0 and item["lager_ist"] > 0:
-                reichweite_monate = item["lager_ist"] / monatlicher_verbrauch
+            # FIX: `.get()` verhindert den KeyError bei alten Einträgen auf dem Server
+            basis_input = item.get("basis_monat_input", 0)
+            lager_ist = item.get("lager_ist", 0)
+            linien = item.get("linien", 1)
+            
+            monatlicher_verbrauch = basis_input * linien
+            if monatlicher_verbrauch > 0 and lager_ist > 0:
+                reichweite_monate = lager_ist / monatlicher_verbrauch
                 if reichweite_monate >= 1.0:
                     reichweite_str = f"ca. {reichweite_monate:.1f} Monate"
                 else:
                     reichweite_str = f"ca. {reichweite_monate * 30:.0f} Tage"
             else:
-                reichweite_str = "0 oder k.A."
+                reichweite_str = "k.A. / Lager leer"
 
             tabelle_daten.append({
                 "ID": idx + 1,
                 "Produktion/Rezept": item["name"],
-                "Linien": item["linien"],
+                "Linien": linien,
                 "Betriebsmonate/Jahr": item["monate"],
-                "Lagerbestand (L)": fmt_int(item["lager_ist"]),
+                "Lagerbestand (L)": fmt_int(lager_ist),
                 "Reichweite Dauerbetrieb": reichweite_str,
                 "Jahresbedarf Rohstoff (L)": fmt_int(item["in_menge"]),
                 "Rohstoff-Typ": item["in_typ"],
@@ -457,7 +457,6 @@ elif menu == "🏭 Produktionen":
             })
             
         df_hof = pd.DataFrame(tabelle_daten)
-        # Große, breite Datentabelle
         st.dataframe(df_hof, use_container_width=True, hide_index=True)
         
         if st.button("🗑️ Alle Produktionen aus der Übersicht löschen", use_container_width=True):
