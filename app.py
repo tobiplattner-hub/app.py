@@ -50,12 +50,8 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.cell(0, 6, "Empfaenger:", ln=True)
     pdf.cell(0, 6, safe_str(kunden_name), ln=True)
     pdf.ln(15)
-    
-    # NEU: Überschrift nach rechts verschoben, damit sie nicht über das Logo läuft
-    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 24)
     pdf.cell(0, 15, "RECHNUNG", ln=True)
-    
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 11)
@@ -99,12 +95,8 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
     pdf.set_x(130)
     pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}", align="R", ln=True)
     pdf.ln(10)
-    
-    # NEU: Überschrift nach rechts verschoben, damit sie nicht über das Logo läuft
-    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 24)
     pdf.cell(0, 15, "WARENBESTELLUNG", ln=True)
-    
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(8)
     pdf.set_font("Helvetica", "B", 11)
