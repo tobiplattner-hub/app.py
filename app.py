@@ -14,10 +14,11 @@ def get_base64_image(image_path):
             return base64.b64encode(img_file.read()).decode()
     return None
 
-# --- WASSERDICHTES DRUCK-CSS (ERZWINGT RECHNUNGSLAYOUT) ---
-st.markdown("""
-    <style>
-    /* Normale Ansicht im Browser */
+# --- DRUCK-STYLE-INJEKTION ---
+# Wir nutzen hier st.html(), damit Streamlit das CSS absolut sicher frisst
+st.html("""
+<style>
+    /* Vorschau-Modus im Browser */
     .invoice-container {
         background-color: white !important;
         padding: 30px !important;
@@ -27,28 +28,27 @@ st.markdown("""
         font-family: Arial, sans-serif !important;
     }
     
-    /* Druck-Regeln (Greifen sobald das Druckfenster öffnet) */
+    /* Druck-Modus im Browser */
     @media print {
-        /* Blende ALLES von Streamlit rigoros aus */
-        div[data-testid="stSidebar"], 
+        /* Verstecke alles von Streamlit komplett */
+        [data-testid="stSidebar"], 
         header, 
         footer, 
-        div.no-print, 
+        .no-print, 
         .stButton, 
-        div[data-testid="stHeader"],
-        div[data-testid="stBlock"] > div:not(.invoice-container) {
+        [data-testid="stHeader"],
+        [data-testid="stVerticalBlock"] > div:not(.invoice-container) {
             display: none !important;
             visibility: hidden !important;
             height: 0 !important;
         }
         
-        /* Setze die Hauptseite auf unsichtbar, AUSSER unsere Rechnung */
         body, html, [data-testid="stAppViewContainer"], .main {
             visibility: hidden !important;
             background: white !important;
         }
         
-        /* Macht die Rechnung als einziges Element sichtbar und zwingt sie nach oben */
+        /* Zeige NUR die Rechnung */
         .invoice-container, .invoice-container * {
             visibility: visible !important;
         }
@@ -68,8 +68,8 @@ st.markdown("""
             margin: 15mm;
         }
     }
-    </style>
-    """, unsafe_allow_html=True)
+</style>
+""")
 
 # 2. Daten-Verbindung
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
@@ -99,7 +99,6 @@ menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Er
 
 # --- BEREICH 1: ERNTE & KALKULATION ---
 if menu == "💰 Ernte & Felder":
-    st.markdown('<div class="no-print">', unsafe_allow_html=True)
     st.title("🚜 Ernte- & Feld-Manager")
     
     with st.expander("⚙️ Verbrauchs-Raten anpassen (pro Hektar)"):
@@ -125,14 +124,12 @@ if menu == "💰 Ernte & Felder":
         preis_pro_1000 = st.number_input("€ pro 1000L:", value=1200)
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erlös:**\n### {erloes:,.2f} €")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- BEREICH 2: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
-    st.markdown('<h1 class="no-print">📋 Rechnungs-Ersteller</h1>', unsafe_allow_html=True)
+    st.title("📋 Rechnungs-Ersteller")
     
     # Eingabe-Maske (wird beim Drucken versteckt)
-    st.markdown('<div class="no-print">', unsafe_allow_html=True)
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
@@ -145,10 +142,10 @@ elif menu == "📋 Rechnungs-Ersteller":
     ck1, ck2 = st.columns(2)
     k_name = ck1.selectbox("Hof auswählen:", aktuelle_kunden) if aktuelle_kunden else ck1.text_input("Hofname:")
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # RECHNUNGSDESIGN
     if st.session_state.rechnungs_posten:
+        st.write("---")
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
         total = summe * (1 - rabatt/100)
         logo_data = get_base64_image("logo.png")
@@ -167,15 +164,15 @@ elif menu == "📋 Rechnungs-Ersteller":
         
         rabatt_html = f"<p style='margin: 5px 0; color: black;'>Rabatt ({rabatt}%): -{summe*(rabatt/100):.2f} €</p>" if rabatt > 0 else ""
 
-        # Die Rechnung verpackt in die Klasse "invoice-container"
+        # Die Rechnung fix als reiner HTML-Block
         rechnung_html = f"""
         <div class="invoice-container">
-            <table style="width: 100%; border: none; margin-bottom: 20px;">
+            <table style="width: 100%; border: none; margin-bottom: 20px; border-collapse: collapse;">
                 <tr>
                     <td style="text-align: left; vertical-align: middle;">
                         {f'<img src="data:image/png;base64,{logo_data}" width="160">' if logo_data else '<h2 style="margin:0; color: black;">🚜 LU-BETRIEB</h2>'}
                     </td>
-                    <td style="text-align: right; vertical-align: middle; color: black; font-size: 14px;">
+                    <td style="text-align: right; vertical-align: middle; color: black; font-size: 14px; line-height: 1.5;">
                         <strong>Datum:</strong> {date.today().strftime('%d.%m.%Y')}<br>
                         <strong>Kunde:</strong> {k_name}
                     </td>
@@ -183,7 +180,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             </table>
             
             <hr style="border: none; border-top: 2px solid black; margin: 10px 0;">
-            <h1 style="margin: 10px 0; color: black; font-size: 28px;">RECHNUNG</h1>
+            <h1 style="margin: 10px 0; color: black; font-size: 28px; font-family: Arial, sans-serif;">RECHNUNG</h1>
             <hr style="border: none; border-top: 2px solid black; margin: 10px 0;">
             
             <table style="width:100%; border-collapse:collapse; margin: 20px 0;">
@@ -210,15 +207,14 @@ elif menu == "📋 Rechnungs-Ersteller":
         </div>
         """
         
-        # Rendert die Rechnung sauber als echtes HTML auf der Seite
-        st.markdown(rechnung_html, unsafe_allow_html=True)
+        # DIE GEHEIMWAFFE: st.html zwingt Streamlit, es als Webseite zu rendern, NIEMALS als Text!
+        st.html(rechnung_html)
 
-        # Buttons (Werden beim Drucken ausgeblendet)
-        st.markdown('<div class="no-print" style="margin-top: 20px;">', unsafe_allow_html=True)
+        # Buttons unter der Rechnung
+        st.write("")
         col_b1, col_b2 = st.columns(2)
         if col_b1.button("🖨️ Rechnung drucken"):
-            st.markdown('<script>window.print();</script>', unsafe_allow_html=True)
+            st.html("<script>window.print();</script>")
         if col_b2.button("🗑️ Rechnung leeren"):
             st.session_state.rechnungs_posten = []
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
