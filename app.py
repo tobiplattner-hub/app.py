@@ -84,25 +84,31 @@ if menu == "💰 Ernte & Felder":
         st.metric("Dein Erlös", f"{(liter/1000)*p_1000:,.2f} €")
 
 # --- BEREICH: RECHNUNGS-ERSTELLER ---
-elif menu == "📋 Rechnungs-Ersteller":
-    st.title("📄 Rechnungs-Ersteller")
+with st.container(border=True):
+    st.subheader("➕ Posten hinzufügen")
+    c1, c2, c3 = st.columns([2, 1, 1])
     
-    with st.container(border=True):
-        st.subheader("➕ Posten hinzufügen")
-        c1, c2, c3 = st.columns([2, 1, 1])
-        
-        auswahl = c1.selectbox("Gerät/Leistung:", options=list(preis_dict.keys()) if preis_dict else ["Keine Daten"])
-        stunden = c2.number_input("Dauer (h):", min_value=0.5, value=1.0, step=0.5)
-        
-        # Preislogik
-        standard_preis = float(preis_dict.get(auswahl, 0.0))
-        einzelpreis = c3.number_input("€/h:", value=standard_preis)
-        
-        if st.button("Posten hinzufügen"):
+    auswahl = c1.selectbox("Gerät/Leistung:", options=list(preis_dict.keys()) if preis_dict else ["Keine Daten"])
+    
+    # NEU: min_value=0.0 und step=0.1 für feinere Zeiterfassung
+    stunden = c2.number_input("Dauer (h):", min_value=0.0, value=1.0, step=0.1)
+    
+    # Preislogik
+    standard_preis = float(preis_dict.get(auswahl, 0.0))
+    einzelpreis = c3.number_input("€/h:", value=standard_preis)
+    
+    if st.button("Posten hinzufügen"):
+        # Sicherstellen, dass auch wirklich etwas gearbeitet wurde
+        if stunden > 0:
             st.session_state.rechnungs_posten.append({
-                "name": auswahl, "std": stunden, "preis": einzelpreis, "gesamt": stunden * einzelpreis
+                "name": auswahl, 
+                "std": stunden, 
+                "preis": einzelpreis, 
+                "gesamt": stunden * einzelpreis
             })
             st.rerun()
+        else:
+            st.warning("Bitte gib eine Dauer größer als 0 an.")
 
     # Kunden-Auswahl
     col_k1, col_k2 = st.columns(2)
