@@ -133,7 +133,6 @@ if "rechnungs_posten" not in st.session_state:
     st.session_state.rechnungs_posten = []
 
 # --- DATA FOR PRODUCTIONS (LS-Standardwerte pro Monat im 24h Betrieb) ---
-# Format: { Rezeptname: (Input_Je_Monat, Output_Je_Monat, Input_Name, Output_Name) }
 PROD_DATA = {
     "Getreidemühle: Weizen zu Mehl": (36000, 27000, "Weizen (L)", "Mehl (L)"),
     "Getreidemühle: Gerste zu Mehl": (36000, 27000, "Gerste (L)", "Mehl (L)"),
@@ -144,7 +143,8 @@ PROD_DATA = {
     "Molkerei: Butter": (36000, 21600, "Milch (L)", "Butter (L)"),
     "Molkerei: Käse": (21600, 16200, "Milch (L)", "Käse (L)"),
     "Zuckerfabrik: Zuckerrohr": (28800, 28800, "Zuckerrohr (L)", "Zucker (L)"),
-    "Zuckerfabrik: Zuckerrüben": (14400, 7200, "Zuckerrüben (L)", "Zucker (L)")
+    "Zuckerfabrik: Zuckerrüben": (14400, 7200, "Zuckerrüben (L)", "Zucker (L)"),
+    "➕ Eigenes / Mod-Rezept hinzufügen": (0, 0, "", "")
 }
 
 # --- NAVIGATION ---
@@ -271,25 +271,41 @@ elif menu == "🛒 Saatgut-Bestellung":
     else:
         st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald einer deiner Bestände ins Minus bzw. unter das Limit rutscht.")
 
-# --- NEUER BEREICH 4: PRODUKTIONS-PLANER ---
+# --- NEUER OPTIMIERTER BEREICH 4: PRODUKTIONS-PLANER ---
 elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
-    st.write("Planst du deine Ernte? Berechne hier, wie viel Rohstoff deine Fabriken im Jahr fressen und wie viel Paletten am Ende herauskommen.")
+    st.write("Berechne den genauen Jahresverbrauch deiner Standard-Fabriken oder trage eigene Mod-Rezepte ein.")
     
     with st.container(border=True):
-        # Rezept-Auswahl
         rezept = st.selectbox("Wähle deine Produktion/Rezept aus:", options=list(PROD_DATA.keys()))
         
-        # Laufzeit in Monaten (Viele Fabriken laufen ja nicht ganzjährig)
-        monate = st.slider("Betriebsdauer der Fabrik im Jahr (Monate):", min_value=1, max_value=12, value=12)
-        
-        # Anzahl der parallel laufenden Linien/Fabriken
-        anzahl_fabriken = st.number_input("Anzahl dieser Fabriken/Produktionslinien auf deinem Hof:", min_value=1, value=1, step=1)
+        # Falls ein eigenes Rezept gewählt wird, dynamische Zusatzfelder anzeigen
+        if rezept == "➕ Eigenes / Mod-Rezept hinzufügen":
+            st.write("---")
+            st.subheader("⚙️ Eigenes Rezept konfigurieren")
+            
+            col_custom1, col_custom2 = st.columns(2)
+            in_name = col_custom1.text_input("Name des Rohstoffs (Input):", value="Dinkel")
+            out_name = col_custom2.text_input("Name des Produkts (Output):", value="Altes Mehl")
+            
+            col_custom3, col_custom4, col_custom5 = st.columns(3)
+            custom_in_menge = col_custom3.number_input(f"Menge {in_name} pro Zyklus:", min_value=1, value=5)
+            custom_out_menge = col_custom4.number_input(f"Menge {out_name} pro Zyklus:", min_value=1, value=4)
+            zyklen_pro_std = col_custom5.number_input("Zyklen pro Stunde (laut Spiel):", min_value=1, value=30)
+            
+            # Umrechnung in die monatliche Basis (24 Std * 30 Tage = 720 Stunden pro LS-Monat)
+            base_in = custom_in_menge * zyklen_pro_std * 24 * 30
+            base_out = custom_out_menge * zyklen_pro_std * 24 * 30
+        else:
+            # Werte aus Standarddatenbank laden
+            base_in, base_out, in_name, out_name = PROD_DATA[rezept]
+            
+        st.write("---")
+        col_time1, col_time2 = st.columns(2)
+        monate = col_time1.slider("Betriebsdauer im Jahr (Monate):", min_value=1, max_value=12, value=12)
+        anzahl_fabriken = col_time2.number_input("Anzahl dieser Produktionslinien:", min_value=1, value=1, step=1)
     
-    # Werte aus der Datenbank holen
-    base_in, base_out, in_name, out_name = PROD_DATA[rezept]
-    
-    # Berechnung hochrechnen
+    # Finale Jahreshochrechnung
     gesamt_input = base_in * monate * anzahl_fabriken
     gesamt_output = base_out * monate * anzahl_fabriken
     
@@ -300,18 +316,17 @@ elif menu == "🏭 Produktions-Planer":
     
     with col_p1:
         st.info(f"""
-        **Benötigter Rohstoff (INPUT):**
+        **Benötigter Rohstoff ({in_name}):**
         ### {gesamt_input:,} Liter
-        Das musst du im Jahr anliefern, um die Fabrik für {monate} Monate auszulasten.
+        Ernteziel pro Jahr für {monate} Monate Betrieb.
         """)
         
     with col_p2:
         st.success(f"""
-        **Erzeugte Produkte (OUTPUT):**
+        **Erzeugte Produkte ({out_name}):**
         ### {gesamt_output:,} Liter / Einheiten
-        Das ist die Menge, die am Ende als Paletten am Trigger spawnt.
+        Erwarteter Ertrag am Ausgangstrigger.
         """)
         
-    # Kleiner Profi-Tipp für den Spieler
     st.write("")
-    st.caption(f"💡 *Hinweis basierend auf den LS-Standard-XML-Daten: Dieses Rezept verarbeitet im Dauerbetrieb exakt {int(base_in/24):,} L pro Tag.*")
+    st.caption(f"💡 *Verarbeitungsrate: Diese Produktionslinie verarbeitet im Dauerbetrieb exakt {int(base_in/24):,} L pro Ingame-Tag.*")
