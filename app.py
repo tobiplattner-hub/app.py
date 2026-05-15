@@ -135,12 +135,13 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
+# LS25 Standard-Werte: (Input je Zyklus, Output je Zyklus, Standard-Zyklen pro Monat, Rohstoff, Endprodukt)
 PROD_DATA = {
-    "Getreidemühle: Weizen zu Mehl": (36000, 27000, "Weizen", "Mehl"),
-    "Bäckerei: Brot": (21600, 10800, "Mehl", "Brot"),
-    "Ölmühle: Rapsöl": (14400, 7200, "Raps", "Rapsöl"),
-    "Molkerei: Käse": (21600, 16200, "Milch", "Käse"),
-    "➕ Eigenes / Mod-Rezept": (0, 0, "", "")
+    "Getreidemühle: Weizen zu Mehl": (15, 11, 2400, "Weizen", "Mehl"),
+    "Bäckerei: Brot": (18, 9, 1200, "Mehl", "Brot"),
+    "Ölmühle: Rapsöl": (20, 10, 720, "Raps", "Rapsöl"),
+    "Molkerei: Käse": (15, 11, 1440, "Milch", "Käse"),
+    "➕ Eigenes / Mod-Rezept": (0, 0, 1, "", "")
 }
 
 # --- SIDEBAR FINANZ-MANAGEMENT ---
@@ -164,7 +165,7 @@ m_details = st.sidebar.text_input("Verwendungszweck:")
 m_monat = st.sidebar.selectbox("In-Game Monat:", LISTE_MONATE, key="sb_m")
 m_jahr = st.sidebar.number_input("In-Game Jahr:", min_value=1, value=1, key="sb_j")
 
-if st.sidebar.button("💾 Buchung保存", use_container_width=True):
+if st.sidebar.button("💾 Buchung speichern", use_container_width=True):
     if m_details.strip():
         in_game_datum_str = f"J{m_jahr}-{m_monat}"
         if m_typ == "Einnahme":
@@ -384,9 +385,9 @@ elif menu == "🛒 Material & Aufträge":
                 st._global_finanzen["naechste_bestellung_id"] += 1
                 st.rerun()
 
-# --- SEITE 4 (KLASSISCHES DESKTOP LAYOUT + FIX FÜR KEYERROR) ---
+# --- SEITE 4 (PRODUKTIONEN INKLUSIVE ZYKLEN-BERECHNUNG) ---
 elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktions-Kapazitäten & Jahresplaner")
+    st.title("🏭 Produktions-Kapazitäten & Zyklen-Planer")
     
     col_form, col_space = st.columns([1, 1])
     with col_form:
@@ -397,43 +398,56 @@ elif menu == "🏭 Produktionen":
             in_name = st.text_input("Rohstoff Name (Input):", value="Weizen")
             out_name = st.text_input("Produkt Name (Output):", value="Mehl")
             c_c1, c_c2 = st.columns(2)
-            custom_in_std = c_c1.number_input("Input Menge pro Stunde (L):", min_value=1, value=50)
-            custom_out_std = c_c2.number_input("Output Menge pro Stunde (L):", min_value=1, value=38)
-            base_in = custom_in_std * 24 * 30
-            base_out = custom_out_std * 24 * 30
+            custom_in_zyklus = c_c1.number_input("Input Menge je Zyklus (L):", min_value=1, value=15)
+            custom_out_zyklus = c_c2.number_input("Output Menge je Zyklus (L):", min_value=1, value=11)
+            
+            zyklen_pro_monat = st.number_input("Zyklen pro Monat (z.B. 2400):", min_value=1, value=2400)
             name_anzeige = f"Mod: {in_name} -> {out_name}"
         else:
-            base_in, base_out, in_name, out_name = PROD_DATA[rezept]
+            custom_in_zyklus, custom_out_zyklus, zyklen_pro_monat, in_name, out_name = PROD_DATA[rezept]
             name_anzeige = rezept
             
         c_f1, c_f2 = st.columns(2)
         anzahl_fabriken = c_f1.number_input("Anzahl aktiver Linien:", min_value=1, value=1, step=1)
         monate = c_f2.slider("Betriebsmonate pro Jahr:", 1, 12, 12)
         
+        # Dynamische Live-Vorschau der Zyklen vor dem Speichern
+        gesamt_zyklen_monat = zyklen_pro_monat * anzahl_fabriken
+        st.info(f"ℹ️ Ausgewähltes Rezept läuft mit **{fmt_int(zyklen_pro_monat)} Zyklen/Monat** je Linie "
+                f"(Gesamt: {fmt_int(gesamt_zyklen_monat)} Zyklen/Monat)")
+        
         aktueller_lagerbestand = st.number_input(f"📦 Aktueller Lagerbestand für '{in_name}' (Liter):", min_value=0, value=0, step=1000)
         
         if st.button("💾 Produktion für den Server speichern", type="primary", use_container_width=True):
+            # Berechnung basierend auf: Menge_je_Zyklus * Zyklen_pro_Monat * Monate * Linien
             st._global_hof_store.append({
-                "name": name_anzeige, "monate": monate, "linien": anzahl_fabriken,
-                "in_typ": in_name, "in_menge": base_in * monate * anzahl_fabriken, 
-                "out_typ": out_name, "out_menge": base_out * monate * anzahl_fabriken,
+                "name": name_anzeige, 
+                "monate": monate, 
+                "linien": anzahl_fabriken,
+                "in_typ": in_name, 
+                "in_menge": custom_in_zyklus * zyklen_pro_monat * monate * anzahl_fabriken, 
+                "out_typ": out_name, 
+                "out_menge": custom_out_zyklus * zyklen_pro_monat * monate * anzahl_fabriken,
                 "lager_ist": aktueller_lagerbestand,
-                "basis_monat_input": base_in
+                "basis_monat_input": custom_in_zyklus * zyklen_pro_monat, # Input-Bedarf für 1 vollen Monat (1 Linie)
+                "zyklen_pro_monat": zyklen_pro_monat
             })
             st.rerun()
 
     if st._global_hof_store:
         st.write("---")
-        st.subheader("🏭 Aktive Produktionen in der Übersicht")
+        st.subheader("🏭 Aktive Produktionen in der Übersicht (Berechnet über In-Game Zyklen)")
         
         tabelle_daten = []
         for idx, item in enumerate(st._global_hof_store):
-            # FIX: `.get()` verhindert den KeyError bei alten Einträgen auf dem Server
-            basis_input = item.get("basis_monat_input", 0)
-            lager_ist = item.get("lager_ist", 0)
             linien = item.get("linien", 1)
+            # Migration/Sicherheit: Falls zyklen_pro_monat fehlt, kalkulieren wir es aus der alten Basis
+            zyklen_m = item.get("zyklen_pro_monat", 1)
+            lager_ist = item.get("lager_ist", 0)
             
-            monatlicher_verbrauch = basis_input * linien
+            # Monatlicher Gesamtverbrauch aller Linien dieser Fabrik
+            monatlicher_verbrauch = item.get("basis_monat_input", 0) * linien
+            
             if monatlicher_verbrauch > 0 and lager_ist > 0:
                 reichweite_monate = lager_ist / monatlicher_verbrauch
                 if reichweite_monate >= 1.0:
@@ -447,9 +461,10 @@ elif menu == "🏭 Produktionen":
                 "ID": idx + 1,
                 "Produktion/Rezept": item["name"],
                 "Linien": linien,
+                "Zyklen / Monat": fmt_int(zyklen_m * linien),
                 "Betriebsmonate/Jahr": item["monate"],
                 "Lagerbestand (L)": fmt_int(lager_ist),
-                "Reichweite Dauerbetrieb": reichweite_str,
+                "Reichweite Lager": reichweite_str,
                 "Jahresbedarf Rohstoff (L)": fmt_int(item["in_menge"]),
                 "Rohstoff-Typ": item["in_typ"],
                 "Jahresertrag Produkt (L)": fmt_int(item["out_menge"]),
