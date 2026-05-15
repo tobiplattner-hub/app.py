@@ -6,22 +6,48 @@ import os
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- CSS FÜR PROFI-DRUCK (DIN A4 Optimierung) ---
+# --- RADIKALES CSS FÜR PROFI-DRUCK ---
 st.markdown("""
     <style>
-    /* Verstecke alles Standardmäßige beim Drucken */
+    /* NORMALE ANSICHT */
+    .print-only { display: none; }
+
+    /* DRUCK-ANSICHT (Wird nur beim Drucken/PDF-Speichern aktiv) */
     @media print {
-        header, [data-testid="stSidebar"], .stButton, .stExpander, footer, .no-print, .stMarkdownContainer:not(.print-content) { 
-            display: none !important; 
+        /* 1. Alles verstecken, was nicht Rechnung ist */
+        header, footer, .no-print, [data-testid="stSidebar"], [data-testid="stHeader"], 
+        .stButton, .stNumberInput, .stSelectbox, .stSlider, .stExpander, 
+        [data-testid="stToolbar"], [data-testid="stActionButtonIcon"] {
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
-        /* Nur den Bereich mit der Klasse 'print-content' anzeigen */
+
+        /* 2. Streamlit-Container anpassen */
+        .main .block-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* 3. Den Rechnungs-Bereich erzwingen */
         .print-content {
             display: block !important;
-            width: 100%;
+            width: 100% !important;
             border: none !important;
+            padding: 0 !important;
         }
-        .main .block-container { 
-            padding: 0 !important; 
+
+        /* 4. Hintergrundfarben und Linien erzwingen (für die meisten Browser) */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        @page {
+            size: A4;
+            margin: 15mm;
         }
     }
     </style>
@@ -65,90 +91,90 @@ if "rechnungs_posten" not in st.session_state:
 
 menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "👥 Kunden-Verwaltung"])
 
-# --- BEREICH: ERNTE & FELDER (Mit anpassbaren Raten) ---
+# --- BEREICH: ERNTE & FELDER ---
 if menu == "💰 Ernte & Felder":
     st.title("🚜 Ernte- & Feld-Manager")
     
     with st.expander("⚙️ Verbrauchs-Raten anpassen (pro Hektar)"):
-        rate_kalk = st.number_input("Kalk Rate (L/ha):", value=2000)
-        rate_duenger = st.number_input("Dünger Rate (L/ha):", value=160)
-        rate_saat = st.number_input("Saatgut Rate (L/ha):", value=150)
+        r_kalk = st.number_input("Kalk (L/ha):", value=2000)
+        r_duenger = st.number_input("Dünger (L/ha):", value=160)
+        r_saat = st.number_input("Saatgut (L/ha):", value=150)
 
     col1, col2 = st.columns(2)
     with col1:
         st.header("🧪 Bedarf")
         ha = st.number_input("Hektar:", value=1.0, step=0.1)
-        st.write(f"⚪ Kalk: **{int(ha * rate_kalk)} L**")
-        st.write(f"💧 Dünger: **{int(ha * rate_duenger)} L**")
-        st.write(f"🌾 Saatgut: **{int(ha * rate_saat)} L**")
+        st.write(f"⚪ Kalk: **{int(ha * r_kalk)} L**")
+        st.write(f"💧 Dünger: **{int(ha * r_duenger)} L**")
+        st.write(f"🌾 Saatgut: **{int(ha * r_saat)} L**")
     with col2:
         st.header("🌾 Erlös")
         m = st.number_input("Liter im Silo:", value=10000)
         p = st.number_input("€/1000L:", value=1200)
         st.metric("Erlös", f"{(m/1000)*p:,.2f} €")
 
-# --- BEREICH: RECHNUNGS-ERSTELLER (Optimierter Druck) ---
+# --- BEREICH: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📄 Rechnungs-Ersteller")
     
-    # Arbeitsbereich (no-print)
+    # EINGABEBEREICH (Wird nicht gedruckt)
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()))
         std = c2.number_input("Stunden:", min_value=0.0, value=1.0, step=0.1)
         e_p = c3.number_input("€/h:", value=float(preis_dict.get(auswahl, 0.0)))
-        if st.button("Hinzufügen"):
+        if st.button("➕ Posten hinzufügen"):
             if std > 0:
                 st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_p, "gesamt": std * e_p})
                 st.rerun()
 
     ck1, ck2 = st.columns(2)
     k_wahl = ck1.selectbox("Hof auswählen:", options=["-- Bitte wählen --"] + aktuelle_kunden + ["Manuelle Eingabe"])
-    k_name = ck1.text_input("Falls manuell:") if k_wahl == "Manuelle Eingabe" else k_wahl
+    k_name = ck1.text_input("Hof-Name:") if k_wahl == "Manuelle Eingabe" else k_wahl
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # RECHNUNGS-BEREICH (Das wird gedruckt)
+    # RECHNUNGS-DRUCKBEREICH
     if st.session_state.rechnungs_posten:
         st.write("---")
-        # Wir wickeln die Rechnung in eine spezielle CSS-Klasse ein
-        rechnungs_container = st.container()
-        with rechnungs_container:
-            st.markdown('<div class="print-content">', unsafe_allow_html=True)
-            with st.container(border=True):
-                cl, cr = st.columns([1,1])
-                with cl:
-                    if os.path.exists("logo.png"): st.image("logo.png", width=150)
-                    else: st.write("### 🚜 LU-BETRIEB")
-                with cr:
-                    st.write(f"**Datum:** {date.today().strftime('%d.%m.%Y')}")
-                    st.write(f"**Kunde:** {k_name}")
-                
-                st.write("---")
-                st.write("### RECHNUNG")
-                tabelle = "| Beschreibung | Menge | Einzel | Gesamt |\n| :--- | :--- | :--- | :--- |\n"
-                summe = 0
-                for p in st.session_state.rechnungs_posten:
-                    tabelle += f"| {p['name']} | {p['std']}h | {p['preis']:.2f}€ | {p['gesamt']:.2f}€ |\n"
-                    summe += p['gesamt']
-                st.markdown(tabelle)
-                
-                total = summe * (1 - rabatt/100)
-                st.write("---")
-                e1, e2 = st.columns([2, 1])
-                with e2:
-                    st.write(f"Zwischensumme: {summe:.2f} €")
-                    if rabatt > 0: st.write(f"Rabatt: -{summe*(rabatt/100):.2f} €")
-                    st.subheader(f"Gesamt: {total:.2f} €")
-            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Dieser Container bekommt die CSS-Klasse für den Druck
+        st.markdown('<div class="print-content">', unsafe_allow_html=True)
+        with st.container(border=True):
+            cl, cr = st.columns([1,1])
+            with cl:
+                if os.path.exists("logo.png"): st.image("logo.png", width=150)
+                else: st.write("### 🚜 LU-BETRIEB")
+            with cr:
+                st.write(f"**Datum:** {date.today().strftime('%d.%m.%Y')}")
+                st.write(f"**Kunde:** {k_name}")
+            
+            st.write("---")
+            st.markdown("### RECHNUNG")
+            tabelle = "| Beschreibung | Menge | Einzel | Gesamt |\n| :--- | :--- | :--- | :--- |\n"
+            summe = 0
+            for p in st.session_state.rechnungs_posten:
+                tabelle += f"| {p['name']} | {p['std']} h | {p['preis']:.2f} € | {p['gesamt']:.2f} € |\n"
+                summe += p['gesamt']
+            st.markdown(tabelle)
+            
+            total = summe * (1 - rabatt/100)
+            st.write("---")
+            e1, e2 = st.columns([2, 1])
+            with e2:
+                st.write(f"Zwischensumme: {summe:.2f} €")
+                if rabatt > 0: st.write(f"Rabatt: -{summe*(rabatt/100):.2f} €")
+                st.subheader(f"Gesamt: {total:.2f} €")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        # Druck-Buttons (no-print)
+        # BUTTONS UNTER DER RECHNUNG (Wird nicht gedruckt)
         st.markdown('<div class="no-print">', unsafe_allow_html=True)
         cp1, cp2 = st.columns(2)
         with cp1:
-            if st.button("🖨️ Jetzt Drucken / PDF speichern"):
+            if st.button("🖨️ Drucken / PDF speichern"):
                 st.markdown('<script>window.print();</script>', unsafe_allow_html=True)
+                st.info("💡 Falls nichts passiert: Drücke **Cmd + P** (Mac) oder **Strg + P** (Windows).")
         with cp2:
             if st.button("🗑️ Rechnung leeren"):
                 st.session_state.rechnungs_posten = []
