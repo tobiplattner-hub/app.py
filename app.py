@@ -12,13 +12,21 @@ st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="
 if not hasattr(st, "_global_hof_store"):
     st._global_hof_store = []
 
-# Globaler Speicher für Lagerbestände (Erweitert um Herbizid)
 if not hasattr(st, "_global_lager_store"):
     st._global_lager_store = {"saat": 3000, "kalk": 10000, "dueng": 2000, "herbi": 2000}
 
-# Globaler Speicher für die Einkaufsliste / Bestellungen
 if not hasattr(st, "_global_bestell_store"):
     st._global_bestell_store = []
+
+# NEU: Globaler Finanzen- & Nummern-Speicher
+if not hasattr(st, "_global_finanzen"):
+    st._global_finanzen = {
+        "einnahmen": 0.0,
+        "ausgaben": 0.0,
+        "naechste_rechnung_id": 1,
+        "naechste_bestellung_id": 1,
+        "historie": [] # Liste aller Buchungen für die Übersicht
+    }
 
 
 # --- HILFSFUNKTIONEN FÜR FORMATIERUNG UND UMLAUTE ---
@@ -30,11 +38,9 @@ def safe_str(text):
     return txt
 
 def fmt_int(wert):
-    """Formatiert Ganzzahlen mit Punkt als Tausendertrenner (z.B. 10.000)"""
     return f"{wert:,.0f}".replace(",", ".")
 
 def fmt_float(wert):
-    """Formatiert Geldbeträge mit Punkt als Tausendertrenner und Komma als Dezimaltrenner (z.B. 1.250,50)"""
     return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -48,13 +54,13 @@ class InvoicePDF(FPDF):
             self.cell(0, 10, "LU-BETRIEB", ln=True)
         self.ln(20)
 
-def generate_pdf(kunden_name, posten, rabatt_prozent):
+def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id):
     pdf = InvoicePDF()
     pdf.add_page()
     
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
-    pdf.multi_cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nRechnung-Nr: #{date.today().strftime('%Y%m%d')}-01", align="R")
+    pdf.multi_cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nRechnung-Nr: #RE-{rechnungs_id:04d}", align="R")
     
     pdf.ln(15)
     pdf.set_font("Helvetica", "B", 12)
@@ -105,13 +111,13 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
     return pdf.output()
 
-def generate_order_pdf(bestell_liste):
+def generate_order_pdf(bestell_liste, bestell_id):
     pdf = InvoicePDF()
     pdf.add_page()
     
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
-    pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}", align="R", ln=True)
+    pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nBestell-Nr: #BS-{bestell_id:04d}", align="R", ln=True)
     
     pdf.ln(35)
     pdf.set_x(65)
@@ -176,7 +182,19 @@ PROD_DATA = {
     "➕ Eigenes / Mod-Rezept hinzufügen": (0, 0, "", "")
 }
 
-# --- NAVIGATION ---
+# --- SIDEBAR FINANZ-METRIKEN ---
+st.sidebar.markdown("## 💰 Hof-Kasse (Live)")
+einn = st._global_finanzen["einnahmen"]
+ausg = st._global_finanzen["ausgaben"]
+gewinn = einn - ausg
+st.sidebar.metric("Einnahmen", f"+{fmt_float(einn)} EUR")
+st.sidebar.metric("Ausgaben", f"-{fmt_float(ausg)} EUR")
+st.sidebar.metric("Gewinn/Verlust", f"{fmt_float(gewinn)} EUR", delta=gewinn)
+if st.sidebar.button("🗑️ Kassenbuch zurücksetzen"):
+    st._global_finanzen = {"einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
+    st.rerun()
+
+st.sidebar.write("---")
 menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "🛒 Saatgut-Bestellung", "🏭 Produktions-Planer"])
 
 # --- SEITE 1 ---
@@ -187,7 +205,7 @@ if menu == "💰 Ernte & Felder":
         r_kalk = col_r1.number_input("Kalk (L/ha):", value=2000)
         r_duenger = col_r2.number_input("Dünger (L/ha):", value=160)
         r_saat = col_r3.number_input("Saatgut (L/ha):", value=150)
-        r_herbi = col_r4.number_input("Herbizid (L/ha):", value=100) # NEU
+        r_herbi = col_r4.number_input("Herbizid (L/ha):", value=100)
     
     col1, col2 = st.columns(2)
     with col1:
@@ -207,9 +225,13 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
-# --- SEITE 2 ---
+# --- SEITE 2: RECHNUNGS-ERSTELLER (MIT GEWINN-BUCHUNG) ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
+    
+    aktuelle_id = st._global_finanzen["naechste_rechnung_id"]
+    st.caption(f"Nächste Rechnungsnummer: **#RE-{aktuelle_id:04d}**")
+
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
@@ -239,29 +261,41 @@ elif menu == "📋 Rechnungs-Ersteller":
         col_m2.metric("Endbetrag", f"{fmt_float(total)} EUR")
 
         st.write("")
-        col_b1, col_b2 = st.columns(2)
-        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt)
+        col_b1, col_b2, col_b3 = st.columns(3)
+        
+        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt, aktuelle_id)
         
         col_b1.download_button(
-            label="📥 Rechnung als PDF herunterladen",
+            label="📥 PDF herunterladen",
             data=bytes(pdf_data),
-            file_name=f"Rechnung_{safe_str(k_name)}_{date.today().strftime('%Y%m%d')}.pdf",
+            file_name=f"Rechnung_RE-{aktuelle_id:04d}_{safe_str(k_name)}.pdf",
             mime="application/pdf"
         )
-        if col_b2.button("🗑️ Rechnung leeren"):
+        
+        # NEU: Button zum finalen Buchen & Festschreiben im Server
+        if col_b2.button("💾 Rechnung auf Server verbuchen", type="primary"):
+            st._global_finanzen["einnahmen"] += total
+            st._global_finanzen["historie"].append({
+                "Typ": "Einnahme (Rechnung)",
+                "Nummer": f"#RE-{aktuelle_id:04d}",
+                "Details": f"Kunde: {k_name}",
+                "Betrag (EUR)": total
+            })
+            st._global_finanzen["naechste_rechnung_id"] += 1
+            st.session_state.rechnungs_posten = []
+            st.success("Erfolgreich verbucht und Rechnungsnummer erhöht!")
+            st.rerun()
+            
+        if col_b3.button("🗑️ Posten löschen"):
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3 ---
+# --- SEITE 3: BESTELLUNGEN (MIT AUSGABEN-BUCHUNG & KOSTENRECHNER) ---
 elif menu == "🛒 Saatgut-Bestellung":
     st.title("🛒 Material- & Lagerverwaltung")
-    st.write("Diese Bestände und die Einkaufsliste sind **live für alle Spieler synchronisiert**.")
     
-    if st.button("🔄 Bestände & Einkaufsliste aktualisieren"):
-        st.rerun()
-        
     st.subheader("📦 Aktueller Hof-Bestand (Server)")
-    col_s, col_k, col_d, col_h = st.columns(4) # Auf 4 Spalten erweitert
+    col_s, col_k, col_d, col_h = st.columns(4)
     
     with col_s:
         st.markdown("### 🌱 Saatgut")
@@ -269,7 +303,7 @@ elif menu == "🛒 Saatgut-Bestellung":
         g_saat = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_saat")
         b_saat = v_saat - g_saat
         st._global_lager_store["saat"] = b_saat
-        if b_saat < 1500: st.error(f"🚨 Kritisch: {fmt_int(b_saat)} L\n(Unter 1.500 L)")
+        if b_saat < 1500: st.error(f"🚨 Kritisch: {fmt_int(b_saat)} L")
         else: st.success(f"✅ Stabil: {fmt_int(b_saat)} L")
             
     with col_k:
@@ -278,7 +312,7 @@ elif menu == "🛒 Saatgut-Bestellung":
         g_kalk = st.number_input("Verbraucht (L):", min_value=0, value=0, step=500, key="g_kalk")
         b_kalk = v_kalk - g_kalk
         st._global_lager_store["kalk"] = b_kalk
-        if b_kalk < 5000: st.error(f"🚨 Kritisch: {fmt_int(b_kalk)} L\n(Unter 5.000 L)")
+        if b_kalk < 5000: st.error(f"🚨 Kritisch: {fmt_int(b_kalk)} L")
         else: st.success(f"✅ Stabil: {fmt_int(b_kalk)} L")
             
     with col_d:
@@ -287,29 +321,37 @@ elif menu == "🛒 Saatgut-Bestellung":
         g_dueng = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_dueng")
         b_dueng = v_dueng - g_dueng
         st._global_lager_store["dueng"] = b_dueng
-        if b_dueng < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_dueng)} L\n(Unter 1.000 L)")
+        if b_dueng < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_dueng)} L")
         else: st.success(f"✅ Stabil: {fmt_int(b_dueng)} L")
 
-    with col_h: # NEU: Herbizid Bestandsschutz
+    with col_h:
         st.markdown("### 🌿 Herbizid")
         v_herbi = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store.get("herbi", 2000)), step=500, key="nb_herbi")
         g_herbi = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_herbi")
         b_herbi = v_herbi - g_herbi
         st._global_lager_store["herbi"] = b_herbi
-        if b_herbi < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_herbi)} L\n(Unter 1.000 L)")
+        if b_herbi < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_herbi)} L")
         else: st.success(f"✅ Stabil: {fmt_int(b_herbi)} L")
             
     st.write("---")
     
-    # Sektion: Nachbestellungen (Inklusive Herbizid)
     if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000 or b_herbi < 1000:
         st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
+        
+        # NEU: Preisrechner für den Einkauf (Ungefähre Richtwerte aus dem LS)
+        with st.expander("💰 Einkaufspreise schätzen"):
+            col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+            p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
+            p_kalk = col_p2.number_input("Kalk (EUR/1000L):", value=150)
+            p_dueng = col_p3.number_input("Dünger (EUR/1000L):", value=1200)
+            p_herbi = col_p4.number_input("Herbizid (EUR/1000L):", value=1000)
+
         col_b1, col_b2 = st.columns(2)
         init_saat = 2000 if b_saat < 1500 else 0
         order_saat = col_b1.number_input("Saatgut Menge (Liter):", min_value=0, value=init_saat, step=500)
         b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
         
-        col_b3, col_b4, col_b5 = st.columns(3) # Auf 3 Spalten erweitert für die Eingaben
+        col_b3, col_b4, col_b5 = st.columns(3)
         init_kalk = 5000 if b_kalk < 5000 else 0
         order_kalk = col_b3.number_input("Kalk Menge (Liter):", min_value=0, value=init_kalk, step=1000)
         init_dueng = 1000 if b_dueng < 1000 else 0
@@ -318,6 +360,9 @@ elif menu == "🛒 Saatgut-Bestellung":
         order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
         
         if st.button("📝 Auf gemeinsame Einkaufsliste setzen", type="primary"):
+            # Berechnung der ungefähren Kosten
+            kosten = ((order_saat/1000)*p_saat) + ((order_kalk/1000)*p_kalk) + ((order_dueng/1000)*p_dueng) + ((order_herbi/1000)*p_herbi)
+            
             if order_saat > 0:
                 art = f"Saatgut ({b_typ})" if b_typ else "Saatgut"
                 st._global_bestell_store.append({"artikel": art, "menge": order_saat})
@@ -327,36 +372,50 @@ elif menu == "🛒 Saatgut-Bestellung":
                 st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng})
             if order_herbi > 0:
                 st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi})
-            st.success("Erfolgreich zur Server-Einkaufsliste hinzugefügt!")
+                
+            st.success(f"Zur Einkaufsliste hinzugefügt! Geschätzte Kosten: {fmt_float(kosten)} EUR")
             st.rerun()
     else:
         st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald ein Bestand unter das Limit rutscht.")
 
-    # Sektion: Anzeige & PDF Export
+    # Sektion: Anzeige offener Bestellungen
     if st._global_bestell_store:
         st.write("---")
-        st.subheader("📋 Offene Bestellungen auf dem Server")
+        bestell_id = st._global_finanzen["naechste_bestellung_id"]
+        st.subheader(f"📋 Offene Bestellungen auf dem Server (#BS-{bestell_id:04d})")
         
         df_bestellungen = pd.DataFrame(st._global_bestell_store)
         df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge (Liter)"]
         st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
         
+        # Eingabe der tatsächlichen Kosten beim Händler
+        tatsaechliche_kosten = st.number_input("Tatsächlicher Einkaufspreis beim Händler (EUR):", min_value=0.0, value=0.0, step=50.0)
+        
         col_btn1, col_btn2 = st.columns(2)
         
-        order_pdf_data = generate_order_pdf(st._global_bestell_store)
+        order_pdf_data = generate_order_pdf(st._global_bestell_store, bestell_id)
         col_btn1.download_button(
-            label="📥 Bestellzettel (Gesamt) als PDF laden", 
+            label="📥 Bestellzettel als PDF laden", 
             data=bytes(order_pdf_data), 
-            file_name=f"Hof_Bestellung_{date.today().strftime('%Y%m%d')}.pdf", 
+            file_name=f"Hof_Bestellung_BS-{bestell_id:04d}.pdf", 
             mime="application/pdf"
         )
         
-        if col_btn2.button("✅ Einkäufe erledigt (Liste leeren)"):
+        # NEU: Einkäufe abrechnen und von der Kasse abziehen
+        if col_btn2.button("✅ Einkäufe erledigt & Geld abziehen", type="primary"):
+            st._global_finanzen["ausgaben"] += tatsaechliche_kosten
+            st._global_finanzen["historie"].append({
+                "Typ": "Ausgabe (Einkauf)",
+                "Nummer": f"#BS-{bestell_id:04d}",
+                "Details": f"{len(st._global_bestell_store)} Artikel gekauft",
+                "Betrag (EUR)": tatsaechliche_kosten
+            })
+            st._global_finanzen["naechste_bestellung_id"] += 1
             st._global_bestell_store = []
-            st.success("Einkaufsliste wurde erfolgreich geleert!")
+            st.success("Einkauf im Kassenbuch abgerechnet!")
             st.rerun()
 
-# --- SEITE 4 ---
+# --- SEITE 4: PRODUKTIONS-PLANER ---
 elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
     st.write("Füge hier deine Fabriken hinzu. Diese Liste wird **live mit allen Spielern auf dem Hof synchronisiert**!")
@@ -438,36 +497,11 @@ elif menu == "🏭 Produktions-Planer":
             st._global_hof_store = []
             st.warning("Die globale Liste wurde für alle Spieler geleert.")
             st.rerun()
-            
-        st.write("---")
-        st.subheader("📊 Logistik & Jahres-Ernteziele (Gesamt)")
-        
-        bedarf_dict = {}
-        ertrag_dict = {}
-        
-        for p in st._global_hof_store:
-            bedarf_dict[p['in_typ']] = bedarf_dict.get(p['in_typ'], 0) + p['in_menge']
-            ertrag_dict[p['out_typ']] = ertrag_dict.get(p['out_typ'], 0) + p['out_menge']
-            
-        col_summary1, col_summary2 = st.columns(2)
-        
-        with col_summary1:
-            st.markdown("#### 🌾 Benötigte Rohstoffe (Gesamtbedarf):")
-            for stoff, menge in bedarf_dict.items():
-                st.info(f"**{stoff}**:\n### {fmt_int(menge)} Liter")
-                
-        with col_summary2:
-            st.markdown("#### 📦 Produzierte Endwaren (Gesamtertrag):")
-            for ware, menge in ertrag_dict.items():
-                st.success(f"**{ware}**:\n### {fmt_int(menge)} Liter / Einheiten")
-                
+
+
+# --- NEU: ANZEIGE DER HISTORIE AM SEITENENDE (URKUNDE/TRANSAKTIONEN) ---
+if st._global_finanzen["historie"]:
     st.write("---")
-    with st.expander("📤 Gesicherte Planung/Backup auf Server laden"):
-        uploaded_file = st.file_uploader("Lade eine .json Datei hoch:", type="json")
-        if uploaded_file is not None:
-            try:
-                st._global_hof_store = json.load(uploaded_file)
-                st.success("✅ Planung erfolgreich hochgeladen und für alle synchronisiert!")
-                st.rerun()
-            except:
-                st.error("Fehler beim Lesen der Backup-Datei.")
+    with st.expander("📊 Digitales Kassenbuch / Transaktionsverlauf anzeigen"):
+        df_hist = pd.DataFrame(st._global_finanzen["historie"])
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
