@@ -2,56 +2,98 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import os
-import base64
+from fpdf import FPDF
 
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- LOGO HELPER ---
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    return None
+# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN (ABSOLUT SICHER FÜR A4) ---
+class InvoicePDF(FPDF):
+    def header(self):
+        # Logo einbinden, wenn vorhanden
+        if os.path.exists("logo.png"):
+            self.image("logo.png", 15, 15, 40)
+        else:
+            self.set_font("Arial", "B", 16)
+            self.cell(0, 10, "🚜 LU-BETRIEB", ln=True)
+        self.ln(20)
 
-# --- DER ULTIMATIVE DRUCK-FIX PER CSS ---
-st.markdown("""
-<style>
-    /* Das Druck-Element ist im Browser standardmäßig KOMPLETT UNSICHTBAR */
-    #print-section {
-        display: none !important;
-    }
+def generate_pdf(kunden_name, posten, rabatt_prozent):
+    pdf = InvoicePDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
     
-    /* Erst beim Drucken greift diese radikale Umstellung */
-    @media print {
-        /* Verstecke die gesamte Streamlit-Oberfläche inklusive aller Container */
-        .stApp, [data-testid="stSidebar"], header, footer, .stButton, [data-testid="stHeader"] {
-            display: none !important;
-            visibility: hidden !important;
-        }
+    # Infoblock oben rechts
+    pdf.set_x(130)
+    pdf.multi_cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nRechnung-Nr: #{date.today().strftime('%Y%m%d')}-01", align="R")
+    
+    # Empfänger
+    pdf.ln(10)
+    self_x = pdf.get_x()
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 6, "Empfänger:", ln=True)
+    pdf.set_font("Arial", size=11)
+    pdf.cell(0, 6, str(kunden_name), ln=True)
+    
+    # Titel
+    pdf.ln(15)
+    pdf.set_font("Arial", "B", 24)
+    pdf.cell(0, 15, "RECHNUNG", ln=True)
+    
+    # Trennlinie
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    
+    # Tabellen-Header
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(80, 10, "Leistung / Maschine", border=0)
+    pdf.cell(30, 10, "Menge", border=0, align="C")
+    pdf.cell(40, 10, "Einzelpreis", border=0, align="R")
+    pdf.cell(40, 10, "Gesamt", border=0, align="R")
+    pdf.ln(10)
+    
+    # Trennlinie unter Header
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.set_font("Arial", size=11)
+    
+    # Posten eintragen
+    summe = 0
+    for p in posten:
+        pdf.cell(80, 10, str(p['name']), border=0)
+        pdf.cell(30, 10, f"{p['std']} h", border=0, align="C")
+        pdf.cell(40, 10, f"{p['preis']:.2f} €", border=0, align="R")
+        pdf.cell(40, 10, f"{p['gesamt']:.2f} €", border=0, align="R")
+        pdf.ln(10)
+        summe += p['gesamt']
         
-        /* Mache NUR das reine HTML-Druck-Element sichtbar */
-        #print-section {
-            display: block !important;
-            visibility: visible !important;
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 210mm !important; /* Exakt A4 Breite */
-            font-family: Arial, sans-serif !important;
-            color: black !important;
-            background: white !important;
-        }
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    
+    # Berechnungen
+    rabatt_betrag = summe * (rabatt_prozent / 100)
+    total = summe - rabatt_betrag
+    
+    # Summen-Block rechtsbündig
+    pdf.cell(150, 6, "Zwischensumme:", align="R")
+    pdf.cell(40, 6, f"{summe:.2f} €", align="R", ln=True)
+    
+    if rabatt_prozent > 0:
+        pdf.cell(150, 6, f"Rabatt ({rabatt_prozent}%):", align="R")
+        pdf.cell(40, 6, f"-{rabatt_betrag:.2f} €", align="R", ln=True)
         
-        @page {
-            size: A4;
-            margin: 15mm;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
+    pdf.cell(40, 10, f"{total:.2f} €", align="R", ln=True)
+    
+    # Fußzeile
+    pdf.ln(30)
+    pdf.set_font("Arial", "I", 10)
+    pdf.cell(0, 10, "Vielen Dank für die gute Zusammenarbeit! Der Betrag ist sofort fällig.", align="C")
+    
+    return pdf.output()
 
-# 2. Daten-Verbindung
+# 2. Daten-Verbindung zu Google Sheets
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
 PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
 KUNDEN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=568043650"
@@ -127,80 +169,34 @@ elif menu == "📋 Rechnungs-Ersteller":
     if st.session_state.rechnungs_posten:
         st.write("---")
         
-        # 1. Schicke, native Streamlit-Vorschau (KEIN Textfehler möglich, da Pandas-Tabelle!)
-        st.subheader("📋 Rechnungsvorschau")
+        # Native, fehlerfreie Streamlit Vorschau
+        st.subheader("📋 Aktuelle Posten")
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        df_preview.columns = ["Leistung / Maschine", "Menge (h)", "Einzelpreis (€/h)", "Gesamtpreis (€)"]
+        df_preview.columns = ["Maschine", "Stunden", "Einzelpreis", "Gesamt"]
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
         
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
         total = summe * (1 - rabatt/100)
         
-        st.metric(label="Zwischensumme", value=f"{summe:.2f} €")
-        if rabatt > 0:
-            st.metric(label=f"Rabatt ({rabatt}%)", value=f"-{summe*(rabatt/100):.2f} €")
-        st.metric(label="RECHNUNGSENDBETRAG", value=f"{total:.2f} €")
+        col_m1, col_m2 = st.columns(2)
+        col_m1.metric("Zwischensumme", f"{summe:.2f} €")
+        col_m2.metric("Endbetrag", f"{total:.2f} €")
 
-        # 2. Das unsichtbare HTML-Druck-Element (Wird erst beim Klick auf Drucken aktiv)
-        logo_data = get_base64_image("logo.png")
-        items_html = "".join([f"<tr style='border-bottom: 1px solid #ddd;'><td style='padding: 10px;'>{p['name']}</td><td style='padding: 10px;'>{p['std']} h</td><td style='padding: 10px;'>{p['preis']:.2f} €</td><td style='padding: 10px; text-align: right;'>{p['gesamt']:.2f} €</td></tr>" for p in st.session_state.rechnungs_posten])
-        rabatt_html = f"<tr><td colspan='3' style='text-align: right; padding: 5px;'>Rabatt ({rabatt}%):</td><td style='text-align: right; padding: 5px;'>-{summe*(rabatt/100):.2f} €</td></tr>" if rabatt > 0 else ""
-
-        # WICHTIG: Das div hat die ID "print-section". Das CSS steuert dieses Element unabhängig von Streamlit.
-        druck_html = f"""
-        <div id="print-section">
-            <table style="width: 100%; border: none; margin-bottom: 30px;">
-                <tr>
-                    <td style="text-align: left; vertical-align: middle;">
-                        {f'<img src="data:image/png;base64,{logo_data}" width="180">' if logo_data else '<h2>🚜 LU-BETRIEB</h2>'}
-                    </td>
-                    <td style="text-align: right; vertical-align: middle; font-size: 14px; line-height: 1.6;">
-                        <strong>Datum:</strong> {date.today().strftime('%d.%m.%Y')}<br>
-                        <strong>Kunde:</strong> {k_name}
-                    </td>
-                </tr>
-            </table>
-            <hr style="border: none; border-top: 3px solid black; margin: 10px 0;">
-            <h1 style="margin: 15px 0; font-size: 32px; letter-spacing: 1px;">RECHNUNG</h1>
-            <hr style="border: none; border-top: 3px solid black; margin: 10px 0;">
-            <table style="width:100%; border-collapse:collapse; margin: 25px 0;">
-                <thead>
-                    <tr style="border-bottom: 2px solid black; background-color: #f2f2f2; text-align: left; font-weight: bold;">
-                        <th style="padding: 12px 10px;">Leistung / Maschine</th>
-                        <th style="padding: 12px 10px;">Menge</th>
-                        <th style="padding: 12px 10px;">Einzelpreis</th>
-                        <th style="padding: 12px 10px; text-align: right;">Gesamt</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items_html}
-                </tbody>
-            </table>
-            <table style="width: 100%; margin-top: 30px;">
-                <tr>
-                    <td style="width: 50%;"></td>
-                    <td style="width: 50%;">
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <tr><td style="text-align: right; padding: 5px;">Zwischensumme:</td><td style="text-align: right; padding: 5px; width: 120px;">{summe:.2f} €</td></tr>
-                            {rabatt_html}
-                            <tr style="font-size: 20px; font-weight: bold;">
-                                <td style="text-align: right; padding: 15px 5px 5px 5px; border-top: 2px solid black;">GESAMT:</td>
-                                <td style="text-align: right; padding: 15px 5px 5px 5px; border-top: 2px solid black;">{total:.2f} €</td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </div>
-        """
-        # Wir injizieren das HTML direkt in die Seite. Im Browser unsichtbar, im Druck sichtbar!
-        st.markdown(druck_html, unsafe_allow_html=True)
-
-        # Buttons unter der Vorschau
+        # PDF GENERIEREN BUTTONS
         st.write("")
         col_b1, col_b2 = st.columns(2)
-        if col_b1.button("🖨️ Rechnung drucken (A4)"):
-            st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
+        
+        # PDF im Hintergrund bauen
+        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt)
+        
+        # Der magische Download-Button (Erzeugt direkt die fertige PDF-Datei!)
+        col_b1.download_button(
+            label="📥 Rechnung als PDF herunterladen",
+            data=pdf_data,
+            file_name=f"Rechnung_{k_name}_{date.today().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf"
+        )
+        
         if col_b2.button("🗑️ Rechnung leeren"):
             st.session_state.rechnungs_posten = []
             st.rerun()
