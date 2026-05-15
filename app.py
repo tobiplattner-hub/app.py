@@ -144,7 +144,6 @@ def generate_order_pdf(bestell_liste, bestell_id, ingame_datum):
     for b in bestell_liste:
         pdf.cell(120, 10, safe_str(b["artikel"]), border=0)
         einheit = b.get("einheit", "L")
-        # Unterscheidung ob Nachkommastellen nötig sind (z.B. bei Hektar)
         if einheit in ["ha", "h"]:
             pdf.cell(60, 10, f"{fmt_float(b['menge'])} {einheit}", border=0, align="R")
         else:
@@ -214,7 +213,7 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_monat = col_m_m.selectbox("Monat:", LISTE_MONATE, key="m_monat")
     m_jahr = col_m_j.number_input("Jahr:", min_value=1, value=1, step=1, key="m_jahr")
     
-    if st.button("💾 Buchung保存"):
+    if st.button("💾 Buchung speichern", key="sidebar_save_btn"):
         if m_details.strip() == "":
             st.error("Bitte einen Verwendungszweck eingeben!")
         else:
@@ -222,24 +221,14 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
             if m_typ == "Einnahme":
                 st._global_finanzen["einnahmen"] += m_betrag
                 st._global_finanzen["historie"].append({
-                    "In-Game Datum": in_game_datum_str,
-                    "Sort_Jahr": m_jahr,
-                    "Sort_Monat": m_monat,
-                    "Typ": "Manuelle Einnahme",
-                    "Nummer": "M-IN",
-                    "Details": m_details,
-                    "Betrag (EUR)": m_betrag
+                    "In-Game Datum": in_game_datum_str, "Sort_Jahr": m_jahr, "Sort_Monat": m_monat,
+                    "Typ": "Manuelle Einnahme", "Nummer": "M-IN", "Details": m_details, "Betrag (EUR)": m_betrag
                 })
             else:
                 st._global_finanzen["ausgaben"] += m_betrag
                 st._global_finanzen["historie"].append({
-                    "In-Game Datum": in_game_datum_str,
-                    "Sort_Jahr": m_jahr,
-                    "Sort_Monat": m_monat,
-                    "Typ": "Manuelle Ausgabe",
-                    "Nummer": "M-OUT",
-                    "Details": m_details,
-                    "Betrag (EUR)": m_betrag
+                    "In-Game Datum": in_game_datum_str, "Sort_Jahr": m_jahr, "Sort_Monat": m_monat,
+                    "Typ": "Manuelle Ausgabe", "Nummer": "M-OUT", "Details": m_details, "Betrag (EUR)": m_betrag
                 })
             st.success("Erfolgreich gebucht!")
             st.rerun()
@@ -371,7 +360,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: AUFTRÄGE & BESTELLUNGEN (ERWEITERT UM LOHNARBEITS-BESTELLUNG) ---
+# --- SEITE 3: AUFTRÄGE & BESTELLUNGEN (JETZT MIT EINZEL-LÖSCHFUNKTION) ---
 elif menu == "🛒 Material- & Auftragsverwaltung":
     st.title("🛒 Materialbestellungen & Fremdaufträge")
     
@@ -417,7 +406,6 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
     st.write("---")
     st.subheader("📝 Einkäufe & Lohnarbeiten auf Server-Liste setzen")
     
-    # NEU: AUSWAHL OB MATERIAL ODER FREMDE ARBEIT GEKAUFT WIRD
     art_der_bestellung = st.radio("Was möchtest du in Auftrag geben / einkaufen?", ["🌾 Eigenes Lager auffüllen (Material)", "🚜 Externe Dienstleistung beauftragen (Mähen, Dreschen etc.)"], horizontal=True)
 
     if art_der_bestellung == "🚜 Externe Dienstleistung beauftragen (Mähen, Dreschen etc.)":
@@ -494,13 +482,27 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
         st.subheader(f"📋 Offene Posten & Aufträge auf dem Server (#BS-{bestell_id:04d})")
         
         df_bestellungen = pd.DataFrame(st._global_bestell_store)
-        # Schönere Darstellung der Mengen und Einheiten
         df_bestellungen["Menge & Einheit"] = df_bestellungen.apply(lambda r: f"{r['menge']} {r['einheit']}", axis=1)
         df_anzeige_b = df_bestellungen[["artikel", "Menge & Einheit"]].copy()
         df_anzeige_b.columns = ["Artikel / Dienstleistung", "Menge & Einheit"]
         
         st.dataframe(df_anzeige_b, use_container_width=True, hide_index=True)
         
+        # --- NEU: MANUELLE EINZEL-LÖSCHFUNKTION ---
+        with st.container(border=True):
+            st.markdown("🗑️ **Einzelnen Posten von der Liste löschen**")
+            # Erstellt eine Liste aus lesbaren Namen ("1: Saatgut (2000 L)", "2: Auftrag LU: Maehen (5.0 ha)")
+            loesch_optionen = [f"{i+1}: {p['artikel']} ({p['menge']} {p['einheit']})" for i, p in enumerate(st._global_bestell_store)]
+            posten_zu_loeschen = st.selectbox("Wähle den Posten aus, den du entfernen willst:", options=loesch_optionen)
+            
+            if st.button("❌ Ausgewählten Posten löschen", type="secondary"):
+                # Index aus dem Optionstext extrahieren
+                idx_zu_loeschen = int(posten_zu_loeschen.split(":")[0]) - 1
+                entfernter_posten = st._global_bestell_store.pop(idx_zu_loeschen)
+                st.success(f" Posten '{entfernter_posten['artikel']}' wurde gelöscht!")
+                st.rerun()
+        # ------------------------------------------
+
         st.markdown("#### 📆 In-Game Buchungsmonat für diesen Beleg")
         col_bs_m, col_bs_j = st.columns(2)
         bs_monat = col_bs_m.selectbox("In-Game Monat für Beleg:", LISTE_MONATE)
