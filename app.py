@@ -13,7 +13,8 @@ if not hasattr(st, "_global_hof_store"):
     st._global_hof_store = []
 
 if not hasattr(st, "_global_lager_store"):
-    st._global_lager_store = {"saat": 3000, "kalk": 10000, "dueng": 2000, "herbi": 2000}
+    # Diesel wurde hier im globalen Speicher mit 5000L Startbestand hinzugefügt
+    st._global_lager_store = {"saat": 3000, "kalk": 10000, "dueng": 2000, "herbi": 2000, "diesel": 5000}
 
 if not hasattr(st, "_global_bestell_store"):
     st._global_bestell_store = []
@@ -21,12 +22,12 @@ if not hasattr(st, "_global_bestell_store"):
 # Globaler Finanzen- & Nummern-Speicher
 if not hasattr(st, "_global_finanzen"):
     st._global_finanzen = {
-        "start_saldo": 0.0,  # Neues Feld für das manuelle Start-Saldo
+        "start_saldo": 0.0,
         "einnahmen": 0.0,
         "ausgaben": 0.0,
         "naechste_rechnung_id": 1,
         "naechste_bestellung_id": 1,
-        "historie": [] # Liste aller Buchungen für die Übersicht
+        "historie": []
     }
 
 # --- STATISCHE LISTE FÜR IN-GAME MONATE ---
@@ -197,7 +198,6 @@ PROD_DATA = {
 # --- SIDEBAR FINANZ-METRIKEN ---
 st.sidebar.markdown("## 💰 Hof-Kasse (Live)")
 
-# NEU: Start-Saldo konfigurieren
 st.sidebar.markdown("### 🏁 Startkapital einrichten")
 st._global_finanzen["start_saldo"] = st.sidebar.number_input(
     "Start-Saldo (EUR):", 
@@ -209,14 +209,12 @@ st._global_finanzen["start_saldo"] = st.sidebar.number_input(
 
 einn = st._global_finanzen["einnahmen"]
 ausg = st._global_finanzen["ausgaben"]
-# Aktueller Hof-Gewinn berechnet sich nun inklusive Start-Saldo
 aktuelle_hof_kasse = st._global_finanzen["start_saldo"] + einn - ausg
 
 st.sidebar.metric("Einnahmen (Saison)", f"+{fmt_float(einn)} EUR")
 st.sidebar.metric("Ausgaben (Saison)", f"-{fmt_float(ausg)} EUR")
 st.sidebar.metric("Aktueller Kontostand", f"{fmt_float(aktuelle_hof_kasse)} EUR")
 
-# Manuelle Buchungsfunktion in der Seitenleiste
 with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_typ = st.radio("Buchungsart:", ["Einnahme", "Ausgabe"], key="m_typ")
     m_betrag = st.number_input("Betrag (EUR):", min_value=0.0, value=1000.0, step=100.0, key="m_betrag")
@@ -347,10 +345,8 @@ elif menu == "📋 Rechnungs-Ersteller":
 
         st.write("")
         
-        # --- DYNAMISCHER DATEINAME FÜR RECHNUNGEN ---
         vorgeschlagener_name = f"Rechnung_RE-{aktuelle_id:04d}_{safe_str(k_name)}"
         pdf_dateiname = st.text_input("📄 PDF-Dateiname (ohne .pdf):", value=vorgeschlagener_name)
-        # ---------------------------------------------
         
         col_b1, col_b2, col_b3 = st.columns(3)
         
@@ -385,7 +381,8 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
     st.title("🛒 Materialbestellungen & Fremdaufträge")
     
     st.subheader("📦 Aktueller Hof-Bestand (Server)")
-    col_s, col_k, col_d, col_h = st.columns(4)
+    # Layout auf 5 Spalten erweitert, um Platz für Diesel zu schaffen
+    col_s, col_k, col_d, col_h, col_diesel = st.columns(5)
     
     with col_s:
         st.markdown("### 🌱 Saatgut")
@@ -406,7 +403,7 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
         else: st.success(f"✅ Stabil: {fmt_int(b_kalk)} L")
             
     with col_d:
-        st.markdown("### 🧪 Flüssigdünger")
+        st.markdown("### 🧪 Dünger")
         v_dueng = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store["dueng"]), step=500, key="nb_dueng")
         g_dueng = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_dueng")
         b_dueng = v_dueng - g_dueng
@@ -422,6 +419,16 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
         st._global_lager_store["herbi"] = b_herbi
         if b_herbi < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_herbi)} L")
         else: st.success(f"✅ Stabil: {fmt_int(b_herbi)} L")
+
+    # NEU: Diesel-Spalte im Hof-Bestand
+    with col_diesel:
+        st.markdown("### ⛽ Diesel")
+        v_diesel = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store.get("diesel", 5000)), step=500, key="nb_diesel")
+        g_diesel = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_diesel")
+        b_diesel = v_diesel - g_diesel
+        st._global_lager_store["diesel"] = b_diesel
+        if b_diesel < 1500: st.error(f"🚨 Kritisch: {fmt_int(b_diesel)} L")
+        else: st.success(f"✅ Stabil: {fmt_int(b_diesel)} L")
             
     st.write("---")
     st.subheader("📝 Einkäufe & Lohnarbeiten auf Server-Liste setzen")
@@ -450,24 +457,29 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
                     st.rerun()
     else:
         with st.expander("📉 Automatische Nachfüllung (Lager-Vorschlag)"):
-            col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+            col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
             p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
             p_kalk = col_p2.number_input("Kalk (EUR/1000L):", value=150)
             p_dueng = col_p3.number_input("Dünger (EUR/1000L):", value=1200)
             p_herbi = col_p4.number_input("Herbizid (EUR/1000L):", value=1000)
+            p_diesel = col_p5.number_input("Diesel (EUR/1000L):", value=1400) # NEU: Diesel-Preisfeld
 
             col_b1, col_b2 = st.columns(2)
             init_saat = 2000 if b_saat < 1500 else 0
             order_saat = col_b1.number_input("Saatgut Menge (Liter):", min_value=0, value=init_saat, step=500)
             b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
             
-            col_b3, col_b4, col_b5 = st.columns(3)
+            col_b3, col_b4, col_b5, col_b6 = st.columns(4)
             init_kalk = 5000 if b_kalk < 5000 else 0
             order_kalk = col_b3.number_input("Kalk Menge (Liter):", min_value=0, value=init_kalk, step=1000)
             init_dueng = 1000 if b_dueng < 1000 else 0
             order_dueng = col_b4.number_input("Flüssigdünger Menge (Liter):", min_value=0, value=init_dueng, step=500)
             init_herbi = 1000 if b_herbi < 1000 else 0
             order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
+            
+            # NEU: Diesel-Mengenfeld bei automatischer Nachfüllung
+            init_diesel = 3000 if b_diesel < 1500 else 0
+            order_diesel = col_b6.number_input("Diesel Menge (Liter):", min_value=0, value=init_diesel, step=500)
             
             if st.button("📝 Standard-Lagergüter hinzufügen"):
                 if order_saat > 0:
@@ -479,12 +491,14 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
                     st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
                 if order_herbi > 0:
                     st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi, "einheit": "L"})
+                if order_diesel > 0: # NEU: Diesel-Verarbeitung
+                    st._global_bestell_store.append({"artikel": "Diesel", "menge": order_diesel, "einheit": "L"})
                 st.success(f"Standardgüter hinzugefügt!")
                 st.rerun()
 
-        with st.expander("➕ Freitext / Andere Waren hinzufügen (Diesel, Futter, etc.)"):
+        with st.expander("➕ Freitext / Andere Waren hinzufügen (Futter, etc.)"):
             col_m1, col_m2, col_m3 = st.columns([2, 1, 1])
-            m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration", key="order_m_name")
+            m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Mischration, Spanngurte", key="order_m_name")
             m_artikel_menge = col_m2.number_input("Menge:", min_value=1, value=1000, step=50, key="order_m_menge")
             m_artikel_einheit = col_m3.selectbox("Einheit:", ["L", "Stk", "kg"], key="order_m_einheit")
             
@@ -508,7 +522,6 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
         
         st.dataframe(df_anzeige_b, use_container_width=True, hide_index=True)
         
-        # --- MANUELLE EINZEL-LÖSCHFUNKTION ---
         with st.container(border=True):
             st.markdown("🗑️ **Einzelnen Posten von der Liste löschen**")
             loesch_optionen = [f"{i+1}: {p['artikel']} ({p['menge']} {p['einheit']})" for i, p in enumerate(st._global_bestell_store)]
@@ -519,17 +532,14 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
                 entfernter_posten = st._global_bestell_store.pop(idx_zu_loeschen)
                 st.success(f" Posten '{entfernter_posten['artikel']}' wurde gelöscht!")
                 st.rerun()
-        # ------------------------------------------
 
         st.markdown("#### 📆 In-Game Buchungsmonat für diesen Beleg")
         col_bs_m, col_bs_j = st.columns(2)
         bs_monat = col_bs_m.selectbox("In-Game Monat für Beleg:", LISTE_MONATE)
         bs_jahr = col_bs_j.number_input("In-Game Jahr für Beleg:", min_value=1, value=1, step=1)
         
-        # --- DYNAMISCHER DATEINAME FÜR AUFTRÄGE ---
         vorgeschlagener_auftrag_name = f"Hof_Auftrag_BS-{bestell_id:04d}"
         auftrag_dateiname = st.text_input("📄 PDF-Dateiname (ohne .pdf):", value=vorgeschlagener_auftrag_name, key="pdf_order_name")
-        # -------------------------------------------
         
         tatsaechliche_kosten = st.number_input("Tatsächliche Gesamtkosten (EUR):", min_value=0.0, value=0.0, step=50.0)
         col_btn1, col_btn2 = st.columns(2)
@@ -585,7 +595,7 @@ elif menu == "🏭 Produktions-Planer":
         monate = col_time1.slider("Betriebsdauer im Jahr (Monate):", min_value=1, max_value=12, value=12, key="prod_monate")
         anzahl_fabriken = col_time2.number_input("Anzahl Linien / Fabriken:", min_value=1, value=1, step=1, key="prod_anzahl")
         
-        if st.button("💾 Für ALLE speichern & synchronisieren", type="primary"):
+        if st.button("💾 Für ALLE保存 & synchronisieren", type="primary"):
             gesamt_input = base_in * monate * anzahl_fabriken
             gesamt_output = base_out * monate * anzahl_fabriken
             st._global_hof_store.append({
@@ -621,10 +631,8 @@ if st._global_finanzen["historie"]:
     df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Einnahme" in r["Typ"] else 0.0, axis=1)
     df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Ausgabe" in r["Typ"] else 0.0, axis=1)
     
-    # Chronologisch sortieren, um das Saldo sauber aufzubauen
     df_raw_sorted = df_raw.sort_values(by=["Sort_Jahr", "Sort_Monat"]).reset_index(drop=True)
     
-    # --- ANGEPASST: Fortlaufendes Saldo inkl. Start-Saldo berechnen ---
     kontostand = st._global_finanzen["start_saldo"]
     saldo_liste = []
     for idx, row in df_raw_sorted.iterrows():
@@ -635,7 +643,6 @@ if st._global_finanzen["historie"]:
         saldo_liste.append(kontostand)
     
     df_raw_sorted["Saldo (EUR)"] = saldo_liste
-    # ------------------------------------------
     
     df_monat = df_raw_sorted.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
         Einnahmen=("Einnahme_Wert", "sum"),
@@ -660,17 +667,14 @@ if st._global_finanzen["historie"]:
         st.bar_chart(data=df_monat, x="In-Game Datum", y="Gewinn / Verlust", color="#2e7d32")
 
     with st.expander("📋 Komplettes Kassenbuch (Einzeltransaktionen mit Live-Saldo anzeigen)"):
-        # Spalten für eine schönere UI-Anzeige formatieren
         df_kassenbuch_view = df_raw_sorted.copy()
         df_kassenbuch_view["Betrag (EUR)"] = df_kassenbuch_view.apply(
             lambda r: f"+{fmt_float(r['Betrag (EUR)'])}" if "Einnahme" in r["Typ"] else f"-{fmt_float(r['Betrag (EUR)'])}", axis=1
         )
         df_kassenbuch_view["Saldo"] = df_kassenbuch_view["Saldo (EUR)"].map(lambda x: f"{fmt_float(x)} EUR")
         
-        # Hinweis-Zeile für das Startkapital über der Tabelle anzeigen
         st.info(f"🏁 Eingestelltes Startkapital: **{fmt_float(st._global_finanzen['start_saldo'])} EUR**")
         
-        # DataFrame mit der neuen Saldo-Spalte ausgeben
         st.dataframe(
             df_kassenbuch_view[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)", "Saldo"]], 
             use_container_width=True, 
