@@ -14,53 +14,33 @@ def get_base64_image(image_path):
             return base64.b64encode(img_file.read()).decode()
     return None
 
-# --- DRUCK-STYLE-INJEKTION ---
-# Wir nutzen hier st.html(), damit Streamlit das CSS absolut sicher frisst
-st.html("""
+# --- DER ULTIMATIVE DRUCK-FIX PER CSS ---
+st.markdown("""
 <style>
-    /* Vorschau-Modus im Browser */
-    .invoice-container {
-        background-color: white !important;
-        padding: 30px !important;
-        border: 1px solid #ddd !important;
-        border-radius: 8px !important;
-        color: black !important;
-        font-family: Arial, sans-serif !important;
+    /* Das Druck-Element ist im Browser standardmäßig KOMPLETT UNSICHTBAR */
+    #print-section {
+        display: none !important;
     }
     
-    /* Druck-Modus im Browser */
+    /* Erst beim Drucken greift diese radikale Umstellung */
     @media print {
-        /* Verstecke alles von Streamlit komplett */
-        [data-testid="stSidebar"], 
-        header, 
-        footer, 
-        .no-print, 
-        .stButton, 
-        [data-testid="stHeader"],
-        [data-testid="stVerticalBlock"] > div:not(.invoice-container) {
+        /* Verstecke die gesamte Streamlit-Oberfläche inklusive aller Container */
+        .stApp, [data-testid="stSidebar"], header, footer, .stButton, [data-testid="stHeader"] {
             display: none !important;
             visibility: hidden !important;
-            height: 0 !important;
         }
         
-        body, html, [data-testid="stAppViewContainer"], .main {
-            visibility: hidden !important;
-            background: white !important;
-        }
-        
-        /* Zeige NUR die Rechnung */
-        .invoice-container, .invoice-container * {
+        /* Mache NUR das reine HTML-Druck-Element sichtbar */
+        #print-section {
+            display: block !important;
             visibility: visible !important;
-        }
-        
-        .invoice-container {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 100% !important;
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
+            width: 210mm !important; /* Exakt A4 Breite */
+            font-family: Arial, sans-serif !important;
+            color: black !important;
+            background: white !important;
         }
         
         @page {
@@ -69,7 +49,7 @@ st.html("""
         }
     }
 </style>
-""")
+""", unsafe_allow_html=True)
 
 # 2. Daten-Verbindung
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
@@ -129,7 +109,7 @@ if menu == "💰 Ernte & Felder":
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
-    # Eingabe-Maske (wird beim Drucken versteckt)
+    # Eingabe-Maske
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
@@ -146,75 +126,81 @@ elif menu == "📋 Rechnungs-Ersteller":
     # RECHNUNGSDESIGN
     if st.session_state.rechnungs_posten:
         st.write("---")
+        
+        # 1. Schicke, native Streamlit-Vorschau (KEIN Textfehler möglich, da Pandas-Tabelle!)
+        st.subheader("📋 Rechnungsvorschau")
+        df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
+        df_preview.columns = ["Leistung / Maschine", "Menge (h)", "Einzelpreis (€/h)", "Gesamtpreis (€)"]
+        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+        
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
         total = summe * (1 - rabatt/100)
-        logo_data = get_base64_image("logo.png")
         
-        # HTML-Zeilen für die Tabelle generieren
-        items_html = ""
-        for p in st.session_state.rechnungs_posten:
-            items_html += f"""
-            <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 10px; color: black;">{p['name']}</td>
-                <td style="padding: 10px; color: black;">{p['std']} h</td>
-                <td style="padding: 10px; color: black;">{p['preis']:.2f} €</td>
-                <td style="padding: 10px; color: black; text-align: right;">{p['gesamt']:.2f} €</td>
-            </tr>
-            """
-        
-        rabatt_html = f"<p style='margin: 5px 0; color: black;'>Rabatt ({rabatt}%): -{summe*(rabatt/100):.2f} €</p>" if rabatt > 0 else ""
+        st.metric(label="Zwischensumme", value=f"{summe:.2f} €")
+        if rabatt > 0:
+            st.metric(label=f"Rabatt ({rabatt}%)", value=f"-{summe*(rabatt/100):.2f} €")
+        st.metric(label="RECHNUNGSENDBETRAG", value=f"{total:.2f} €")
 
-        # Die Rechnung fix als reiner HTML-Block
-        rechnung_html = f"""
-        <div class="invoice-container">
-            <table style="width: 100%; border: none; margin-bottom: 20px; border-collapse: collapse;">
+        # 2. Das unsichtbare HTML-Druck-Element (Wird erst beim Klick auf Drucken aktiv)
+        logo_data = get_base64_image("logo.png")
+        items_html = "".join([f"<tr style='border-bottom: 1px solid #ddd;'><td style='padding: 10px;'>{p['name']}</td><td style='padding: 10px;'>{p['std']} h</td><td style='padding: 10px;'>{p['preis']:.2f} €</td><td style='padding: 10px; text-align: right;'>{p['gesamt']:.2f} €</td></tr>" for p in st.session_state.rechnungs_posten])
+        rabatt_html = f"<tr><td colspan='3' style='text-align: right; padding: 5px;'>Rabatt ({rabatt}%):</td><td style='text-align: right; padding: 5px;'>-{summe*(rabatt/100):.2f} €</td></tr>" if rabatt > 0 else ""
+
+        # WICHTIG: Das div hat die ID "print-section". Das CSS steuert dieses Element unabhängig von Streamlit.
+        druck_html = f"""
+        <div id="print-section">
+            <table style="width: 100%; border: none; margin-bottom: 30px;">
                 <tr>
                     <td style="text-align: left; vertical-align: middle;">
-                        {f'<img src="data:image/png;base64,{logo_data}" width="160">' if logo_data else '<h2 style="margin:0; color: black;">🚜 LU-BETRIEB</h2>'}
+                        {f'<img src="data:image/png;base64,{logo_data}" width="180">' if logo_data else '<h2>🚜 LU-BETRIEB</h2>'}
                     </td>
-                    <td style="text-align: right; vertical-align: middle; color: black; font-size: 14px; line-height: 1.5;">
+                    <td style="text-align: right; vertical-align: middle; font-size: 14px; line-height: 1.6;">
                         <strong>Datum:</strong> {date.today().strftime('%d.%m.%Y')}<br>
                         <strong>Kunde:</strong> {k_name}
                     </td>
                 </tr>
             </table>
-            
-            <hr style="border: none; border-top: 2px solid black; margin: 10px 0;">
-            <h1 style="margin: 10px 0; color: black; font-size: 28px; font-family: Arial, sans-serif;">RECHNUNG</h1>
-            <hr style="border: none; border-top: 2px solid black; margin: 10px 0;">
-            
-            <table style="width:100%; border-collapse:collapse; margin: 20px 0;">
+            <hr style="border: none; border-top: 3px solid black; margin: 10px 0;">
+            <h1 style="margin: 15px 0; font-size: 32px; letter-spacing: 1px;">RECHNUNG</h1>
+            <hr style="border: none; border-top: 3px solid black; margin: 10px 0;">
+            <table style="width:100%; border-collapse:collapse; margin: 25px 0;">
                 <thead>
-                    <tr style="border-bottom: 2px solid black; background-color: #f2f2f2; text-align: left;">
-                        <th style="padding: 10px; color: black;">Leistung / Maschine</th>
-                        <th style="padding: 10px; color: black;">Menge</th>
-                        <th style="padding: 10px; color: black;">Einzelpreis</th>
-                        <th style="padding: 10px; color: black; text-align: right;">Gesamt</th>
+                    <tr style="border-bottom: 2px solid black; background-color: #f2f2f2; text-align: left; font-weight: bold;">
+                        <th style="padding: 12px 10px;">Leistung / Maschine</th>
+                        <th style="padding: 12px 10px;">Menge</th>
+                        <th style="padding: 12px 10px;">Einzelpreis</th>
+                        <th style="padding: 12px 10px; text-align: right;">Gesamt</th>
                     </tr>
                 </thead>
                 <tbody>
                     {items_html}
                 </tbody>
             </table>
-            
-            <div style="text-align: right; margin-top: 30px; color: black;">
-                <p style="margin: 5px 0; color: black;">Zwischensumme: {summe:.2f} €</p>
-                {rabatt_html}
-                <h2 style="border-top: 2px solid black; display: inline-block; padding-top: 10px; margin-top: 5px; color: black;">
-                    GESAMT: {total:.2f} €
-                </h2>
-            </div>
+            <table style="width: 100%; margin-top: 30px;">
+                <tr>
+                    <td style="width: 50%;"></td>
+                    <td style="width: 50%;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr><td style="text-align: right; padding: 5px;">Zwischensumme:</td><td style="text-align: right; padding: 5px; width: 120px;">{summe:.2f} €</td></tr>
+                            {rabatt_html}
+                            <tr style="font-size: 20px; font-weight: bold;">
+                                <td style="text-align: right; padding: 15px 5px 5px 5px; border-top: 2px solid black;">GESAMT:</td>
+                                <td style="text-align: right; padding: 15px 5px 5px 5px; border-top: 2px solid black;">{total:.2f} €</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </div>
         """
-        
-        # DIE GEHEIMWAFFE: st.html zwingt Streamlit, es als Webseite zu rendern, NIEMALS als Text!
-        st.html(rechnung_html)
+        # Wir injizieren das HTML direkt in die Seite. Im Browser unsichtbar, im Druck sichtbar!
+        st.markdown(druck_html, unsafe_allow_html=True)
 
-        # Buttons unter der Rechnung
+        # Buttons unter der Vorschau
         st.write("")
         col_b1, col_b2 = st.columns(2)
-        if col_b1.button("🖨️ Rechnung drucken"):
-            st.html("<script>window.print();</script>")
+        if col_b1.button("🖨️ Rechnung drucken (A4)"):
+            st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
         if col_b2.button("🗑️ Rechnung leeren"):
             st.session_state.rechnungs_posten = []
             st.rerun()
