@@ -607,7 +607,21 @@ if st._global_finanzen["historie"]:
     df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Einnahme" in r["Typ"] else 0.0, axis=1)
     df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Ausgabe" in r["Typ"] else 0.0, axis=1)
     
-    df_raw_sorted = df_raw.sort_values(by=["Sort_Jahr", "Sort_Monat"])
+    # Chronologisch sortieren, um das Saldo sauber aufzubauen
+    df_raw_sorted = df_raw.sort_values(by=["Sort_Jahr", "Sort_Monat"]).reset_index(drop=True)
+    
+    # --- NEU: Fortlaufendes Saldo berechnen ---
+    kontostand = 0.0
+    saldo_liste = []
+    for idx, row in df_raw_sorted.iterrows():
+        if "Einnahme" in row["Typ"]:
+            kontostand += row["Betrag (EUR)"]
+        else:
+            kontostand -= row["Betrag (EUR)"]
+        saldo_liste.append(kontostand)
+    
+    df_raw_sorted["Saldo (EUR)"] = saldo_liste
+    # ------------------------------------------
     
     df_monat = df_raw_sorted.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
         Einnahmen=("Einnahme_Wert", "sum"),
@@ -631,5 +645,17 @@ if st._global_finanzen["historie"]:
         st.subheader("📈 Reingewinn-Trend")
         st.bar_chart(data=df_monat, x="In-Game Datum", y="Gewinn / Verlust", color="#2e7d32")
 
-    with st.expander("📋 Komplettes Kassenbuch (Einzeltransaktionen anzeigen)"):
-        st.dataframe(df_raw_sorted[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+    with st.expander("📋 Komplettes Kassenbuch (Einzeltransaktionen mit Live-Saldo anzeigen)"):
+        # Spalten für eine schönere UI-Anzeige formatieren
+        df_kassenbuch_view = df_raw_sorted.copy()
+        df_kassenbuch_view["Betrag (EUR)"] = df_kassenbuch_view.apply(
+            lambda r: f"+{fmt_float(r['Betrag (EUR)'])}" if "Einnahme" in r["Typ"] else f"-{fmt_float(r['Betrag (EUR)'])}", axis=1
+        )
+        df_kassenbuch_view["Saldo"] = df_kassenbuch_view["Saldo (EUR)"].map(lambda x: f"{fmt_float(x)} EUR")
+        
+        # DataFrame mit der neuen Saldo-Spalte ausgeben
+        st.dataframe(
+            df_kassenbuch_view[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)", "Saldo"]], 
+            use_container_width=True, 
+            hide_index=True
+        )
