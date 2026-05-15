@@ -129,14 +129,16 @@ def generate_order_pdf(bestell_liste, bestell_id):
     pdf.ln(8)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(120, 10, "Artikel / Ware", border=0)
-    pdf.cell(60, 10, "Bestellmenge (Liter)", border=0, align="R")
+    pdf.cell(60, 10, "Bestellmenge", border=0, align="R")
     pdf.ln(10)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
     
     for b in bestell_liste:
         pdf.cell(120, 10, safe_str(b["artikel"]), border=0)
-        pdf.cell(60, 10, f"{fmt_int(b['menge'])} L", border=0, align="R")
+        # Wenn eine Einheit mitgegeben wurde, nutzen wir diese, sonst Standard 'L'
+        einheit = b.get("einheit", "L")
+        pdf.cell(60, 10, f"{fmt_int(b['menge'])} {einheit}", border=0, align="R")
         pdf.ln(10)
         
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
@@ -191,7 +193,7 @@ st.sidebar.metric("Einnahmen", f"+{fmt_float(einn)} EUR")
 st.sidebar.metric("Ausgaben", f"-{fmt_float(ausg)} EUR")
 st.sidebar.metric("Gewinn/Verlust", f"{fmt_float(gewinn)} EUR", delta=gewinn)
 
-# NEU: Manuelle Buchungsfunktion direkt in der Seitenleiste
+# Manuelle Buchungsfunktion in der Seitenleiste
 with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_typ = st.radio("Buchungsart:", ["Einnahme", "Ausgabe"], key="m_typ")
     m_betrag = st.number_input("Betrag (EUR):", min_value=0.0, value=1000.0, step=100.0, key="m_betrag")
@@ -255,7 +257,7 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
-# --- SEITE 2: RECHNUNGS-ERSTELLER ---
+# --- SEITE 2: RECHNUNGS-ERSTELLER (MIT MANUELLEM POSTEN-BUTTON) ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
@@ -263,13 +265,26 @@ elif menu == "📋 Rechnungs-Ersteller":
     st.caption(f"Nächste Rechnungsnummer: **#RE-{aktuelle_id:04d}**")
 
     with st.container(border=True):
+        # NEU: Checkbox um einen komplett freien Posten zu aktivieren
+        manuell_aktiv = st.checkbox("⚙️ Sonderleistung / Manueller Posten (Nicht in Liste)")
+        
         c1, c2, c3 = st.columns([2, 1, 1])
-        auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
-        std = c2.number_input("Stunden:", min_value=0.1, value=1.0, step=0.1)
-        e_p = c3.number_input("Preis (EUR/h):", value=float(preis_dict.get(auswahl, 0.0)))
+        
+        if manuell_aktiv:
+            auswahl = c1.text_input("Bezeichnung / Leistung:", value="", placeholder="z.B. Forstarbeiten, Ballentransport")
+            std = c2.number_input("Stunden / Menge:", min_value=0.1, value=1.0, step=0.1)
+            e_p = c3.number_input("Preis (EUR / Einheit):", value=0.0, step=10.0)
+        else:
+            auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
+            std = c2.number_input("Stunden:", min_value=0.1, value=1.0, step=0.1)
+            e_p = c3.number_input("Preis (EUR/h):", value=float(preis_dict.get(auswahl, 0.0)))
+            
         if st.button("➕ Hinzufuegen"):
-            st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_p, "gesamt": std * e_p})
-            st.rerun()
+            if manuell_aktiv and auswahl.strip() == "":
+                st.error("Bitte gib einen Namen für die Sonderleistung ein!")
+            else:
+                st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_p, "gesamt": std * e_p})
+                st.rerun()
 
     ck1, ck2 = st.columns(2)
     k_name = ck1.selectbox("Hof auswählen:", aktuelle_kunden) if aktuelle_kunden else ck1.text_input("Hofname:")
@@ -280,7 +295,7 @@ elif menu == "📋 Rechnungs-Ersteller":
         st.subheader("📋 Aktuelle Posten")
         
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        df_preview.columns = ["Maschine", "Stunden", "Einzelpreis (EUR)", "Gesamt (EUR)"]
+        df_preview.columns = ["Maschine / Leistung", "Menge/Stunden", "Einzelpreis (EUR)", "Gesamt (EUR)"]
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
         
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
@@ -319,7 +334,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: BESTELLUNGEN ---
+# --- SEITE 3: BESTELLUNGEN (MIT MANUELLEM FREITEXT-ARTIKEL-BUTTON) ---
 elif menu == "🛒 Saatgut-Bestellung":
     st.title("🛒 Material- & Lagerverwaltung")
     
@@ -364,15 +379,15 @@ elif menu == "🛒 Saatgut-Bestellung":
             
     st.write("---")
     
-    if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000 or b_herbi < 1000:
-        st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
-        
-        with st.expander("💰 Einkaufspreise schätzen"):
-            col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-            p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
-            p_kalk = col_p2.number_input("Kalk (EUR/1000L):", value=150)
-            p_dueng = col_p3.number_input("Dünger (EUR/1000L):", value=1200)
-            p_herbi = col_p4.number_input("Herbizid (EUR/1000L):", value=1000)
+    st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
+    
+    # 1. Option: Standard-Automatisierter Einkaufsrechner für Lagergrenzen
+    with st.expander("📉 Automatische Nachfüllung (Lager-Vorschlag)"):
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
+        p_kalk = col_p2.number_input("Kalk (EUR/1000L):", value=150)
+        p_dueng = col_p3.number_input("Dünger (EUR/1000L):", value=1200)
+        p_herbi = col_p4.number_input("Herbizid (EUR/1000L):", value=1000)
 
         col_b1, col_b2 = st.columns(2)
         init_saat = 2000 if b_saat < 1500 else 0
@@ -387,23 +402,38 @@ elif menu == "🛒 Saatgut-Bestellung":
         init_herbi = 1000 if b_herbi < 1000 else 0
         order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
         
-        if st.button("📝 Auf gemeinsame Einkaufsliste setzen", type="primary"):
+        if st.button("📝 Standard-Lagergüter hinzufügen"):
             kosten = ((order_saat/1000)*p_saat) + ((order_kalk/1000)*p_kalk) + ((order_dueng/1000)*p_dueng) + ((order_herbi/1000)*p_herbi)
-            
             if order_saat > 0:
                 art = f"Saatgut ({b_typ})" if b_typ else "Saatgut"
-                st._global_bestell_store.append({"artikel": art, "menge": order_saat})
+                st._global_bestell_store.append({"artikel": art, "menge": order_saat, "einheit": "L"})
             if order_kalk > 0:
-                st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk})
+                st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk, "einheit": "L"})
             if order_dueng > 0:
-                st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng})
+                st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
             if order_herbi > 0:
-                st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi})
-                
-            st.success(f"Zur Einkaufsliste hinzugefügt! Geschätzte Kosten: {fmt_float(kosten)} EUR")
+                st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi, "einheit": "L"})
+            st.success(f"Standardgüter hinzugefügt! Geschätzte Kosten: {fmt_float(kosten)} EUR")
             st.rerun()
-    else:
-        st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald ein Bestand unter das Limit rutscht.")
+
+    # NEU 2. Option: Manueller Freitext-Button für ALLES andere
+    with st.expander("➕ Freitext / Sonderbestellung hinzufügen (Diesel, Futter, etc.)"):
+        col_m1, col_m2, col_m3 = st.columns([2, 1, 1])
+        m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration, Spanngurte", key="order_m_name")
+        m_artikel_menge = col_m2.number_input("Menge:", min_value=1, value=1000, step=50, key="order_m_menge")
+        m_artikel_einheit = col_m3.selectbox("Einheit:", ["L", "Stk", "Stück", "kg"], key="order_m_einheit")
+        
+        if st.button("📝 Sonderposten zur Einkaufsliste packen"):
+            if m_artikel_name.strip() == "":
+                st.error("Bitte gib einen Namen für das Produkt ein!")
+            else:
+                st._global_bestell_store.append({
+                    "artikel": m_artikel_name,
+                    "menge": m_artikel_menge,
+                    "einheit": m_artikel_einheit
+                })
+                st.success(f"✅ '{m_artikel_name}' wurde auf die Einkaufsliste gesetzt!")
+                st.rerun()
 
     if st._global_bestell_store:
         st.write("---")
@@ -411,7 +441,8 @@ elif menu == "🛒 Saatgut-Bestellung":
         st.subheader(f"📋 Offene Bestellungen auf dem Server (#BS-{bestell_id:04d})")
         
         df_bestellungen = pd.DataFrame(st._global_bestell_store)
-        df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge (Liter)"]
+        # Umbenennung & Schöner Formatieren im Dataframe
+        df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge", "Einheit"]
         st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
         
         tatsaechliche_kosten = st.number_input("Tatsächlicher Einkaufspreis beim Händler (EUR):", min_value=0.0, value=0.0, step=50.0)
