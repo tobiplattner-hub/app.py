@@ -5,8 +5,8 @@ import os
 import json
 from fpdf import FPDF
 
-# 1. Seiteneinstellungen - "centered" ist ideal für mobile Geräte
-st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
+# 1. Seiteneinstellungen - Zurück auf das klassische, breite Desktop-Layout
+st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜")
 
 # --- GLOBALER SERVER-SPEICHER (FÜR ALLE SPIELER SYNCHRONISIERT) ---
 if not hasattr(st, "_global_hof_store"):
@@ -135,7 +135,6 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
-# LS25 Produktions-Rohdaten (Input pro Monat bei 24h Dauerbetrieb für 1 Linie, Output pro Monat)
 PROD_DATA = {
     "Getreidemühle: Weizen zu Mehl": (36000, 27000, "Weizen", "Mehl"),
     "Bäckerei: Brot": (21600, 10800, "Mehl", "Brot"),
@@ -144,116 +143,138 @@ PROD_DATA = {
     "➕ Eigenes / Mod-Rezept": (0, 0, "", "")
 }
 
-# --- SIDEBAR FINANZ-METRIKEN ---
-st.sidebar.markdown("## 💰 Hof-Kasse (Live)")
+# --- SIDEBAR FINANZ-MANAGEMENT ---
+st.sidebar.title("💰 Hof-Kasse (Server-Live)")
 
 einn = st._global_finanzen["einnahmen"]
 ausg = st._global_finanzen["ausgaben"]
 aktuelle_hof_kasse = st._global_finanzen["start_saldo"] + einn - ausg
 
-st.sidebar.metric("Kontostand", f"{fmt_float(aktuelle_hof_kasse)} €")
+st.sidebar.metric("Aktueller Kontostand", f"{fmt_float(aktuelle_hof_kasse)} €")
+st.sidebar.write(f"📈 Gesamteinnahmen: {fmt_float(einn)} €")
+st.sidebar.write(f"📉 Gesamtausgaben: {fmt_float(ausg)} €")
 
-with st.sidebar.expander("⚙️ Einstellungen & Buchung"):
-    st._global_finanzen["start_saldo"] = st.number_input("Start-Saldo:", min_value=0.0, value=float(st._global_finanzen.get("start_saldo", 0.0)), step=5000.0)
-    st.write("---")
-    m_typ = st.radio("Typ:", ["Einnahme", "Ausgabe"])
-    m_betrag = st.number_input("Betrag (€):", min_value=0.0, value=1000.0)
-    m_details = st.text_input("Zweck:")
-    m_monat = st.selectbox("Monat:", LISTE_MONATE, key="sb_m")
-    m_jahr = st.number_input("Jahr:", min_value=1, value=1, key="sb_j")
-    
-    if st.button("💾 Buchen", use_container_width=True):
-        if m_details.strip():
-            in_game_datum_str = f"J{m_jahr}-{m_monat}"
-            if m_typ == "Einnahme":
-                st._global_finanzen["einnahmen"] += m_betrag
-            else:
-                st._global_finanzen["ausgaben"] += m_betrag
-            st._global_finanzen["historie"].append({
-                "In-Game Datum": in_game_datum_str, "Sort_Jahr": m_jahr, "Sort_Monat": m_monat,
-                "Typ": m_typ, "Nummer": "MANUELL", "Details": m_details, "Betrag (EUR)": m_betrag
-            })
-            st.rerun()
+st.sidebar.markdown("---")
+st.sidebar.subheader("Manuelle Buchung / Startkapital")
+st._global_finanzen["start_saldo"] = st.sidebar.number_input("Start-Saldo (€):", min_value=0.0, value=float(st._global_finanzen.get("start_saldo", 0.0)), step=10000.0)
 
-if st.sidebar.button("🗑️ Kassenbuch Reset", use_container_width=True):
+m_typ = st.sidebar.radio("Buchungs-Typ:", ["Einnahme", "Ausgabe"])
+m_betrag = st.sidebar.number_input("Betrag (€):", min_value=0.0, value=1000.0)
+m_details = st.sidebar.text_input("Verwendungszweck:")
+m_monat = st.sidebar.selectbox("In-Game Monat:", LISTE_MONATE, key="sb_m")
+m_jahr = st.sidebar.number_input("In-Game Jahr:", min_value=1, value=1, key="sb_j")
+
+if st.sidebar.button("💾 Buchung speichern", use_container_width=True):
+    if m_details.strip():
+        in_game_datum_str = f"J{m_jahr}-{m_monat}"
+        if m_typ == "Einnahme":
+            st._global_finanzen["einnahmen"] += m_betrag
+        else:
+            st._global_finanzen["ausgaben"] += m_betrag
+        st._global_finanzen["historie"].append({
+            "In-Game Datum": in_game_datum_str, "Sort_Jahr": m_jahr, "Sort_Monat": m_monat,
+            "Typ": m_typ, "Nummer": "MANUELL", "Details": m_details, "Betrag (EUR)": m_betrag
+        })
+        st.rerun()
+
+if st.sidebar.button("🗑️ Kassenbuch komplett zurücksetzen", use_container_width=True):
     st._global_finanzen = {"start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
     st.rerun()
 
-st.sidebar.write("---")
-menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungen", "🛒 Material & Aufträge", "🏭 Produktionen"])
+st.sidebar.markdown("---")
+menu = st.sidebar.radio("Hauptmenü Navigation", ["💰 Ernte & Felder", "📋 Rechnungen", "🛒 Material & Aufträge", "🏭 Produktionen"])
 
 # --- SEITE 1 ---
 if menu == "💰 Ernte & Felder":
-    st.title("🚜 Ernte & Felder")
-    with st.expander("⚙️ Verbrauchs-Raten (ha)"):
-        r_kalk = st.number_input("Kalk (L/ha):", value=2000)
-        r_duenger = st.number_input("Dünger (L/ha):", value=160)
-        r_saat = st.number_input("Saatgut (L/ha):", value=150)
-        r_herbi = st.number_input("Herbizid (L/ha):", value=100)
+    st.title("🚜 Ernte-Kalkulator & Saatgut-Planer")
     
-    st.subheader("🧪 Bedarfskalkulation")
-    ha = st.number_input("Hektar (ha):", min_value=0.1, value=1.0, step=0.1)
-    st.info(f"""
-    **Bedarf für {ha} ha:**
-    * Kalk: **{fmt_int(ha * r_kalk)} L** | Dünger: **{fmt_int(ha * r_duenger)} L**
-    * Saatgut: **{fmt_int(ha * r_saat)} L** | Herbizid: **{fmt_int(ha * r_herbi)} L**
-    """)
-    
-    st.subheader("📊 Erlösrechner")
-    menge = st.number_input("Liter im Silo:", value=10000)
-    preis_pro_1000 = st.number_input("€ pro 1000L:", value=1200)
-    st.success(f"**Voraussichtlicher Erlös:** {fmt_float((menge / 1000) * preis_pro_1000)} EUR")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("⚙️ Standard-Verbrauchsraten anpassen")
+        r_kalk = st.number_input("Kalk Bedarf (L/ha):", value=2000)
+        r_duenger = st.number_input("Dünger Bedarf (L/ha):", value=160)
+        r_saat = st.number_input("Saatgut Bedarf (L/ha):", value=150)
+        r_herbi = st.number_input("Herbizid Bedarf (L/ha):", value=100)
+        
+    with col2:
+        st.subheader("🧪 Feldbedarf berechnen")
+        ha = st.number_input("Hektar Gesamtfläche (ha):", min_value=0.1, value=1.0, step=0.1)
+        st.markdown(f"### Benötigtes Material für {ha} ha:")
+        st.write(f"⚪ Kalk: **{fmt_int(ha * r_kalk)} Liter**")
+        st.write(f"🧪 Dünger: **{fmt_int(ha * r_duenger)} Liter**")
+        st.write(f"🌱 Saatgut: **{fmt_int(ha * r_saat)} Liter**")
+        st.write(f"🌿 Herbizid: **{fmt_int(ha * r_herbi)} Liter**")
+
+    st.write("---")
+    st.subheader("📊 Erlösrechner für Ernteerträge")
+    c1, c2 = st.columns(2)
+    menge = c1.number_input("Geerntete Menge (Liter im Silo):", value=10000)
+    preis_pro_1000 = c2.number_input("Aktueller Marktpreis (€ pro 1000L):", value=1200)
+    erloes = (menge / 1000) * preis_pro_1000
+    st.success(f"## 💵 Erwarteter Umsatz: {fmt_float(erloes)} EUR")
 
 # --- SEITE 2 ---
 elif menu == "📋 Rechnungen":
-    st.title("📋 Rechnungs-Ersteller")
-    st.caption(f"Nächste Nummer: #RE-{st._global_finanzen['naechste_rechnung_id']:04d}")
+    st.title("📋 Dienstleistungs-Rechnungen erstellen")
+    st.info(f"Nächste Rechnungsnummer auf dem Server: **#RE-{st._global_finanzen['naechste_rechnung_id']:04d}**")
 
-    with st.container(border=True):
-        abrechnungs_art = st.selectbox("Methode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Sonderposten"])
+    col_eingabe, col_liste = st.columns([1, 1])
+    
+    with col_eingabe:
+        st.subheader("Posten hinzufügen")
+        abrechnungs_art = st.selectbox("Abrechnungs-Methode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Sonderposten"])
         
         if abrechnungs_art == "Sonderposten":
-            auswahl = st.text_input("Bezeichnung:")
+            auswahl = st.text_input("Freie Beschreibung:")
             menge = st.number_input("Menge:", min_value=0.1, value=1.0)
             e_p = st.number_input("Preis (€):", value=0.0)
             einheit_str = "Stk"
         elif abrechnungs_art == "Nach Feldfläche (ha)":
-            auswahl = st.text_input("Leistung:", value="Mähen")
+            auswahl = st.text_input("Dienstleistung (z.B. Grubbern, Drillen):", value="Mähen")
             menge = st.number_input("Fläche (ha):", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis (€/ha):", value=50.0)
+            e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
             einheit_str = "ha"
         else: 
-            auswahl = st.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["Traktorenarbeit"])
-            menge = st.number_input("Zeit (h):", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
+            auswahl = st.selectbox("Maschine / Service aus Google-Sheet:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
+            menge = st.number_input("Gefahrene Stunden (h):", min_value=0.1, value=1.0)
+            e_p = st.number_input("Preis pro Stunde (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
             einheit_str = "h"
             
-        if st.button("➕ Hinzufügen", use_container_width=True):
+        if st.button("➕ Posten zur Rechnung hinzufügen", use_container_width=True):
             if auswahl.strip():
                 st.session_state.rechnungs_posten.append({"name": auswahl, "menge": menge, "preis": e_p, "einheit": einheit_str, "gesamt": menge * e_p})
                 st.rerun()
 
-    k_name = st.selectbox("Hof:", aktuelle_kunden) if aktuelle_kunden else st.text_input("Hofname:")
-    rabatt = st.slider("Rabatt (%)", 0, 50, 0)
-    
-    col_m, col_j = st.columns(2)
-    re_monat = col_m.selectbox("Monat:", LISTE_MONATE, key="re_m")
-    re_jahr = col_j.number_input("Jahr:", min_value=1, value=1, key="re_j")
+    with col_liste:
+        st.subheader("Rechnungsdaten & Vorschau")
+        k_name = st.selectbox("Empfänger (Kunde):", aktuelle_kunden) if aktuelle_kunden else st.text_input("Empfänger (Hofname):")
+        rabatt = st.slider("Rabatt auf Gesamtsumme (%)", 0, 50, 0)
+        
+        c_m, c_j = st.columns(2)
+        re_monat = c_m.selectbox("In-Game Monat:", LISTE_MONATE, key="re_m")
+        re_jahr = c_j.number_input("In-Game Jahr:", min_value=1, value=1, key="re_j")
 
     if st.session_state.rechnungs_posten:
         st.write("---")
+        st.subheader("📑 Aktuelle Rechnungsposten")
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        st.dataframe(df_preview[["name", "menge", "einheit", "gesamt"]], use_container_width=True, hide_index=True)
+        st.dataframe(df_preview[["name", "menge", "einheit", "preis", "gesamt"]], use_container_width=True, hide_index=True)
         
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
-        total = summe * (1 - rabatt/100)
-        st.metric("Gesamtbetrag (inkl. Rabatt)", f"{fmt_float(total)} EUR")
+        rabatt_betrag = summe * (rabatt / 100)
+        total = summe - rabatt_betrag
+        
+        c_res1, c_res2 = st.columns(2)
+        c_res1.metric("Zwischensumme", f"{fmt_float(summe)} EUR")
+        c_res2.metric("Endbetrag (inkl. Rabatt)", f"{fmt_float(total)} EUR")
         
         full_ingame_date = f"J{re_jahr}-{re_monat}"
-        pdf_data = generate_pdf(kunden_name=k_name, posten=st.session_state.rechnungs_posten, rabatt_prozent=rabatt, rechnungs_id=st._global_finanzen["naechste_rechnung_id"], ingame_datum=full_ingame_date)
+        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
         
-        st.download_button("📥 PDF herunterladen", data=bytes(pdf_data), file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
-        if st.button("💾 Auf Server buchen", type="primary", use_container_width=True):
+        col_b1, col_b2, col_b3 = st.columns(3)
+        col_b1.download_button("📥 PDF generieren & laden", data=bytes(pdf_data), file_name=f"Rechnung_{k_name}_#RE{st._global_finanzen['naechste_rechnung_id']}.pdf", mime="application/pdf", use_container_width=True)
+        
+        if col_b2.button("💾 Als Einnahme buchen & Rechnungs-Nr erhöhen", type="primary", use_container_width=True):
             st._global_finanzen["einnahmen"] += total
             st._global_finanzen["historie"].append({
                 "In-Game Datum": full_ingame_date, "Sort_Jahr": re_jahr, "Sort_Monat": re_monat,
@@ -263,122 +284,123 @@ elif menu == "📋 Rechnungen":
             st._global_finanzen["naechste_rechnung_id"] += 1
             st.session_state.rechnungs_posten = []
             st.rerun()
-        if st.button("🗑️ Liste leeren", use_container_width=True):
+            
+        if col_b3.button("🗑️ Rechnung verwerfen", use_container_width=True):
             st.session_state.rechnungs_posten = []
             st.rerun()
 
 # --- SEITE 3 ---
 elif menu == "🛒 Material & Aufträge":
-    st.title("🛒 Material & Aufträge")
-    st.subheader("📦 Aktueller Hof-Bestand")
+    st.title("🛒 Materialeinkauf & Externe Dienstleistungen")
     
-    with st.expander("✏️ Bestände bearbeiten / Verbräuche eintragen"):
-        c_edit1, c_edit2 = st.columns(2)
-        v_saat = c_edit1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500)
-        v_kalk = c_edit2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]), step=1000)
-        v_dueng = c_edit1.number_input("Dünger (L):", min_value=0, value=int(st._global_lager_store["dueng"]), step=500)
-        v_herbi = c_edit2.number_input("Herbizid (L):", min_value=0, value=int(st._global_lager_store.get("herbi", 2000)), step=500)
-        v_diesel = c_edit1.number_input("Diesel (L):", min_value=0, value=int(st._global_lager_store.get("diesel", 5000)), step=500)
-        
-        if st.button("💾 Bestände aktualisieren", use_container_width=True):
-            st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
-            st.rerun()
+    st.subheader("📦 Aktueller Hof-Bestand (Wird live für alle Spieler synchronisiert)")
+    # Das ursprüngliche 5-Spalten Desktop Layout für die Bestände
+    c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
+    
+    v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500)
+    v_kalk = c_l2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]), step=1000)
+    v_dueng = c_l3.number_input("Dünger (L):", min_value=0, value=int(st._global_lager_store["dueng"]), step=500)
+    v_herbi = c_l4.number_input("Herbizid (L):", min_value=0, value=int(st._global_lager_store.get("herbi", 2000)), step=500)
+    v_diesel = c_l5.number_input("Diesel (L):", min_value=0, value=int(st._global_lager_store.get("diesel", 5000)), step=500)
+    
+    if st.button("💾 Lagerbestände auf Server speichern", use_container_width=True):
+        st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
+        st.rerun()
 
-    def status_card(label, menge, limit):
-        if menge < limit: st.error(f"🚨 {label}: {fmt_int(menge)} L (Kritisch!)")
-        else: st.success(f"✅ {label}: {fmt_int(menge)} L")
-
-    status_card("🌱 Saatgut", st._global_lager_store["saat"], 1500)
-    status_card("⚪ Kalk", st._global_lager_store["kalk"], 5000)
-    status_card("🧪 Dünger", st._global_lager_store["dueng"], 1000)
-    status_card("🌿 Herbizid", st._global_lager_store["herbi"], 1000)
-    status_card("⛽ Diesel", st._global_lager_store["diesel"], 1500)
+    # Optische Bestandsampel in 5 Spalten
+    c_s1, c_s2, c_s3, c_s4, c_s5 = st.columns(5)
+    def status_box(col, label, menge, limit):
+        if menge < limit: col.error(f"🚨 {label}\n\n{fmt_int(menge)} L (Wenig!)")
+        else: col.success(f"✅ {label}\n\n{fmt_int(menge)} L")
+    
+    status_box(c_s1, "Saatgut", st._global_lager_store["saat"], 1500)
+    status_box(c_s2, "Kalk", st._global_lager_store["kalk"], 5000)
+    status_box(c_s3, "Dünger", st._global_lager_store["dueng"], 1000)
+    status_box(c_s4, "Herbizid", st._global_lager_store["herbi"], 1000)
+    status_box(c_s5, "Diesel", st._global_lager_store["diesel"], 1500)
             
     st.write("---")
-    art = st.selectbox("Aktion wählen:", ["🌾 Lager auffüllen", "🚜 Dienstleistung beauftragen"])
-
-    if art == "🚜 Dienstleistung beauftragen":
-        lu_arbeit = st.text_input("Welche Arbeit?", placeholder="z.B. Mähen Feld 12")
-        col_lu1, col_lu2 = st.columns(2)
-        lu_einheit = col_lu1.selectbox("Einheit:", ["ha", "h"])
-        lu_menge = col_lu2.number_input("Menge:", min_value=0.1, value=1.0)
+    
+    col_links, col_rechts = st.columns(2)
+    with col_links:
+        st.subheader("🚜 Dienstleister / anderes LU beauftragen")
+        lu_arbeit = st.text_input("Welche Arbeit soll erledigt werden?", placeholder="z.B. Häckseln Feld 4")
+        c_lu1, c_lu2 = st.columns(2)
+        lu_einheit = c_lu1.selectbox("Abrechnungseinheit:", ["ha", "h"])
+        lu_menge = c_lu2.number_input("Menge (ha oder h):", min_value=0.1, value=1.0)
         
-        if st.button("📝 Auftrag listen", use_container_width=True):
+        if st.button("📝 Dienstleistung auf Einkaufsliste setzen", use_container_width=True):
             if lu_arbeit.strip():
                 st._global_bestell_store.append({"artikel": f"LU: {lu_arbeit}", "menge": lu_menge, "einheit": lu_einheit})
                 st.rerun()
-    else:
-        with st.expander("📉 Automatischer Vorschlag (Preise anpassen)"):
-            c_p1, c_p2 = st.columns(2)
-            p_saat = c_p1.number_input("Saatgut (€/1k L):", value=900)
-            p_kalk = c_p2.number_input("Kalk (€/1k L):", value=150)
-            p_dueng = c_p1.number_input("Dünger (€/1k L):", value=1200)
-            p_herbi = c_p2.number_input("Herbizid (€/1k L):", value=1000)
-            p_diesel = c_p1.number_input("Diesel (€/1k L):", value=1400)
+                
+    with col_rechts:
+        st.subheader("📉 Automatischer Einkaufsvorschlag")
+        c_p1, c_p2, c_p3 = st.columns(3)
+        p_saat = c_p1.number_input("Saatgut (€/1k L):", value=900)
+        p_kalk = c_p2.number_input("Kalk (€/1k L):", value=150)
+        p_dueng = c_p3.number_input("Dünger (€/1k L):", value=1200)
 
-            order_saat = st.number_input("Saatgut (L):", min_value=0, value=2000 if st._global_lager_store["saat"] < 1500 else 0)
-            order_kalk = st.number_input("Kalk (L):", min_value=0, value=5000 if st._global_lager_store["kalk"] < 5000 else 0)
-            order_dueng = st.number_input("Dünger (L):", min_value=0, value=1000 if st._global_lager_store["dueng"] < 1000 else 0)
-            order_herbi = st.number_input("Herbizid (L):", min_value=0, value=1000 if st._global_lager_store["herbi"] < 1000 else 0)
-            order_diesel = st.number_input("Diesel (L):", min_value=0, value=3000 if st._global_lager_store["diesel"] < 1500 else 0)
-            
-            if st.button("📝 Standardgüter hinzufügen", use_container_width=True):
-                if order_saat > 0: st._global_bestell_store.append({"artikel": "Saatgut", "menge": order_saat, "einheit": "L"})
-                if order_kalk > 0: st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk, "einheit": "L"})
-                if order_dueng > 0: st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
-                if order_herbi > 0: st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi, "einheit": "L"})
-                if order_diesel > 0: st._global_bestell_store.append({"artikel": "Diesel", "menge": order_diesel, "einheit": "L"})
-                st.rerun()
+        order_saat = st.number_input("Saatgut Kaufmenge (L):", min_value=0, value=2000 if st._global_lager_store["saat"] < 1500 else 0)
+        order_kalk = st.number_input("Kalk Kaufmenge (L):", min_value=0, value=5000 if st._global_lager_store["kalk"] < 5000 else 0)
+        order_dueng = st.number_input("Dünger Kaufmenge (L):", min_value=0, value=1000 if st._global_lager_store["dueng"] < 1000 else 0)
+        
+        if st.button("📝 Vorgeschlagene Waren auf Einkaufsliste setzen", use_container_width=True):
+            if order_saat > 0: st._global_bestell_store.append({"artikel": "Saatgut", "menge": order_saat, "einheit": "L"})
+            if order_kalk > 0: st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk, "einheit": "L"})
+            if order_dueng > 0: st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
+            st.rerun()
 
     if st._global_bestell_store:
         st.write("---")
-        st.subheader("📋 Offene Posten")
-        df_b = pd.DataFrame(st._global_bestell_store)
-        st.dataframe(df_b[["artikel", "menge", "einheit"]], use_container_width=True, hide_index=True)
+        st.subheader("📋 Aktuelle Einkaufs- & Auftragsliste")
         
-        loesch_optionen = [f"{i+1}: {p['artikel']}" for i, p in enumerate(st._global_bestell_store)]
-        p_del = st.selectbox("Posten löschen:", options=loesch_optionen)
-        if st.button("❌ Löschen", use_container_width=True):
-            st._global_bestell_store.pop(int(p_del.split(":")[0]) - 1)
-            st.rerun()
+        col_tbl, col_actions = st.columns([2, 1])
+        with col_tbl:
+            df_b = pd.DataFrame(st._global_bestell_store)
+            st.dataframe(df_b[["artikel", "menge", "einheit"]], use_container_width=True, hide_index=True)
+        
+        with col_actions:
+            loesch_optionen = [f"{i+1}: {p['artikel']}" for i, p in enumerate(st._global_bestell_store)]
+            p_del = st.selectbox("Eintrag entfernen:", options=loesch_optionen)
+            if st.button("❌ Eintrag löschen", use_container_width=True):
+                st._global_bestell_store.pop(int(p_del.split(":")[0]) - 1)
+                st.rerun()
 
-        col_bm, col_bj = st.columns(2)
-        bs_monat = col_bm.selectbox("Monat:", LISTE_MONATE, key="bs_m")
-        bs_jahr = col_bj.number_input("Jahr:", min_value=1, value=1, key="bs_j")
-        
-        tatsaechliche_kosten = st.number_input("Gesamtkosten (€):", min_value=0.0)
-        
-        full_bs_date = f"J{bs_jahr}-{bs_monat}"
-        if st.button("✅ Erledigt & Geld abziehen", type="primary", use_container_width=True):
-            st._global_finanzen["ausgaben"] += tatsaechliche_kosten
-            st._global_finanzen["historie"].append({
-                "In-Game Datum": full_bs_date, "Sort_Jahr": bs_jahr, "Sort_Monat": bs_monat,
-                "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
-                "Details": "Material/Auftrag eingekauft", "Betrag (EUR)": tatsaechliche_kosten
-            })
-            st._global_bestell_store = []
-            st._global_finanzen["naechste_bestellung_id"] += 1
-            st.rerun()
-
-# --- SEITE 4 (SMARTPHONE + REICHWEITEN-RECHNER OPTIMIERT) ---
-elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktions-Planer")
-    
-    with st.container(border=True):
-        st.subheader("🏭 Produktion eintragen")
-        rezept = st.selectbox("Rezept / Fabrik:", options=list(PROD_DATA.keys()))
-        
-        # Falls eigenes Rezept, fragen wir Daten ab, ansonsten holen wir die monatlichen LS25-Standardwerte
-        if rezept == "➕ Eigenes / Mod-Rezept":
             st.write("---")
-            in_name = st.text_input("Name Rohstoff (Input):", value="Weizen")
-            out_name = st.text_input("Name Endprodukt (Output):", value="Mehl")
+            col_bm, col_bj = st.columns(2)
+            bs_monat = col_bm.selectbox("Kauf im Monat:", LISTE_MONATE, key="bs_m")
+            bs_jahr = col_bj.number_input("Kauf im Jahr:", min_value=1, value=1, key="bs_j")
             
+            tatsaechliche_kosten = st.number_input("Rechnungsendbetrag (€):", min_value=0.0)
+            full_bs_date = f"J{bs_jahr}-{bs_monat}"
+            
+            if st.button("✅ Liste abarbeiten & als Ausgabe buchen", type="primary", use_container_width=True):
+                st._global_finanzen["ausgaben"] += tatsaechliche_kosten
+                st._global_finanzen["historie"].append({
+                    "In-Game Datum": full_bs_date, "Sort_Jahr": bs_jahr, "Sort_Monat": bs_monat,
+                    "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
+                    "Details": f"Material/Dienstleistung eingekauft", "Betrag (EUR)": tatsaechliche_kosten
+                })
+                st._global_bestell_store = []
+                st._global_finanzen["naechste_bestellung_id"] += 1
+                st.rerun()
+
+# --- SEITE 4 (KLASSISCHES DESKTOP LAYOUT + REICHWEITENRECHNER) ---
+elif menu == "🏭 Produktionen":
+    st.title("🏭 Produktions-Kapazitäten & Jahresplaner")
+    
+    col_form, col_space = st.columns([1, 1])
+    with col_form:
+        st.subheader("Neue Fabrik / Produktionslinie registrieren")
+        rezept = st.selectbox("Wähle das Rezept aus:", options=list(PROD_DATA.keys()))
+        
+        if rezept == "➕ Eigenes / Mod-Rezept":
+            in_name = st.text_input("Rohstoff Name (Input):", value="Weizen")
+            out_name = st.text_input("Produkt Name (Output):", value="Mehl")
             c_c1, c_c2 = st.columns(2)
-            custom_in_std = c_c1.number_input("Input pro Stunde:", min_value=1, value=50)
-            custom_out_std = c_c2.number_input("Output pro Stunde:", min_value=1, value=38)
-            
-            # Umrechnen auf 1 vollen In-Game Monat (24h * 30 Tage Betrieb für die mathematische Basis)
+            custom_in_std = c_c1.number_input("Input Menge pro Stunde (L):", min_value=1, value=50)
+            custom_out_std = c_c2.number_input("Output Menge pro Stunde (L):", min_value=1, value=38)
             base_in = custom_in_std * 24 * 30
             base_out = custom_out_std * 24 * 30
             name_anzeige = f"Mod: {in_name} -> {out_name}"
@@ -386,88 +408,82 @@ elif menu == "🏭 Produktionen":
             base_in, base_out, in_name, out_name = PROD_DATA[rezept]
             name_anzeige = rezept
             
-        anzahl_fabriken = st.number_input("Anzahl Linien / parallele Fabriken:", min_value=1, value=1, step=1)
-        monate = st.slider("Geplante Betriebsdauer im Jahr (Monate):", 1, 12, 12)
+        c_f1, c_f2 = st.columns(2)
+        anzahl_fabriken = c_f1.number_input("Anzahl aktiver Linien:", min_value=1, value=1, step=1)
+        monate = c_f2.slider("Betriebsmonate pro Jahr:", 1, 12, 12)
         
-        st.write("---")
-        # NEU: Das gewünschte Feld für den aktuellen Lagerbestand
-        aktueller_lagerbestand = st.number_input(f"📦 Aktueller Lagerbestand im Hof-Silo für '{in_name}' (Liter):", min_value=0, value=0, step=1000, help="Gib ein, wie viel Rohstoff du im Moment besitzt")
+        # HIER IST DAS GEWÜNSCHTE FELD IM DESKTOP-LAYOUT
+        aktueller_lagerbestand = st.number_input(f"📦 Aktueller Lagerbestand für '{in_name}' (Liter):", min_value=0, value=0, step=1000)
         
-        if st.button("💾 Speichern & Synchronisieren", type="primary", use_container_width=True):
-            gesamt_input = base_in * monate * anzahl_fabriken
-            gesamt_output = base_out * monate * anzahl_fabriken
-            
+        if st.button("💾 Produktion für den Server speichern", type="primary", use_container_width=True):
             st._global_hof_store.append({
-                "name": name_anzeige, 
-                "monate": monate, 
-                "linien": anzahl_fabriken,
-                "in_typ": in_name, 
-                "in_menge": gesamt_input, 
-                "out_typ": out_name, 
-                "out_menge": gesamt_output,
+                "name": name_anzeige, "monate": monate, "linien": anzahl_fabriken,
+                "in_typ": in_name, "in_menge": base_in * monate * anzahl_fabriken, 
+                "out_typ": out_name, "out_menge": base_out * monate * anzahl_fabriken,
                 "lager_ist": aktueller_lagerbestand,
-                "basis_monat_input": base_in  # Wichtig für den Live-Reichweiten-Kalkulator
+                "basis_monat_input": base_in
             })
             st.rerun()
 
     if st._global_hof_store:
         st.write("---")
-        st.header("🏡 Aktive Produktionen auf dem Server")
+        st.subheader("🏭 Aktive Produktionen in der Übersicht")
         
+        # Umrechnung in die klassische, breite Tabelle für Desktop-Ansichten
+        tabelle_daten = []
         for idx, item in enumerate(st._global_hof_store):
-            # Live-Berechnung der Reichweite
-            # Monatlicher Verbrauch = Verbrauch einer Linie pro Monat * Anzahl Linien
+            # Reichweitenberechnung
             monatlicher_verbrauch = item["basis_monat_input"] * item["linien"]
-            
             if monatlicher_verbrauch > 0 and item["lager_ist"] > 0:
                 reichweite_monate = item["lager_ist"] / monatlicher_verbrauch
-                
                 if reichweite_monate >= 1.0:
-                    reichweite_text = f"⏱️ Reichweite: ca. **{reichweite_monate:.1f} Monate** im Dauerbetrieb."
-                    alert_type = "success" if reichweite_monate >= 2 else "warning"
+                    reichweite_str = f"ca. {reichweite_monate:.1f} Monate"
                 else:
-                    # Wenn es weniger als ein Monat ist, rechnen wir es in In-Game Tage um (Basis 30 Tage/Monat)
-                    reichweite_tage = reichweite_monate * 30
-                    reichweite_text = f"🚨 Reichweite kritisch: Nur noch ca. **{reichweite_tage:.0f} Tage** Dauerbetrieb!"
-                    alert_type = "error"
+                    reichweite_str = f"ca. {reichweite_monate * 30:.0f} Tage"
             else:
-                reichweite_text = "⚠️ Keine Reichweiten-Berechnung möglich (Lager ist leer oder 0er-Rezept)."
-                alert_type = "info"
-                
-            # Schickes mobiles UI-Card Design untereinander
-            with st.container(border=True):
-                st.markdown(f"### {idx+1}. {item['name']}")
-                st.markdown(f"**Aktiv:** {item['linien']} Linie(n) für {item['monate']} Monate/Jahr")
-                
-                # Bestandsanzeige
-                st.markdown(f"📦 **Lagerbestand:** {fmt_int(item['lager_ist'])} L ({item['in_typ']})")
-                
-                # Reichweiten-Auswertung mit dynamischer Hintergrundfarbe
-                if alert_type == "success": st.success(reichweite_text)
-                elif alert_type == "warning": st.warning(reichweite_text)
-                elif alert_type == "error": st.error(reichweite_text)
-                else: st.info(reichweite_text)
-                
-                st.markdown(f"""
-                * 📉 **Gesamtbedarf (Jahr):** {fmt_int(item['in_menge'])} L
-                * 📈 **Erwarteter Ertrag (Jahr):** {fmt_int(item['out_menge'])} L ({item['out_typ']})
-                """)
-                
-        if st.button("🗑️ Alle Produktionen löschen", use_container_width=True):
+                reichweite_str = "0 oder k.A."
+
+            tabelle_daten.append({
+                "ID": idx + 1,
+                "Produktion/Rezept": item["name"],
+                "Linien": item["linien"],
+                "Betriebsmonate/Jahr": item["monate"],
+                "Lagerbestand (L)": fmt_int(item["lager_ist"]),
+                "Reichweite Dauerbetrieb": reichweite_str,
+                "Jahresbedarf Rohstoff (L)": fmt_int(item["in_menge"]),
+                "Rohstoff-Typ": item["in_typ"],
+                "Jahresertrag Produkt (L)": fmt_int(item["out_menge"]),
+                "Produkt-Typ": item["out_typ"]
+            })
+            
+        df_hof = pd.DataFrame(tabelle_daten)
+        # Große, breite Datentabelle
+        st.dataframe(df_hof, use_container_width=True, hide_index=True)
+        
+        if st.button("🗑️ Alle Produktionen aus der Übersicht löschen", use_container_width=True):
             st._global_hof_store = []
             st.rerun()
 
-# --- BILANZ-HISTORIE AM ENDE ---
+# --- FINANZ-HISTORIE DESKTOP-TABELLE ---
 if st._global_finanzen["historie"]:
     st.write("---")
-    st.subheader("📊 In-Game Monatsberichte")
+    st.subheader("📊 In-Game Monatsberichte & Finanzhistorie")
     df_raw = pd.DataFrame(st._global_finanzen["historie"])
+    
     df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if r["Typ"] == "Einnahme" else 0.0, axis=1)
     df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if r["Typ"] == "Ausgabe" else 0.0, axis=1)
     
     df_monat = df_raw.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
-        Einnahmen=("Einnahme_Wert", "sum"), Ausgaben=("Ausgabe_Wert", "sum")
+        Einnahmen=("Einnahme_Wert", "sum"),
+        Ausgaben=("Ausgabe_Wert", "sum")
     ).reset_index().sort_values(by=["Sort_Jahr", "Sort_Monat"])
     
     df_monat["Gewinn"] = df_monat["Einnahmen"] - df_monat["Ausgaben"]
-    st.dataframe(df_monat[["In-Game Datum", "Gewinn"]], use_container_width=True, hide_index=True)
+    
+    c_tab1, c_tab2 = st.columns(2)
+    with c_tab1:
+        st.markdown("**Zusammenfassung nach In-Game Monaten:**")
+        st.dataframe(df_monat[["In-Game Datum", "Einnahmen", "Ausgaben", "Gewinn"]], use_container_width=True, hide_index=True)
+    with c_tab2:
+        st.markdown("**Einzelbuchungen (Letzte zuerst):**")
+        st.dataframe(df_raw[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]].iloc[::-1], use_container_width=True, hide_index=True)
