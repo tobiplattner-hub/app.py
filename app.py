@@ -6,46 +6,31 @@ import os
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- RADIKALES CSS FÜR PROFI-DRUCK (NUR DIE RECHNUNG BLEIBT) ---
+# --- RADIKALES CSS FÜR PROFI-DRUCK (VERSTECKT ALLES AUSSER DIE RECHNUNG) ---
 st.markdown("""
     <style>
-    /* Normale Ansicht */
-    .print-only { display: none; }
-
     @media print {
-        /* 1. Alles auf der Seite unsichtbar machen */
+        /* Alles auf der Hauptseite, Sidebar, Header und Buttons unsichtbar machen */
         html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"], 
-        header, footer, .no-print, .stButton, [data-testid="stHeader"], .stMarkdownContainer:not(.print-content) {
+        header, footer, .no-print, .stButton, [data-testid="stHeader"] {
             visibility: hidden !important;
             height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
         }
 
-        /* 2. Nur den Rechnungs-Block nach ganz oben schieben und einblenden */
-        .print-content, .print-content * {
+        /* Nur das Element mit unserer Rechnung absolut oben einblenden */
+        iframe, .element-container {
             visibility: visible !important;
-        }
-        
-        .print-content {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
-            display: block !important;
-            background-color: white !important;
         }
-
-        /* 3. A4 Einstellungen */
+        
         @page {
             size: A4;
             margin: 15mm;
-        }
-        
-        /* Grafiken wie Tabellenhintergrund erzwingen */
-        * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
         }
     }
     </style>
@@ -116,12 +101,11 @@ if menu == "💰 Ernte & Felder":
 elif menu == "📋 Rechnungs-Ersteller":
     st.markdown('<h1 class="no-print">📋 Rechnungs-Ersteller</h1>', unsafe_allow_html=True)
     
-    # EINGABE-BEREICH (wird beim Drucken versteckt)
+    # EINGABE-BEREICH (wird beim Drucken über CSS versteckt)
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine auswählen:", options=list(preis_dict.keys()) if preis_dict else ["Keine Daten"])
-        # Stunden ab 0.0 möglich
         std = c2.number_input("Stunden (h):", min_value=0.0, value=1.0, step=0.1)
         e_p = c3.number_input("Preis (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
         
@@ -136,67 +120,111 @@ elif menu == "📋 Rechnungs-Ersteller":
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # RECHNUNGS-BEREICH (DAS WIRD GEDRUCKT)
+    # RECHNUNGS-BEREICH (DAS WIRD GERENDERED UND GEDRUCKT)
     if st.session_state.rechnungs_posten:
         st.write("---")
-        st.markdown('<div class="print-content">', unsafe_allow_html=True)
         
-        with st.container(border=True):
-            col_l, col_r = st.columns([1,1])
-            with col_l:
-                if os.path.exists("logo.png"):
-                    st.image("logo.png", width=180)
-                else:
-                    st.write("## 🚜 LU-BETRIEB")
-            with col_r:
-                st.write(f"**Datum:** {date.today().strftime('%d.%m.%Y')}")
-                st.write(f"**Kunde:** {k_name}")
-            
-            st.write("---")
-            st.write("# RECHNUNG")
-            st.write("---")
-            
-            # HTML-Tabelle bauen
-            html_table = """
-            <table style="width:100%; border-collapse: collapse; margin-top: 15px; font-family: sans-serif;">
-                <thead>
-                    <tr style="border-bottom: 2px solid black; text-align: left; background-color: #f2f2f2;">
-                        <th style="padding: 10px;">Leistung / Maschine</th>
-                        <th style="padding: 10px;">Menge</th>
-                        <th style="padding: 10px;">Einzelpreis</th>
-                        <th style="padding: 10px; text-align: right;">Gesamt</th>
-                    </tr>
-                </thead>
-                <tbody>
+        # 1. Werte zuerst sauber in Python berechnen
+        summe = 0
+        tabellen_zeilen = ""
+        for p in st.session_state.rechnungs_posten:
+            tabellen_zeilen += f"""
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 10px; text-align: left;">{p['name']}</td>
+                <td style="padding: 10px; text-align: left;">{p['std']} h</td>
+                <td style="padding: 10px; text-align: left;">{p['preis']:.2f} €</td>
+                <td style="padding: 10px; text-align: right;">{p['gesamt']:.2f} €</td>
+            </tr>
             """
-            summe = 0
-            for p in st.session_state.rechnungs_posten:
-                html_table += f"""
-                <tr style="border-bottom: 1px solid #ddd;">
-                    <td style="padding: 10px;">{p['name']}</td>
-                    <td style="padding: 10px;">{p['std']} h</td>
-                    <td style="padding: 10px;">{p['preis']:.2f} €</td>
-                    <td style="padding: 10px; text-align: right;">{p['gesamt']:.2f} €</td>
-                </tr>
-                """
-                summe += p['gesamt']
-            
-            html_table += "</tbody></table>"
-            st.markdown(html_table, unsafe_allow_html=True)
-            
-            # Summen-Berechnung
-            total = summe * (1 - rabatt/100)
-            st.write("---")
-            col_f1, col_f2 = st.columns([1.5, 1])
-            with col_f2:
-                st.write(f"Zwischensumme: {summe:.2f} €")
-                if rabatt > 0:
-                    st.write(f"Rabatt ({rabatt}%): -{summe*(rabatt/100):.2f} €")
-                st.write(f"### **Gesamtbetrag: {total:.2f} €**")
+            summe += p['gesamt']
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        total = summe * (1 - rabatt/100)
+        
+        rabatt_html = ""
+        if rabatt > 0:
+            rabatt_html = f"""
+            <tr>
+                <td colspan="3" style="text-align: right; padding: 5px; color: #555; font-family: sans-serif;">Rabatt ({rabatt}%):</td>
+                <td style="text-align: right; padding: 5px; color: #555; font-family: sans-serif;">-{summe*(rabatt/100):.2f} €</td>
+            </tr>
+            """
 
-        # Buttons (nur im Browser sichtbar)
+        # 2. Die gesamte Rechnung als ein festes HTML-Paket schnüren
+        komplette_rechnung_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: white; }}
+                .invoice-box {{ padding: 20px; border: 1px solid #333; border-radius: 6px; }}
+                @media print {{
+                    .invoice-box {{ border: none; padding: 0; }}
+                    * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="invoice-box">
+                <!-- Header mit Logo/Name und Meta-Daten -->
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr>
+                        <td style="text-align: left; vertical-align: middle;">
+                            <h2 style="margin: 0; color: #222; font-size: 24px;">🚜 LU-BETRIEB</h2>
+                        </td>
+                        <td style="text-align: right; vertical-align: middle; font-size: 14px; color: #444; line-height: 1.5;">
+                            <strong>Datum:</strong> {date.today().strftime('%d.%m.%Y')}<br>
+                            <strong>Kunde:</strong> {k_name}
+                        </td>
+                    </tr>
+                </table>
+                
+                <hr style="border: 0; border-top: 3px solid #111; margin: 10px 0;">
+                <h1 style="margin: 10px 0; font-size: 32px; font-weight: bold; letter-spacing: 0.5px;">RECHNUNG</h1>
+                <hr style="border: 0; border-top: 3px solid #111; margin: 10px 0;">
+                
+                <!-- Artikelliste -->
+                <table style="width:100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #111; background-color: #f2f2f2; font-weight: bold;">
+                            <th style="padding: 12px 10px; text-align: left;">Leistung / Maschine</th>
+                            <th style="padding: 12px 10px; text-align: left;">Menge</th>
+                            <th style="padding: 12px 10px; text-align: left;">Einzelpreis</th>
+                            <th style="padding: 12px 10px; text-align: right;">Gesamt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {tabellen_zeilen}
+                    </tbody>
+                </table>
+                
+                <!-- Finanzieller Abschluss -->
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <tr>
+                        <td style="width: 40%;"></td>
+                        <td style="width: 60%;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <tr>
+                                    <td style="text-align: right; padding: 6px; font-size: 15px;">Zwischensumme:</td>
+                                    <td style="text-align: right; padding: 6px; font-size: 15px; width: 120px;">{summe:.2f} €</td>
+                                </tr>
+                                {rabatt_html}
+                                <tr style="font-size: 20px; font-weight: bold;">
+                                    <td style="text-align: right; padding: 12px 6px; border-top: 2px solid #111;">Gesamtbetrag:</td>
+                                    <td style="text-align: right; padding: 12px 6px; border-top: 2px solid #111; color: #000;">{total:.2f} €</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # 3. SICHERE GENERIERUNG ALS ECHTE WEB-KOMPONENTE
+        # Verhindert, dass roher Text oder Code ausgegeben wird
+        st.components.v1.html(komplette_rechnung_html, height=480, scrolling=True)
+
+        # Aktionsbuttons unter der Rechnung (beim Drucken unsichtbar)
         st.markdown('<div class="no-print">', unsafe_allow_html=True)
         btn1, btn2 = st.columns(2)
         if btn1.button("🖨️ RECHNUNG DRUCKEN / PDF"):
