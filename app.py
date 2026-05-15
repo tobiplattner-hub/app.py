@@ -2,10 +2,16 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import os
+import json
 from fpdf import FPDF
 
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
+
+# --- GLOBALER SPEICHER FÜR DIE PRODUKTIONEN (LÖSUNG 1) ---
+# Erstellt einen Speicher direkt auf dem Server-Prozess, den sich alle User teilen
+if not hasattr(st, "_global_hof_store"):
+    st._global_hof_store = []
 
 # --- HILFSFUNKTIONEN FÜR FORMATIERUNG UND UMLAUTE ---
 def safe_str(text):
@@ -21,7 +27,6 @@ def fmt_int(wert):
 
 def fmt_float(wert):
     """Formatiert Geldbeträge mit Punkt als Tausendertrenner und Komma als Dezimaltrenner (z.B. 1.250,50)"""
-    # Temporärer Tausch, da Python standardmäßig US-Formate nutzt
     return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # --- PDF KLASSEN ---
@@ -138,21 +143,22 @@ preis_dict = dict(zip(df_preise['Geraet'], df_preise['Preis'])) if not df_preise
 df_kunden = load_data(KUNDEN_URL)
 aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.empty else []
 
+# --- INITIALISIERUNG LOCAL SESSIONS ---
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
 # --- DATA FOR PRODUCTIONS ---
 PROD_DATA = {
-    "Getreidemühle: Weizen zu Mehl": (36000, 27000, "Weizen (L)", "Mehl (L)"),
-    "Getreidemühle: Gerste zu Mehl": (36000, 27000, "Gerste (L)", "Mehl (L)"),
-    "Bäckerei: Brot": (21600, 10800, "Mehl (L)", "Brot (L/Zyklen)"),
-    "Bäckerei: Kuchen": (4320, 4320, "Mehl/Zucker/Milch/Eier/Erdbeeren (Mix)", "Kuchen (L/Zyklen)"),
-    "Ölmühle: Sonnenblumenöl": (14400, 7200, "Sonnenblumen (L)", "Sonnenblumenöl (L)"),
-    "Ölmühle: Rapsöl": (14400, 7200, "Raps (L)", "Rapsöl (L)"),
-    "Molkerei: Butter": (36000, 21600, "Milch (L)", "Butter (L)"),
-    "Molkerei: Käse": (21600, 16200, "Milch (L)", "Käse (L)"),
-    "Zuckerfabrik: Zuckerrohr": (28800, 28800, "Zuckerrohr (L)", "Zucker (L)"),
-    "Zuckerfabrik: Zuckerrüben": (14400, 7200, "Zuckerrüben (L)", "Zucker (L)"),
+    "Getreidemühle: Weizen zu Mehl": (36000, 27000, "Weizen", "Mehl"),
+    "Getreidemühle: Gerste zu Mehl": (36000, 27000, "Gerste", "Mehl"),
+    "Bäckerei: Brot": (21600, 10800, "Mehl", "Brot"),
+    "Bäckerei: Kuchen": (4320, 4320, "Mehl/Zucker/Milch/Eier/Erdbeeren (Mix)", "Kuchen"),
+    "Ölmühle: Sonnenblumenöl": (14400, 7200, "Sonnenblumen", "Sonnenblumenöl"),
+    "Ölmühle: Rapsöl": (14400, 7200, "Raps", "Rapsöl"),
+    "Molkerei: Butter": (36000, 21600, "Milch", "Butter"),
+    "Molkerei: Käse": (21600, 16200, "Milch", "Käse"),
+    "Zuckerfabrik: Zuckerrohr": (28800, 28800, "Zuckerrohr", "Zucker"),
+    "Zuckerfabrik: Zuckerrüben": (14400, 7200, "Zuckerrüben", "Zucker"),
     "➕ Eigenes / Mod-Rezept hinzufügen": (0, 0, "", "")
 }
 
@@ -205,7 +211,6 @@ elif menu == "📋 Rechnungs-Ersteller":
         st.write("---")
         st.subheader("📋 Aktuelle Posten")
         
-        # Für die Streamlit-Tabelle formatieren wir eine Kopie der Daten
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
         df_preview.columns = ["Maschine", "Stunden", "Einzelpreis (EUR)", "Gesamt (EUR)"]
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
@@ -282,58 +287,125 @@ elif menu == "🛒 Saatgut-Bestellung":
     else:
         st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald einer deiner Bestände ins Minus bzw. unter das Limit rutscht.")
 
-# --- SEITE 4: PRODUKTIONS-PLANER ---
+# --- SEITE 4: PRODUKTIONS-PLANER (LIVE SERVER SPEICHER) ---
 elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
-    st.write("Berechne den genauen Jahresverbrauch deiner Standard-Fabriken oder trage eigene Mod-Rezepte ein.")
+    st.write("Füge hier deine Fabriken hinzu. Diese Liste wird **live mit allen Spielern auf dem Hof synchronisiert**!")
     
+    # Button zum manuellen Neuladen der Serverdaten (praktisch für Mitspieler)
+    if st.button("🔄 Server-Liste aktualisieren"):
+        st.rerun()
+
+    # Sektion 1: Neue Produktion hinzufügen
     with st.container(border=True):
-        rezept = st.selectbox("Wähle deine Produktion/Rezept aus:", options=list(PROD_DATA.keys()))
+        st.subheader("🏭 Neue Produktion hinzufügen")
+        rezept = st.selectbox("Wähle eine Produktion/Rezept aus:", options=list(PROD_DATA.keys()))
         
         if rezept == "➕ Eigenes / Mod-Rezept hinzufügen":
             st.write("---")
-            st.subheader("⚙️ Eigenes Rezept konfigurieren")
-            
             col_custom1, col_custom2 = st.columns(2)
             in_name = col_custom1.text_input("Name des Rohstoffs (Input):", value="Dinkel")
             out_name = col_custom2.text_input("Name des Produkts (Output):", value="Altes Mehl")
             
             col_custom3, col_custom4, col_custom5 = st.columns(3)
-            custom_in_menge = col_custom3.number_input(f"Menge {in_name} pro Zyklus:", min_value=1, value=5)
-            custom_out_menge = col_custom4.number_input(f"Menge {out_name} pro Zyklus:", min_value=1, value=4)
-            zyklen_pro_std = col_custom5.number_input("Zyklen pro Stunde (laut Spiel):", min_value=1, value=30)
+            custom_in_menge = col_custom3.number_input(f"Menge pro Zyklus:", min_value=1, value=5)
+            custom_out_menge = col_custom4.number_input(f"Menge pro Zyklus:", min_value=1, value=4)
+            zyklen_pro_std = col_custom5.number_input("Zyklen pro Stunde:", min_value=1, value=30)
             
             base_in = custom_in_menge * zyklen_pro_std * 24 * 30
             base_out = custom_out_menge * zyklen_pro_std * 24 * 30
+            name_anzeige = f"Mod-Rezept: {in_name} -> {out_name}"
         else:
             base_in, base_out, in_name, out_name = PROD_DATA[rezept]
+            name_anzeige = rezept
             
-        st.write("---")
         col_time1, col_time2 = st.columns(2)
-        monate = col_time1.slider("Betriebsdauer im Jahr (Monate):", min_value=1, max_value=12, value=12)
-        anzahl_fabriken = col_time2.number_input("Anzahl dieser Produktionslinien:", min_value=1, value=1, step=1)
-    
-    gesamt_input = base_in * monate * anzahl_fabriken
-    gesamt_output = base_out * monate * anzahl_fabriken
-    
+        monate = col_time1.slider("Betriebsdauer im Jahr (Monate):", min_value=1, max_value=12, value=12, key="prod_monate")
+        anzahl_fabriken = col_time2.number_input("Anzahl Linien / Fabriken:", min_value=1, value=1, step=1, key="prod_anzahl")
+        
+        if st.button("💾 Für ALLE speichern & synchronisieren", type="primary"):
+            gesamt_input = base_in * monate * anzahl_fabriken
+            gesamt_output = base_out * monate * anzahl_fabriken
+            
+            # Schreibt direkt in das globale Server-Array
+            st._global_hof_store.append({
+                "name": name_anzeige,
+                "monate": monate,
+                "linien": anzahl_fabriken,
+                "in_typ": in_name,
+                "in_menge": gesamt_input,
+                "out_typ": out_name,
+                "out_menge": gesamt_output
+            })
+            st.success(f"✅ {name_anzeige} wurde für alle Spieler gespeichert!")
+            st.rerun()
+
+    # Sektion 2: Anzeige der gespeicherten Hof-Produktionen
+    if st._global_hof_store:
+        st.write("---")
+        st.header("🏡 Aktive Produktionen auf dem Server")
+        
+        table_data = []
+        for idx, item in enumerate(st._global_hof_store):
+            table_data.append({
+                "ID": idx + 1,
+                "Produktion / Fabrik": item["name"],
+                "Linien": item["linien"],
+                "Laufzeit": f"{item['monate']} Monate",
+                "Rohstoff Bedarf (Jahr)": f"{fmt_int(item['in_menge'])} L ({item['in_typ']})",
+                "Produkt Ertrag (Jahr)": f"{fmt_int(item['out_menge'])} L ({item['out_typ']})"
+            })
+            
+        df_prods = pd.DataFrame(table_data)
+        st.dataframe(df_prods, use_container_width=True, hide_index=True)
+        
+        col_action1, col_action2 = st.columns(2)
+        
+        # Backup-Funktion als Sicherheitsnetz
+        json_data = json.dumps(st._global_hof_store, indent=4)
+        col_action1.download_button(
+            label="📥 Server-Planung als Datei sichern",
+            data=json_data,
+            file_name=f"LS25_Hofplan_{date.today().strftime('%Y%m%d')}.json",
+            mime="application/json"
+        )
+        
+        if col_action2.button("🗑️ Alle Produktionen vom Server löschen"):
+            st._global_hof_store = []
+            st.warning("Die globale Liste wurde für alle Spieler geleert.")
+            st.rerun()
+            
+        # Sektion 3: Aggregierte Jahres-Auswertung (Logistik-Zusammenfassung)
+        st.write("---")
+        st.subheader("📊 Logistik & Jahres-Ernteziele (Gesamt)")
+        
+        bedarf_dict = {}
+        ertrag_dict = {}
+        
+        for p in st._global_hof_store:
+            bedarf_dict[p['in_typ']] = bedarf_dict.get(p['in_typ'], 0) + p['in_menge']
+            ertrag_dict[p['out_typ']] = ertrag_dict.get(p['out_typ'], 0) + p['out_menge']
+            
+        col_summary1, col_summary2 = st.columns(2)
+        
+        with col_summary1:
+            st.markdown("#### 🌾 Benötigte Rohstoffe (Gesamtbedarf):")
+            for stoff, menge in bedarf_dict.items():
+                st.info(f"**{stoff}**:\n### {fmt_int(menge)} Liter")
+                
+        with col_summary2:
+            st.markdown("#### 📦 Produzierte Endwaren (Gesamtertrag):")
+            for ware, menge in ertrag_dict.items():
+                st.success(f"**{ware}**:\n### {fmt_int(menge)} Liter / Einheiten")
+                
+    # Sektion 4: Backup einspielen
     st.write("---")
-    st.subheader("📊 Berechneter Jahresumsatz")
-    
-    col_p1, col_p2 = st.columns(2)
-    
-    with col_p1:
-        st.info(f"""
-        **Benötigter Rohstoff ({in_name}):**
-        ### {fmt_int(gesamt_input)} Liter
-        Ernteziel pro Jahr für {monate} Monate Betrieb.
-        """)
-        
-    with col_p2:
-        st.success(f"""
-        **Erzeugte Produkte ({out_name}):**
-        ### {fmt_int(gesamt_output)} Liter / Einheiten
-        Erwarteter Ertrag am Ausgangstrigger.
-        """)
-        
-    st.write("")
-    st.caption(f"💡 *Verarbeitungsrate: Diese Produktionslinie verarbeitet im Dauerbetrieb exakt {fmt_int(base_in/24)} L pro Ingame-Tag.*")
+    with st.expander("📤 Gesicherte Planung/Backup auf Server laden"):
+        uploaded_file = st.file_uploader("Lade eine .json Datei hoch:", type="json")
+        if uploaded_file is not None:
+            try:
+                st._global_hof_store = json.load(uploaded_file)
+                st.success("✅ Planung erfolgreich hochgeladen und für alle synchronisiert!")
+                st.rerun()
+            except:
+                st.error("Fehler beim Lesen der Backup-Datei.")
