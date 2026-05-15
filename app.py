@@ -9,7 +9,6 @@ from fpdf import FPDF
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
 # --- GLOBALER SPEICHER FÜR DIE PRODUKTIONEN (LÖSUNG 1) ---
-# Erstellt einen Speicher direkt auf dem Server-Prozess, den sich alle User teilen
 if not hasattr(st, "_global_hof_store"):
     st._global_hof_store = []
 
@@ -42,16 +41,26 @@ class InvoicePDF(FPDF):
 def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf = InvoicePDF()
     pdf.add_page()
+    
+    # Datum und Rechnungsnummer oben rechts
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
     pdf.multi_cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nRechnung-Nr: #{date.today().strftime('%Y%m%d')}-01", align="R")
-    pdf.ln(10)
+    
+    # Weiter nach unten setzen für den Empfänger
+    pdf.ln(15)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 6, "Empfaenger:", ln=True)
     pdf.cell(0, 6, safe_str(kunden_name), ln=True)
-    pdf.ln(15)
+    
+    # Weiter nach unten setzen und nach rechts rücken für die Hauptüberschrift
+    pdf.ln(20)
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 24)
     pdf.cell(0, 15, "RECHNUNG", ln=True)
+    
+    # Tabelle startet weiter unten
+    pdf.ln(10)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 11)
@@ -62,6 +71,7 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.ln(10)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
+    
     summe = 0
     for p in posten:
         pdf.cell(80, 10, safe_str(p['name']), border=0)
@@ -70,6 +80,7 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
         pdf.cell(40, 10, f"{fmt_float(p['gesamt'])} EUR", border=0, align="R")
         pdf.ln(10)
         summe += p['gesamt']
+        
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
     rabatt_betrag = summe * (rabatt_prozent / 100)
@@ -91,12 +102,20 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
 def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
     pdf = InvoicePDF()
     pdf.add_page()
+    
+    # Datum oben rechts
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
     pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}", align="R", ln=True)
-    pdf.ln(10)
+    
+    # Deutlich weiter nach unten setzen und nach rechts rücken für die Hauptüberschrift
+    pdf.ln(35)
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 24)
     pdf.cell(0, 15, "WARENBESTELLUNG", ln=True)
+    
+    # Tabelle startet weiter unten
+    pdf.ln(15)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(8)
     pdf.set_font("Helvetica", "B", 11)
@@ -105,6 +124,7 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
     pdf.ln(10)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
+    
     if kalk_l > 0:
         pdf.cell(120, 10, "Kalk", border=0)
         pdf.cell(60, 10, f"{fmt_int(kalk_l)} L", border=0, align="R")
@@ -118,6 +138,7 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
         pdf.cell(120, 10, safe_str(art_name), border=0)
         pdf.cell(60, 10, f"{fmt_int(saatgut_l)} L", border=0, align="R")
         pdf.ln(10)
+        
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(30)
     pdf.set_font("Helvetica", "I", 10)
@@ -292,7 +313,6 @@ elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
     st.write("Füge hier deine Fabriken hinzu. Diese Liste wird **live mit allen Spielern auf dem Hof synchronisiert**!")
     
-    # Button zum manuellen Neuladen der Serverdaten (praktisch für Mitspieler)
     if st.button("🔄 Server-Liste aktualisieren"):
         st.rerun()
 
@@ -327,7 +347,6 @@ elif menu == "🏭 Produktions-Planer":
             gesamt_input = base_in * monate * anzahl_fabriken
             gesamt_output = base_out * monate * anzahl_fabriken
             
-            # Schreibt direkt in das globale Server-Array
             st._global_hof_store.append({
                 "name": name_anzeige,
                 "monate": monate,
@@ -361,7 +380,6 @@ elif menu == "🏭 Produktions-Planer":
         
         col_action1, col_action2 = st.columns(2)
         
-        # Backup-Funktion als Sicherheitsnetz
         json_data = json.dumps(st._global_hof_store, indent=4)
         col_action1.download_button(
             label="📥 Server-Planung als Datei sichern",
@@ -375,7 +393,7 @@ elif menu == "🏭 Produktions-Planer":
             st.warning("Die globale Liste wurde für alle Spieler geleert.")
             st.rerun()
             
-        # Sektion 3: Aggregierte Jahres-Auswertung (Logistik-Zusammenfassung)
+        # Sektion 3: Aggregierte Jahres-Auswertung
         st.write("---")
         st.subheader("📊 Logistik & Jahres-Ernteziele (Gesamt)")
         
