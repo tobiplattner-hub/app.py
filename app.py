@@ -7,10 +7,18 @@ from fpdf import FPDF
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN ---
+# --- HILFSFUNKTION FÜR UMLAUTE ---
+def safe_str(text):
+    """Ersetzt deutsche Umlaute, falls sie die PDF zum Absturz bringen"""
+    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
+    txt = str(text)
+    for r, v in replacements.items():
+        txt = txt.replace(r, v)
+    return txt
+
+# --- RECHNUNGS-PDF KLASSE ---
 class InvoicePDF(FPDF):
     def header(self):
-        # Logo einbinden, wenn vorhanden
         if os.path.exists("logo.png"):
             self.image("logo.png", 15, 15, 40)
         else:
@@ -18,40 +26,27 @@ class InvoicePDF(FPDF):
             self.cell(0, 10, "LU-BETRIEB", ln=True)
         self.ln(20)
 
-def safe_str(text):
-    """Hilfsfunktion: Ersetzt deutsche Umlaute, falls sie die PDF zum Absturz bringen"""
-    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
-    txt = str(text)
-    for r, v in replacements.items():
-        txt = txt.replace(r, v)
-    return txt
-
 def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf = InvoicePDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
     
-    # Infoblock oben rechts
     pdf.set_x(130)
     pdf.multi_cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nRechnung-Nr: #{date.today().strftime('%Y%m%d')}-01", align="R")
     
-    # Empfänger
     pdf.ln(10)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 6, "Empfaenger:", ln=True)
     pdf.set_font("Helvetica", size=11)
     pdf.cell(0, 6, safe_str(kunden_name), ln=True)
     
-    # Titel
     pdf.ln(15)
     pdf.set_font("Helvetica", "B", 24)
     pdf.cell(0, 15, "RECHNUNG", ln=True)
     
-    # Trennlinie
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
     
-    # Tabellen-Header
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(80, 10, "Leistung / Maschine", border=0)
     pdf.cell(30, 10, "Menge", border=0, align="C")
@@ -59,11 +54,9 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.cell(40, 10, "Gesamt", border=0, align="R")
     pdf.ln(10)
     
-    # Trennlinie unter Header
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
     
-    # Posten eintragen
     summe = 0
     for p in posten:
         pdf.cell(80, 10, safe_str(p['name']), border=0)
@@ -76,11 +69,9 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
     
-    # Berechnungen
     rabatt_betrag = summe * (rabatt_prozent / 100)
     total = summe - rabatt_betrag
     
-    # Summen-Block rechtsbündig
     pdf.cell(150, 6, "Zwischensumme:", align="R")
     pdf.cell(40, 6, f"{summe:.2f} EUR", align="R", ln=True)
     
@@ -93,13 +84,60 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
     pdf.cell(40, 10, f"{total:.2f} EUR", align="R", ln=True)
     
-    # Fußzeile
     pdf.ln(30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
-    
-    # Das output() muss als reiner Byte-String ausgegeben werden
     return pdf.output()
+
+
+# --- NEU: BESTELL-PDF KLASSE ---
+def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
+    pdf = InvoicePDF() # Nutzt das gleiche Logo-Header-System
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=11)
+    
+    # Datum oben rechts
+    pdf.set_x(130)
+    pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}", align="R", ln=True)
+    
+    pdf.ln(10)
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.cell(0, 15, "WARENBESTELLUNG", ln=True)
+    
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(8)
+    
+    # Tabelle Header
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(120, 10, "Artikel / Ware", border=0)
+    pdf.cell(60, 10, "Bestellmenge (Liter)", border=0, align="R")
+    pdf.ln(10)
+    
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.set_font("Helvetica", size=11)
+    
+    # Posten eintragen (nur wenn Menge > 0)
+    if kalk_l > 0:
+        pdf.cell(120, 10, "Kalk", border=0)
+        pdf.cell(60, 10, f"{kalk_l:,} L", border=0, align="R")
+        pdf.ln(10)
+    if duenger_l > 0:
+        pdf.cell(120, 10, "Fluessigduenger", border=0)
+        pdf.cell(60, 10, f"{duenger_l:,} L", border=0, align="R")
+        pdf.ln(10)
+    if saatgut_l > 0:
+        art_name = f"Saatgut ({saaten_typ})" if saaten_typ else "Saatgut"
+        pdf.cell(120, 10, safe_str(art_name), border=0)
+        pdf.cell(60, 10, f"{saatgut_l:,} L", border=0, align="R")
+        pdf.ln(10)
+        
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    
+    pdf.ln(30)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 10, "Generiert ueber LS25 Hof-Manager. Bitte an den Landhandel uebermitteln.", align="C")
+    return pdf.output()
+
 
 # 2. Daten-Verbindung zu Google Sheets
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
@@ -124,8 +162,8 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
-# --- NAVIGATION ---
-menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller"])
+# --- NAVIGATION (JETZT MIT BESTELLUNG) ---
+menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "🛒 Saatgut-Bestellung"])
 
 # --- BEREICH 1: ERNTE & KALKULATION ---
 if menu == "💰 Ernte & Felder":
@@ -159,7 +197,6 @@ if menu == "💰 Ernte & Felder":
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
-    # Eingabe-Maske
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
@@ -173,11 +210,8 @@ elif menu == "📋 Rechnungs-Ersteller":
     k_name = ck1.selectbox("Hof auswählen:", aktuelle_kunden) if aktuelle_kunden else ck1.text_input("Hofname:")
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
 
-    # RECHNUNGSDESIGN
     if st.session_state.rechnungs_posten:
         st.write("---")
-        
-        # Native, fehlerfreie Streamlit Vorschau
         st.subheader("📋 Aktuelle Posten")
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
         df_preview.columns = ["Maschine", "Stunden", "Einzelpreis", "Gesamt"]
@@ -190,14 +224,10 @@ elif menu == "📋 Rechnungs-Ersteller":
         col_m1.metric("Zwischensumme", f"{summe:.2f} EUR")
         col_m2.metric("Endbetrag", f"{total:.2f} EUR")
 
-        # PDF GENERIEREN BUTTONS
         st.write("")
         col_b1, col_b2 = st.columns(2)
-        
-        # PDF im Hintergrund fehlerfrei bauen
         pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt)
         
-        # JETZT FIXIERT: Wir wandeln pdf_data explizit in bytes() um, damit Streamlit nicht meckert
         col_b1.download_button(
             label="📥 Rechnung als PDF herunterladen",
             data=bytes(pdf_data),
@@ -208,3 +238,42 @@ elif menu == "📋 Rechnungs-Ersteller":
         if col_b2.button("🗑️ Rechnung leeren"):
             st.session_state.rechnungs_posten = []
             st.rerun()
+
+# --- NEU: BEREICH 3: SAATGUT-BESTELLUNG ---
+elif menu == "🛒 Saatgut-Bestellung":
+    st.title("🛒 Saatgut- & Material-Bestellung")
+    st.write("Gib hier die gewünschten Mengen ein, um eine Bestellliste für den Landhandel zu generieren.")
+    
+    with st.container(border=True):
+        col_b1, col_b2 = st.columns(2)
+        b_kalk = col_b1.number_input("Kalk bestellen (Liter):", min_value=0, value=0, step=500)
+        b_duenger = col_b2.number_input("Flüssigdünger bestellen (Liter):", min_value=0, value=0, step=100)
+        
+        col_b3, col_b4 = st.columns(2)
+        b_saat = col_b3.number_input("Saatgut bestellen (Liter):", min_value=0, value=0, step=100)
+        b_typ = col_b4.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
+        
+    if b_kalk > 0 or b_duenger > 0 or b_saat > 0:
+        st.write("---")
+        st.subheader("📋 Vorschau deiner Bestellung")
+        
+        # Kleine Live-Übersicht in der App
+        daten_liste = []
+        if b_kalk > 0: daten_liste.append({"Ware": "Kalk", "Menge": f"{b_kalk:,} L"})
+        if b_duenger > 0: daten_liste.append({"Ware": "Flüssigdünger", "Menge": f"{b_duenger:,} L"})
+        if b_saat > 0: daten_liste.append({"Ware": f"Saatgut ({b_typ if b_typ else 'Allgemein'})", "Menge": f"{b_saat:,} L"})
+        
+        st.table(pd.DataFrame(daten_liste))
+        
+        # PDF im Hintergrund generieren
+        order_pdf_data = generate_order_pdf(b_kalk, b_duenger, b_saat, b_typ)
+        
+        # Download Button für die Bestellung
+        st.download_button(
+            label="📥 Bestellzettel als PDF herunterladen",
+            data=bytes(order_pdf_data),
+            file_name=f"Bestellung_{date.today().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf"
+        )
+    else:
+        st.info("Gib oben bei mindestens einem Produkt eine Menge ein, um die Bestellung zu aktivieren.")
