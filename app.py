@@ -6,54 +6,55 @@ import os
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- RADIKALES CSS FÜR PROFI-DRUCK ---
+# --- DER ULTIMATIVE DRUCK-FIX (RADIKAL) ---
 st.markdown("""
     <style>
-    /* NORMALE ANSICHT */
-    .print-only { display: none; }
+    /* NORMALE ANSICHT IM BROWSER */
+    .only-print { display: none; }
 
-    /* DRUCK-ANSICHT (Wird nur beim Drucken/PDF-Speichern aktiv) */
     @media print {
-        /* 1. Alles verstecken, was nicht Rechnung ist */
-        header, footer, .no-print, [data-testid="stSidebar"], [data-testid="stHeader"], 
-        .stButton, .stNumberInput, .stSelectbox, .stSlider, .stExpander, 
-        [data-testid="stToolbar"], [data-testid="stActionButtonIcon"] {
-            display: none !important;
+        /* 1. ALLES auf der Seite komplett ausblenden */
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"], 
+        header, footer, .no-print, .stButton, [data-testid="stHeader"] {
+            visibility: hidden !important;
             height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
         }
 
-        /* 2. Streamlit-Container anpassen */
-        .main .block-container {
-            max-width: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        
-        /* 3. Den Rechnungs-Bereich erzwingen */
+        /* 2. NUR den Rechnungs-Container wieder einblenden */
         .print-content {
-            display: block !important;
+            visibility: visible !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
-            border: none !important;
-            padding: 0 !important;
+            display: block !important;
+            background-color: white !important;
         }
 
-        /* 4. Hintergrundfarben und Linien erzwingen (für die meisten Browser) */
+        /* 3. Text-Korrekturen für den Druck */
+        .print-content h3, .print-content p, .print-content span, .print-content td, .print-content th {
+            color: black !important;
+            visibility: visible !important;
+        }
+
+        /* 4. A4 Einstellungen */
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+        
+        /* Grafiken erzwingen */
         * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
-        }
-
-        @page {
-            size: A4;
-            margin: 15mm;
         }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Google Sheet Verbindung
+# 2. Google Sheet Daten (ID & GID)
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
 KUNDEN_GID = "568043650"
 PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
@@ -91,33 +92,21 @@ if "rechnungs_posten" not in st.session_state:
 
 menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "👥 Kunden-Verwaltung"])
 
-# --- BEREICH: ERNTE & FELDER ---
+# --- BEREICH: ERNTE ---
 if menu == "💰 Ernte & Felder":
     st.title("🚜 Ernte- & Feld-Manager")
-    
-    with st.expander("⚙️ Verbrauchs-Raten anpassen (pro Hektar)"):
+    with st.expander("⚙️ Raten anpassen"):
         r_kalk = st.number_input("Kalk (L/ha):", value=2000)
         r_duenger = st.number_input("Dünger (L/ha):", value=160)
         r_saat = st.number_input("Saatgut (L/ha):", value=150)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.header("🧪 Bedarf")
-        ha = st.number_input("Hektar:", value=1.0, step=0.1)
-        st.write(f"⚪ Kalk: **{int(ha * r_kalk)} L**")
-        st.write(f"💧 Dünger: **{int(ha * r_duenger)} L**")
-        st.write(f"🌾 Saatgut: **{int(ha * r_saat)} L**")
-    with col2:
-        st.header("🌾 Erlös")
-        m = st.number_input("Liter im Silo:", value=10000)
-        p = st.number_input("€/1000L:", value=1200)
-        st.metric("Erlös", f"{(m/1000)*p:,.2f} €")
+    ha = st.number_input("Hektar:", value=1.0, step=0.1)
+    st.write(f"⚪ Kalk: **{int(ha * r_kalk)} L** | 💧 Dünger: **{int(ha * r_duenger)} L** | 🌾 Saat: **{int(ha * r_saat)} L**")
 
 # --- BEREICH: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
-    st.title("📄 Rechnungs-Ersteller")
+    # Diese Überschrift ist NUR im Browser sichtbar, verschwindet beim Drucken
+    st.markdown('<h1 class="no-print">📋 Rechnungs-Ersteller</h1>', unsafe_allow_html=True)
     
-    # EINGABEBEREICH (Wird nicht gedruckt)
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
@@ -131,57 +120,80 @@ elif menu == "📋 Rechnungs-Ersteller":
 
     ck1, ck2 = st.columns(2)
     k_wahl = ck1.selectbox("Hof auswählen:", options=["-- Bitte wählen --"] + aktuelle_kunden + ["Manuelle Eingabe"])
-    k_name = ck1.text_input("Hof-Name:") if k_wahl == "Manuelle Eingabe" else k_wahl
+    k_name = ck1.text_input("Name:") if k_wahl == "Manuelle Eingabe" else k_wahl
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # RECHNUNGS-DRUCKBEREICH
+    # DER RECHNUNGS-BLOCK (DRUCK-RELEVANT)
     if st.session_state.rechnungs_posten:
-        st.write("---")
-        
-        # Dieser Container bekommt die CSS-Klasse für den Druck
         st.markdown('<div class="print-content">', unsafe_allow_html=True)
+        
+        # Innerer Rahmen der Rechnung
         with st.container(border=True):
-            cl, cr = st.columns([1,1])
-            with cl:
-                if os.path.exists("logo.png"): st.image("logo.png", width=150)
-                else: st.write("### 🚜 LU-BETRIEB")
-            with cr:
+            col_logo_l, col_logo_r = st.columns([1,1])
+            with col_logo_l:
+                if os.path.exists("logo.png"):
+                    st.image("logo.png", width=180)
+                else:
+                    st.write("## 🚜 LU-BETRIEB")
+            with col_logo_r:
                 st.write(f"**Datum:** {date.today().strftime('%d.%m.%Y')}")
                 st.write(f"**Kunde:** {k_name}")
             
             st.write("---")
-            st.markdown("### RECHNUNG")
-            tabelle = "| Beschreibung | Menge | Einzel | Gesamt |\n| :--- | :--- | :--- | :--- |\n"
+            st.write("# RECHNUNG")
+            st.write("---")
+            
+            # Tabelle manuell in HTML für maximale Druckkontrolle
+            html_table = """
+            <table style="width:100%; border-collapse: collapse; margin-top: 10px;">
+                <thead>
+                    <tr style="border-bottom: 2px solid black; text-align: left;">
+                        <th style="padding: 8px;">Posten</th>
+                        <th style="padding: 8px;">Menge</th>
+                        <th style="padding: 8px;">Einzelpreis</th>
+                        <th style="padding: 8px; text-align: right;">Gesamt</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
             summe = 0
             for p in st.session_state.rechnungs_posten:
-                tabelle += f"| {p['name']} | {p['std']} h | {p['preis']:.2f} € | {p['gesamt']:.2f} € |\n"
+                html_table += f"""
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 8px;">{p['name']}</td>
+                    <td style="padding: 8px;">{p['std']} h</td>
+                    <td style="padding: 8px;">{p['preis']:.2f} €</td>
+                    <td style="padding: 8px; text-align: right;">{p['gesamt']:.2f} €</td>
+                </tr>
+                """
                 summe += p['gesamt']
-            st.markdown(tabelle)
             
             total = summe * (1 - rabatt/100)
+            html_table += "</tbody></table>"
+            st.markdown(html_table, unsafe_allow_html=True)
+            
             st.write("---")
-            e1, e2 = st.columns([2, 1])
-            with e2:
+            col_f1, col_f2 = st.columns([2, 1])
+            with col_f2:
                 st.write(f"Zwischensumme: {summe:.2f} €")
-                if rabatt > 0: st.write(f"Rabatt: -{summe*(rabatt/100):.2f} €")
-                st.subheader(f"Gesamt: {total:.2f} €")
+                if rabatt > 0:
+                    st.write(f"Rabatt ({rabatt}%): -{summe*(rabatt/100):.2f} €")
+                st.write(f"## **Gesamt: {total:.2f} €**")
+        
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # BUTTONS UNTER DER RECHNUNG (Wird nicht gedruckt)
+        # Buttons (no-print)
         st.markdown('<div class="no-print">', unsafe_allow_html=True)
-        cp1, cp2 = st.columns(2)
-        with cp1:
-            if st.button("🖨️ Drucken / PDF speichern"):
-                st.markdown('<script>window.print();</script>', unsafe_allow_html=True)
-                st.info("💡 Falls nichts passiert: Drücke **Cmd + P** (Mac) oder **Strg + P** (Windows).")
-        with cp2:
-            if st.button("🗑️ Rechnung leeren"):
-                st.session_state.rechnungs_posten = []
-                st.rerun()
+        btn_c1, btn_c2 = st.columns(2)
+        if btn_c1.button("🖨️ RECHNUNG DRUCKEN (PDF)"):
+            st.markdown('<script>window.print();</script>', unsafe_allow_html=True)
+        if btn_c2.button("🗑️ Rechnung leeren"):
+            st.session_state.rechnungs_posten = []
+            st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- BEREICH: KUNDEN-VERWALTUNG ---
+# --- BEREICH: KUNDEN ---
 elif menu == "👥 Kunden-Verwaltung":
     st.title("👥 Hof-Namen speichern")
     neuer_hof = st.text_input("Neuer Hof-Name:")
@@ -196,7 +208,3 @@ elif menu == "👥 Kunden-Verwaltung":
                 st.success(f"'{neuer_hof}' gespeichert!")
                 st.cache_data.clear()
             except Exception as e: st.error(f"Fehler: {e}")
-
-if st.sidebar.button("Abmelden"):
-    st.session_state["user_correct"] = False
-    st.rerun()
