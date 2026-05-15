@@ -226,32 +226,68 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3 (UMSCHRIEBEN, DAMIT SIE NIE WIEDER LEER BLEIBT) ---
+# --- SEITE 3: ERWEITERTE MATERIALVERWALTUNG ---
 elif menu == "🛒 Saatgut-Bestellung":
-    st.title("🛒 Saatgut- & Materialverwaltung")
+    st.title("🛒 Material- & Lagerverwaltung")
     
     st.subheader("📦 Aktueller Hof-Bestand")
-    col_s1, col_s2 = st.columns(2)
-    vorhanden = col_s1.number_input("Vorhandenes Saatgut am Hof (Liter):", min_value=0, value=3000, step=500)
-    verbraucht = col_s2.number_input("Auf den Feldern verbraucht (Liter):", min_value=0, value=0, step=100)
     
-    aktueller_bestand = vorhanden - verbraucht
+    # Drei Spalten für die drei Güter
+    col_s, col_k, col_d = st.columns(3)
     
-    if aktueller_bestand < 1500:
-        st.error(f"🚨 Kritischer Bestand! Restmenge: {aktueller_bestand:,} L")
-        st.write("---")
+    with col_s:
+        st.markdown("### 🌱 Saatgut")
+        v_saat = st.number_input("Vorhanden (L):", min_value=0, value=3000, step=500, key="v_saat")
+        g_saat = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_saat")
+        b_saat = v_saat - g_saat
+        if b_saat < 1500:
+            st.error(f"🚨 Kritisch: {b_saat:,} L\n(Unter 1.500 L)")
+        else:
+            st.success(f"✅ Stabil: {b_saat:,} L")
+            
+    with col_k:
+        st.markdown("### ⚪ Kalk")
+        v_kalk = st.number_input("Vorhanden (L):", min_value=0, value=10000, step=1000, key="v_kalk")
+        g_kalk = st.number_input("Verbraucht (L):", min_value=0, value=0, step=500, key="g_kalk")
+        b_kalk = v_kalk - g_kalk
+        if b_kalk < 5000:
+            st.error(f"🚨 Kritisch: {b_kalk:,} L\n(Unter 5.000 L)")
+        else:
+            st.success(f"✅ Stabil: {b_kalk:,} L")
+            
+    with col_d:
+        st.markdown("### 🧪 Flüssigdünger")
+        v_dueng = st.number_input("Vorhanden (L):", min_value=0, value=2000, step=500, key="v_dueng")
+        g_dueng = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_dueng")
+        b_dueng = v_dueng - g_dueng
+        if b_dueng < 1000:
+            st.error(f"🚨 Kritisch: {b_dueng:,} L\n(Unter 1.000 L)")
+        else:
+            st.success(f"✅ Stabil: {b_dueng:,} L")
+            
+    st.write("---")
+    
+    # Freischaltlogik: Wenn IRGENDEIN Bestand im kritischen Bereich ist
+    if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000:
         st.subheader("🛒 Nachbestellung aufgeben")
+        st.info("Folgende Masken stehen bereit, um das Lager wieder aufzufüllen:")
         
         col_b1, col_b2 = st.columns(2)
-        b_saat = col_b1.number_input("Saatgut nachbestellen (Liter):", min_value=0, value=2000, step=500)
+        # Wenn Saatgut kritisch ist, schlagen wir direkt 2000L vor, sonst 0
+        init_saat = 2000 if b_saat < 1500 else 0
+        order_saat = col_b1.number_input("Saatgut nachbestellen (Liter):", min_value=0, value=init_saat, step=500)
         b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
         
         col_b3, col_b4 = st.columns(2)
-        b_kalk = col_b3.number_input("Gleichzeitig Kalk mitbestellen (Liter):", min_value=0, value=0, step=500)
-        b_duenger = col_b4.number_input("Gleichzeitig Flüssigdünger mitbestellen (Liter):", min_value=0, value=0, step=100)
+        init_kalk = 5000 if b_kalk < 5000 else 0
+        order_kalk = col_b3.number_input("Kalk nachbestellen (Liter):", min_value=0, value=init_kalk, step=1000)
         
-        if b_saat > 0 or b_kalk > 0 or b_duenger > 0:
-            order_pdf_data = generate_order_pdf(b_kalk, b_duenger, b_saat, b_typ)
+        init_dueng = 1000 if b_dueng < 1000 else 0
+        order_dueng = col_b4.number_input("Flüssigdünger nachbestellen (Liter):", min_value=0, value=init_dueng, step=500)
+        
+        # Wenn tatsächlich Mengen eingetragen wurden, PDF aktivieren
+        if order_saat > 0 or order_kalk > 0 or order_dueng > 0:
+            order_pdf_data = generate_order_pdf(order_kalk, order_dueng, order_saat, b_typ)
             st.write("")
             st.download_button(
                 label="📥 Bestellzettel als PDF herunterladen",
@@ -260,6 +296,4 @@ elif menu == "🛒 Saatgut-Bestellung":
                 mime="application/pdf"
             )
     else:
-        st.success(f"✅ Bestand stabil. Restmenge: {aktueller_bestand:,} L")
-        st.write("---")
-        st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald der Bestand unter 1.500 Liter fällt.")
+        st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald einer deiner Bestände ins Minus bzw. unter das Limit rutscht.")
