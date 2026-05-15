@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 import os
 import json
 from fpdf import FPDF
@@ -42,6 +42,15 @@ def fmt_int(wert):
 
 def fmt_float(wert):
     return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def get_current_month_year():
+    # Gibt z.B. "05 - Mai 2026" zurück für eine saubere chronologische Sortierung
+    monate = {
+        1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai", 6: "Juni",
+        7: "Juli", 8: "August", 9: "September", 10: "Oktober", 11: "November", 12: "Dezember"
+    }
+    jetzt = datetime.now()
+    return f"{jetzt.month:02d} - {monate[jetzt.month]} {jetzt.year}"
 
 
 # --- PDF KLASSEN ---
@@ -87,7 +96,7 @@ def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id):
     summe = 0
     for p in posten:
         pdf.cell(80, 10, safe_str(p['name']), border=0)
-        pdf.cell(30, 10, f"{p['std']} h", border=0, align="C")
+        pdf.cell(30, 10, f"{p['std']} h" if "h" in str(p.get('einheit', 'h')) else f"{p['std']}", border=0, align="C")
         pdf.cell(40, 10, f"{fmt_float(p['preis'])} EUR", border=0, align="R")
         pdf.cell(40, 10, f"{fmt_float(p['gesamt'])} EUR", border=0, align="R")
         pdf.ln(10)
@@ -136,7 +145,6 @@ def generate_order_pdf(bestell_liste, bestell_id):
     
     for b in bestell_liste:
         pdf.cell(120, 10, safe_str(b["artikel"]), border=0)
-        # Wenn eine Einheit mitgegeben wurde, nutzen wir diese, sonst Standard 'L'
         einheit = b.get("einheit", "L")
         pdf.cell(60, 10, f"{fmt_int(b['menge'])} {einheit}", border=0, align="R")
         pdf.ln(10)
@@ -189,11 +197,11 @@ st.sidebar.markdown("## 💰 Hof-Kasse (Live)")
 einn = st._global_finanzen["einnahmen"]
 ausg = st._global_finanzen["ausgaben"]
 gewinn = einn - ausg
-st.sidebar.metric("Einnahmen", f"+{fmt_float(einn)} EUR")
-st.sidebar.metric("Ausgaben", f"-{fmt_float(ausg)} EUR")
-st.sidebar.metric("Gewinn/Verlust", f"{fmt_float(gewinn)} EUR", delta=gewinn)
+st.sidebar.metric("Einnahmen Gesamtergebnis", f"+{fmt_float(einn)} EUR")
+st.sidebar.metric("Ausgaben Gesamtergebnis", f"-{fmt_float(ausg)} EUR")
+st.sidebar.metric("Hof-Gewinn", f"{fmt_float(gewinn)} EUR", delta=gewinn)
 
-# Manuelle Buchungsfunktion in der Seitenleiste
+# Manuelle Buchungsfunktion in der Seitenleiste (MIT MONATSSTEMPEL)
 with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_typ = st.radio("Buchungsart:", ["Einnahme", "Ausgabe"], key="m_typ")
     m_betrag = st.number_input("Betrag (EUR):", min_value=0.0, value=1000.0, step=100.0, key="m_betrag")
@@ -203,9 +211,11 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
         if m_details.strip() == "":
             st.error("Bitte einen Verwendungszweck eingeben!")
         else:
+            aktueller_monat = get_current_month_year()
             if m_typ == "Einnahme":
                 st._global_finanzen["einnahmen"] += m_betrag
                 st._global_finanzen["historie"].append({
+                    "Monat": aktueller_monat,
                     "Typ": "Manuelle Einnahme",
                     "Nummer": "M-IN",
                     "Details": m_details,
@@ -214,6 +224,7 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
             else:
                 st._global_finanzen["ausgaben"] += m_betrag
                 st._global_finanzen["historie"].append({
+                    "Monat": aktueller_monat,
                     "Typ": "Manuelle Ausgabe",
                     "Nummer": "M-OUT",
                     "Details": m_details,
@@ -257,7 +268,7 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
-# --- SEITE 2: RECHNUNGS-ERSTELLER (MIT MANUELLEM POSTEN-BUTTON) ---
+# --- SEITE 2: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
@@ -265,9 +276,7 @@ elif menu == "📋 Rechnungs-Ersteller":
     st.caption(f"Nächste Rechnungsnummer: **#RE-{aktuelle_id:04d}**")
 
     with st.container(border=True):
-        # NEU: Checkbox um einen komplett freien Posten zu aktivieren
         manuell_aktiv = st.checkbox("⚙️ Sonderleistung / Manueller Posten (Nicht in Liste)")
-        
         c1, c2, c3 = st.columns([2, 1, 1])
         
         if manuell_aktiv:
@@ -320,6 +329,7 @@ elif menu == "📋 Rechnungs-Ersteller":
         if col_b2.button("💾 Rechnung auf Server verbuchen", type="primary"):
             st._global_finanzen["einnahmen"] += total
             st._global_finanzen["historie"].append({
+                "Monat": get_current_month_year(),
                 "Typ": "Einnahme (Rechnung)",
                 "Nummer": f"#RE-{aktuelle_id:04d}",
                 "Details": f"Kunde: {k_name}",
@@ -327,14 +337,14 @@ elif menu == "📋 Rechnungs-Ersteller":
             })
             st._global_finanzen["naechste_rechnung_id"] += 1
             st.session_state.rechnungs_posten = []
-            st.success("Erfolgreich verbucht und Rechnungsnummer erhöht!")
+            st.success("Erfolgreich verbucht!")
             st.rerun()
             
         if col_b3.button("🗑️ Posten löschen"):
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: BESTELLUNGEN (MIT MANUELLEM FREITEXT-ARTIKEL-BUTTON) ---
+# --- SEITE 3: BESTELLUNGEN ---
 elif menu == "🛒 Saatgut-Bestellung":
     st.title("🛒 Material- & Lagerverwaltung")
     
@@ -378,10 +388,8 @@ elif menu == "🛒 Saatgut-Bestellung":
         else: st.success(f"✅ Stabil: {fmt_int(b_herbi)} L")
             
     st.write("---")
-    
     st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
     
-    # 1. Option: Standard-Automatisierter Einkaufsrechner für Lagergrenzen
     with st.expander("📉 Automatische Nachfüllung (Lager-Vorschlag)"):
         col_p1, col_p2, col_p3, col_p4 = st.columns(4)
         p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
@@ -413,26 +421,21 @@ elif menu == "🛒 Saatgut-Bestellung":
                 st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
             if order_herbi > 0:
                 st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi, "einheit": "L"})
-            st.success(f"Standardgüter hinzugefügt! Geschätzte Kosten: {fmt_float(kosten)} EUR")
+            st.success(f"Standardgüter hinzugefügt!")
             st.rerun()
 
-    # NEU 2. Option: Manueller Freitext-Button für ALLES andere
     with st.expander("➕ Freitext / Sonderbestellung hinzufügen (Diesel, Futter, etc.)"):
         col_m1, col_m2, col_m3 = st.columns([2, 1, 1])
-        m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration, Spanngurte", key="order_m_name")
+        m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration", key="order_m_name")
         m_artikel_menge = col_m2.number_input("Menge:", min_value=1, value=1000, step=50, key="order_m_menge")
-        m_artikel_einheit = col_m3.selectbox("Einheit:", ["L", "Stk", "Stück", "kg"], key="order_m_einheit")
+        m_artikel_einheit = col_m3.selectbox("Einheit:", ["L", "Stk", "kg"], key="order_m_einheit")
         
         if st.button("📝 Sonderposten zur Einkaufsliste packen"):
             if m_artikel_name.strip() == "":
                 st.error("Bitte gib einen Namen für das Produkt ein!")
             else:
-                st._global_bestell_store.append({
-                    "artikel": m_artikel_name,
-                    "menge": m_artikel_menge,
-                    "einheit": m_artikel_einheit
-                })
-                st.success(f"✅ '{m_artikel_name}' wurde auf die Einkaufsliste gesetzt!")
+                st._global_bestell_store.append({"artikel": m_artikel_name, "menge": m_artikel_menge, "einheit": m_artikel_einheit})
+                st.success(f"✅ '{m_artikel_name}' wurde hinzugefügt!")
                 st.rerun()
 
     if st._global_bestell_store:
@@ -441,25 +444,19 @@ elif menu == "🛒 Saatgut-Bestellung":
         st.subheader(f"📋 Offene Bestellungen auf dem Server (#BS-{bestell_id:04d})")
         
         df_bestellungen = pd.DataFrame(st._global_bestell_store)
-        # Umbenennung & Schöner Formatieren im Dataframe
         df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge", "Einheit"]
         st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
         
         tatsaechliche_kosten = st.number_input("Tatsächlicher Einkaufspreis beim Händler (EUR):", min_value=0.0, value=0.0, step=50.0)
-        
         col_btn1, col_btn2 = st.columns(2)
         
         order_pdf_data = generate_order_pdf(st._global_bestell_store, bestell_id)
-        col_btn1.download_button(
-            label="📥 Bestellzettel als PDF laden", 
-            data=bytes(order_pdf_data), 
-            file_name=f"Hof_Bestellung_BS-{bestell_id:04d}.pdf", 
-            mime="application/pdf"
-        )
+        col_btn1.download_button(label="📥 Bestellzettel als PDF laden", data=bytes(order_pdf_data), file_name=f"Hof_Bestellung_BS-{bestell_id:04d}.pdf", mime="application/pdf")
         
         if col_btn2.button("✅ Einkäufe erledigt & Geld abziehen", type="primary"):
             st._global_finanzen["ausgaben"] += tatsaechliche_kosten
             st._global_finanzen["historie"].append({
+                "Monat": get_current_month_year(),
                 "Typ": "Ausgabe (Einkauf)",
                 "Nummer": f"#BS-{bestell_id:04d}",
                 "Details": f"{len(st._global_bestell_store)} Artikel gekauft",
@@ -473,11 +470,8 @@ elif menu == "🛒 Saatgut-Bestellung":
 # --- SEITE 4: PRODUKTIONS-PLANER ---
 elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
-    st.write("Füge hier deine Fabriken hinzu. Diese Liste wird **live mit allen Spielern auf dem Hof synchronisiert**!")
+    st.write("Diese Liste wird **live mit allen Spielern auf dem Hof synchronisiert**!")
     
-    if st.button("🔄 Server-Liste aktualisieren"):
-        st.rerun()
-
     with st.container(border=True):
         st.subheader("🏭 Neue Produktion hinzufügen")
         rezept = st.selectbox("Wähle eine Produktion/Rezept aus:", options=list(PROD_DATA.keys()))
@@ -487,12 +481,10 @@ elif menu == "🏭 Produktions-Planer":
             col_custom1, col_custom2 = st.columns(2)
             in_name = col_custom1.text_input("Name des Rohstoffs (Input):", value="Dinkel")
             out_name = col_custom2.text_input("Name des Produkts (Output):", value="Altes Mehl")
-            
             col_custom3, col_custom4, col_custom5 = st.columns(3)
             custom_in_menge = col_custom3.number_input(f"Menge pro Zyklus:", min_value=1, value=5)
             custom_out_menge = col_custom4.number_input(f"Menge pro Zyklus:", min_value=1, value=4)
             zyklen_pro_std = col_custom5.number_input("Zyklen pro Stunde:", min_value=1, value=30)
-            
             base_in = custom_in_menge * zyklen_pro_std * 24 * 30
             base_out = custom_out_menge * zyklen_pro_std * 24 * 30
             name_anzeige = f"Mod-Rezept: {in_name} -> {out_name}"
@@ -507,56 +499,67 @@ elif menu == "🏭 Produktions-Planer":
         if st.button("💾 Für ALLE speichern & synchronisieren", type="primary"):
             gesamt_input = base_in * monate * anzahl_fabriken
             gesamt_output = base_out * monate * anzahl_fabriken
-            
             st._global_hof_store.append({
-                "name": name_anzeige,
-                "monate": monate,
-                "linien": anzahl_fabriken,
-                "in_typ": in_name,
-                "in_menge": gesamt_input,
-                "out_typ": out_name,
-                "out_menge": gesamt_output
+                "name": name_anzeige, "monate": monate, "linien": anzahl_fabriken,
+                "in_typ": in_name, "in_menge": gesamt_input, "out_typ": out_name, "out_menge": gesamt_output
             })
-            st.success(f"✅ {name_anzeige} wurde für alle Spieler gespeichert!")
+            st.success(f"✅ Gespeichert!")
             st.rerun()
 
     if st._global_hof_store:
         st.write("---")
         st.header("🏡 Aktive Produktionen auf dem Server")
-        
         table_data = []
         for idx, item in enumerate(st._global_hof_store):
             table_data.append({
-                "ID": idx + 1,
-                "Produktion / Fabrik": item["name"],
-                "Linien": item["linien"],
-                "Laufzeit": f"{item['monate']} Monate",
-                "Rohstoff Bedarf (Jahr)": f"{fmt_int(item['in_menge'])} L ({item['in_typ']})",
-                "Produkt Ertrag (Jahr)": f"{fmt_int(item['out_menge'])} L ({item['out_typ']})"
+                "ID": idx + 1, "Produktion / Fabrik": item["name"], "Linien": item["linien"], "Laufzeit": f"{item['monate']} Monate",
+                "Rohstoff Bedarf (Jahr)": f"{fmt_int(item['in_menge'])} L ({item['in_typ']})", "Produkt Ertrag (Jahr)": f"{fmt_int(item['out_menge'])} L ({item['out_typ']})"
             })
-            
-        df_prods = pd.DataFrame(table_data)
-        st.dataframe(df_prods, use_container_width=True, hide_index=True)
-        
+        st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
         col_action1, col_action2 = st.columns(2)
-        
-        json_data = json.dumps(st._global_hof_store, indent=4)
-        col_action1.download_button(
-            label="📥 Server-Planung als Datei sichern",
-            data=json_data,
-            file_name=f"LS25_Hofplan_{date.today().strftime('%Y%m%d')}.json",
-            mime="application/json"
-        )
-        
         if col_action2.button("🗑️ Alle Produktionen vom Server löschen"):
             st._global_hof_store = []
-            st.warning("Die globale Liste wurde für alle Spieler geleert.")
             st.rerun()
 
 
-# --- ANZEIGE DER HISTORIE AM SEITENENDE (URKUNDE/TRANSAKTIONEN) ---
+# --- ANZEIGE DER HISTORIE & JAHRESABSCHLUSS BILANZ ---
 if st._global_finanzen["historie"]:
     st.write("---")
-    with st.expander("📊 Digitales Kassenbuch / Transaktionsverlauf anzeigen"):
-        df_hist = pd.DataFrame(st._global_finanzen["historie"])
-        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+    
+    # 1. Erstellung der Jahresabschluss Bilanz (Datenaggregation)
+    st.header("📊 Jahresabschluss-Bilanz & Monatsberichte")
+    
+    df_raw = pd.DataFrame(st._global_finanzen["historie"])
+    
+    # Trennung der Beträge für die Berechnung nach Monat
+    df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Einnahme" in r["Typ"] else 0.0, axis=1)
+    df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Ausgabe" in r["Typ"] else 0.0, axis=1)
+    
+    # Gruppieren nach Monat
+    df_monat = df_raw.groupby("Monat").agg(
+        Einnahmen=("Einnahme_Wert", "sum"),
+        Ausgaben=("Ausgabe_Wert", "sum")
+    ).reset_index()
+    
+    df_monat["Gewinn / Verlust"] = df_monat["Einnahmen"] - df_monat["Ausgaben"]
+    
+    # Anzeige der Bilanz-Tabelle
+    col_bil1, col_bil2 = st.columns([5, 4])
+    
+    with col_bil1:
+        st.subheader("🗓️ Finanzergebnis nach Monaten")
+        # Formatierte Tabelle für die Anzeige bauen
+        df_anzeige = df_monat.copy()
+        df_anzeige["Einnahmen"] = df_anzeige["Einnahmen"].map(lambda x: f"+{fmt_float(x)} EUR")
+        df_anzeige["Ausgaben"] = df_anzeige["Ausgaben"].map(lambda x: f"-{fmt_float(x)} EUR")
+        df_anzeige["Gewinn / Verlust"] = df_anzeige["Gewinn / Verlust"].map(lambda x: f"{fmt_float(x)} EUR")
+        st.dataframe(df_anzeige, use_container_width=True, hide_index=True)
+        
+    with col_bil2:
+        st.subheader("📈 Reingewinn-Trend")
+        # Kleines visuelles Balkendiagramm für den schnellen Überblick
+        st.bar_chart(data=df_monat, x="Monat", y="Gewinn / Verlust", color="#2e7d32")
+
+    # 2. Die detaillierte Einzelposten-Liste
+    with st.expander("📋 Komplettes Kassenbuch (Einzeltransaktionen anzeigen)"):
+        st.dataframe(df_raw[["Monat", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
