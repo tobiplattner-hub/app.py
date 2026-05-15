@@ -21,6 +21,7 @@ if not hasattr(st, "_global_bestell_store"):
 # Globaler Finanzen- & Nummern-Speicher
 if not hasattr(st, "_global_finanzen"):
     st._global_finanzen = {
+        "start_saldo": 0.0,  # Neues Feld für das manuelle Start-Saldo
         "einnahmen": 0.0,
         "ausgaben": 0.0,
         "naechste_rechnung_id": 1,
@@ -195,12 +196,25 @@ PROD_DATA = {
 
 # --- SIDEBAR FINANZ-METRIKEN ---
 st.sidebar.markdown("## 💰 Hof-Kasse (Live)")
+
+# NEU: Start-Saldo konfigurieren
+st.sidebar.markdown("### 🏁 Startkapital einrichten")
+st._global_finanzen["start_saldo"] = st.sidebar.number_input(
+    "Start-Saldo (EUR):", 
+    min_value=0.0, 
+    value=float(st._global_finanzen.get("start_saldo", 0.0)), 
+    step=10000.0,
+    key="config_start_saldo"
+)
+
 einn = st._global_finanzen["einnahmen"]
 ausg = st._global_finanzen["ausgaben"]
-gewinn = einn - ausg
-st.sidebar.metric("Einnahmen Gesamtergebnis", f"+{fmt_float(einn)} EUR")
-st.sidebar.metric("Ausgaben Gesamtergebnis", f"-{fmt_float(ausg)} EUR")
-st.sidebar.metric("Hof-Gewinn", f"{fmt_float(gewinn)} EUR", delta=gewinn)
+# Aktueller Hof-Gewinn berechnet sich nun inklusive Start-Saldo
+aktuelle_hof_kasse = st._global_finanzen["start_saldo"] + einn - ausg
+
+st.sidebar.metric("Einnahmen (Saison)", f"+{fmt_float(einn)} EUR")
+st.sidebar.metric("Ausgaben (Saison)", f"-{fmt_float(ausg)} EUR")
+st.sidebar.metric("Aktueller Kontostand", f"{fmt_float(aktuelle_hof_kasse)} EUR")
 
 # Manuelle Buchungsfunktion in der Seitenleiste
 with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
@@ -234,7 +248,7 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
             st.rerun()
 
 if st.sidebar.button("🗑️ Kassenbuch zurücksetzen"):
-    st._global_finanzen = {"einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
+    st._global_finanzen = {"start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
     st.rerun()
 
 st.sidebar.write("---")
@@ -610,8 +624,8 @@ if st._global_finanzen["historie"]:
     # Chronologisch sortieren, um das Saldo sauber aufzubauen
     df_raw_sorted = df_raw.sort_values(by=["Sort_Jahr", "Sort_Monat"]).reset_index(drop=True)
     
-    # --- NEU: Fortlaufendes Saldo berechnen ---
-    kontostand = 0.0
+    # --- ANGEPASST: Fortlaufendes Saldo inkl. Start-Saldo berechnen ---
+    kontostand = st._global_finanzen["start_saldo"]
     saldo_liste = []
     for idx, row in df_raw_sorted.iterrows():
         if "Einnahme" in row["Typ"]:
@@ -652,6 +666,9 @@ if st._global_finanzen["historie"]:
             lambda r: f"+{fmt_float(r['Betrag (EUR)'])}" if "Einnahme" in r["Typ"] else f"-{fmt_float(r['Betrag (EUR)'])}", axis=1
         )
         df_kassenbuch_view["Saldo"] = df_kassenbuch_view["Saldo (EUR)"].map(lambda x: f"{fmt_float(x)} EUR")
+        
+        # Hinweis-Zeile für das Startkapital über der Tabelle anzeigen
+        st.info(f"🏁 Eingestelltes Startkapital: **{fmt_float(st._global_finanzen['start_saldo'])} EUR**")
         
         # DataFrame mit der neuen Saldo-Spalte ausgeben
         st.dataframe(
