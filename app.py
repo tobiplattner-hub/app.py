@@ -332,6 +332,12 @@ elif menu == "📋 Rechnungs-Ersteller":
         col_m2.metric("Endbetrag", f"{fmt_float(total)} EUR")
 
         st.write("")
+        
+        # --- DYNAMISCHER DATEINAME FÜR RECHNUNGEN ---
+        vorgeschlagener_name = f"Rechnung_RE-{aktuelle_id:04d}_{safe_str(k_name)}"
+        pdf_dateiname = st.text_input("📄 PDF-Dateiname (ohne .pdf):", value=vorgeschlagener_name)
+        # ---------------------------------------------
+        
         col_b1, col_b2, col_b3 = st.columns(3)
         
         full_ingame_date = f"Jahr {re_jahr} - {re_monat}"
@@ -340,7 +346,7 @@ elif menu == "📋 Rechnungs-Ersteller":
         col_b1.download_button(
             label="📥 PDF herunterladen",
             data=bytes(pdf_data),
-            file_name=f"Rechnung_RE-{aktuelle_id:04d}_{safe_str(k_name)}.pdf",
+            file_name=f"{pdf_dateiname}.pdf",
             mime="application/pdf"
         )
         
@@ -360,7 +366,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: AUFTRÄGE & BESTELLUNGEN (JETZT MIT EINZEL-LÖSCHFUNKTION) ---
+# --- SEITE 3: AUFTRÄGE & BESTELLUNGEN ---
 elif menu == "🛒 Material- & Auftragsverwaltung":
     st.title("🛒 Materialbestellungen & Fremdaufträge")
     
@@ -488,15 +494,13 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
         
         st.dataframe(df_anzeige_b, use_container_width=True, hide_index=True)
         
-        # --- NEU: MANUELLE EINZEL-LÖSCHFUNKTION ---
+        # --- MANUELLE EINZEL-LÖSCHFUNKTION ---
         with st.container(border=True):
             st.markdown("🗑️ **Einzelnen Posten von der Liste löschen**")
-            # Erstellt eine Liste aus lesbaren Namen ("1: Saatgut (2000 L)", "2: Auftrag LU: Maehen (5.0 ha)")
             loesch_optionen = [f"{i+1}: {p['artikel']} ({p['menge']} {p['einheit']})" for i, p in enumerate(st._global_bestell_store)]
             posten_zu_loeschen = st.selectbox("Wähle den Posten aus, den du entfernen willst:", options=loesch_optionen)
             
             if st.button("❌ Ausgewählten Posten löschen", type="secondary"):
-                # Index aus dem Optionstext extrahieren
                 idx_zu_loeschen = int(posten_zu_loeschen.split(":")[0]) - 1
                 entfernter_posten = st._global_bestell_store.pop(idx_zu_loeschen)
                 st.success(f" Posten '{entfernter_posten['artikel']}' wurde gelöscht!")
@@ -508,12 +512,23 @@ elif menu == "🛒 Material- & Auftragsverwaltung":
         bs_monat = col_bs_m.selectbox("In-Game Monat für Beleg:", LISTE_MONATE)
         bs_jahr = col_bs_j.number_input("In-Game Jahr für Beleg:", min_value=1, value=1, step=1)
         
+        # --- DYNAMISCHER DATEINAME FÜR AUFTRÄGE ---
+        vorgeschlagener_auftrag_name = f"Hof_Auftrag_BS-{bestell_id:04d}"
+        auftrag_dateiname = st.text_input("📄 PDF-Dateiname (ohne .pdf):", value=vorgeschlagener_auftrag_name, key="pdf_order_name")
+        # -------------------------------------------
+        
         tatsaechliche_kosten = st.number_input("Tatsächliche Gesamtkosten (EUR):", min_value=0.0, value=0.0, step=50.0)
         col_btn1, col_btn2 = st.columns(2)
         
         full_bs_date = f"Jahr {bs_jahr} - {bs_monat}"
         order_pdf_data = generate_order_pdf(st._global_bestell_store, bestell_id, full_bs_date)
-        col_btn1.download_button(label="📥 Bestell-/Auftragszettel als PDF", data=bytes(order_pdf_data), file_name=f"Hof_Auftrag_BS-{bestell_id:04d}.pdf", mime="application/pdf")
+        
+        col_btn1.download_button(
+            label="📥 Bestell-/Auftragszettel als PDF", 
+            data=bytes(order_pdf_data), 
+            file_name=f"{auftrag_dateiname}.pdf", 
+            mime="application/pdf"
+        )
         
         if col_btn2.button("✅ Posten erledigt & Geld abziehen", type="primary"):
             st._global_finanzen["ausgaben"] += tatsaechliche_kosten
