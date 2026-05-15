@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import date
 import os
 import json
 from fpdf import FPDF
@@ -28,6 +28,12 @@ if not hasattr(st, "_global_finanzen"):
         "historie": [] # Liste aller Buchungen für die Übersicht
     }
 
+# --- STATISCHE LISTE FÜR IN-GAME MONATE ---
+LISTE_MONATE = [
+    "01 - Januar", "02 - Februar", "03 - März", "04 - April", 
+    "05 - Mai", "06 - Juni", "07 - Juli", "08 - August", 
+    "09 - September", "10 - Oktober", "11 - November", "12 - Dezember"
+]
 
 # --- HILFSFUNKTIONEN FÜR FORMATIERUNG UND UMLAUTE ---
 def safe_str(text):
@@ -43,15 +49,6 @@ def fmt_int(wert):
 def fmt_float(wert):
     return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def get_current_month_year():
-    # Gibt z.B. "05 - Mai 2026" zurück für eine saubere chronologische Sortierung
-    monate = {
-        1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai", 6: "Juni",
-        7: "Juli", 8: "August", 9: "September", 10: "Oktober", 11: "November", 12: "Dezember"
-    }
-    jetzt = datetime.now()
-    return f"{jetzt.month:02d} - {monate[jetzt.month]} {jetzt.year}"
-
 
 # --- PDF KLASSEN ---
 class InvoicePDF(FPDF):
@@ -63,13 +60,13 @@ class InvoicePDF(FPDF):
             self.cell(0, 10, "LU-BETRIEB", ln=True)
         self.ln(20)
 
-def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id):
+def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum):
     pdf = InvoicePDF()
     pdf.add_page()
     
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
-    pdf.multi_cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nRechnung-Nr: #RE-{rechnungs_id:04d}", align="R")
+    pdf.multi_cell(65, 6, f"In-Game Datum: {ingame_datum}\nRechnung-Nr: #RE-{rechnungs_id:04d}", align="R")
     
     pdf.ln(15)
     pdf.set_font("Helvetica", "B", 12)
@@ -120,13 +117,13 @@ def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id):
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
     return pdf.output()
 
-def generate_order_pdf(bestell_liste, bestell_id):
+def generate_order_pdf(bestell_liste, bestell_id, ingame_datum):
     pdf = InvoicePDF()
     pdf.add_page()
     
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
-    pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}\nBestell-Nr: #BS-{bestell_id:04d}", align="R", ln=True)
+    pdf.cell(65, 6, f"In-Game Datum: {ingame_datum}\nBestell-Nr: #BS-{bestell_id:04d}", align="R", ln=True)
     
     pdf.ln(35)
     pdf.set_x(65)
@@ -201,21 +198,28 @@ st.sidebar.metric("Einnahmen Gesamtergebnis", f"+{fmt_float(einn)} EUR")
 st.sidebar.metric("Ausgaben Gesamtergebnis", f"-{fmt_float(ausg)} EUR")
 st.sidebar.metric("Hof-Gewinn", f"{fmt_float(gewinn)} EUR", delta=gewinn)
 
-# Manuelle Buchungsfunktion in der Seitenleiste (MIT MONATSSTEMPEL)
+# Manuelle Buchungsfunktion in der Seitenleiste (MIT SELEKTIVEM DATUM)
 with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_typ = st.radio("Buchungsart:", ["Einnahme", "Ausgabe"], key="m_typ")
     m_betrag = st.number_input("Betrag (EUR):", min_value=0.0, value=1000.0, step=100.0, key="m_betrag")
     m_details = st.text_input("Zweck (z.B. Getreideverkauf):", value="", key="m_details")
     
+    st.markdown("**In-Game Zeit:**")
+    col_m_m, col_m_j = st.columns(2)
+    m_monat = col_m_m.selectbox("Monat:", LISTE_MONATE, key="m_monat")
+    m_jahr = col_m_j.number_input("Jahr:", min_value=1, value=1, step=1, key="m_jahr")
+    
     if st.button("💾 Buchung speichern"):
         if m_details.strip() == "":
             st.error("Bitte einen Verwendungszweck eingeben!")
         else:
-            aktueller_monat = get_current_month_year()
+            in_game_datum_str = f"Jahr {m_jahr} - {m_monat}"
             if m_typ == "Einnahme":
                 st._global_finanzen["einnahmen"] += m_betrag
                 st._global_finanzen["historie"].append({
-                    "Monat": aktueller_monat,
+                    "In-Game Datum": in_game_datum_str,
+                    "Sort_Jahr": m_jahr,
+                    "Sort_Monat": m_monat,
                     "Typ": "Manuelle Einnahme",
                     "Nummer": "M-IN",
                     "Details": m_details,
@@ -224,7 +228,9 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
             else:
                 st._global_finanzen["ausgaben"] += m_betrag
                 st._global_finanzen["historie"].append({
-                    "Monat": aktueller_monat,
+                    "In-Game Datum": in_game_datum_str,
+                    "Sort_Jahr": m_jahr,
+                    "Sort_Monat": m_monat,
                     "Typ": "Manuelle Ausgabe",
                     "Nummer": "M-OUT",
                     "Details": m_details,
@@ -298,6 +304,12 @@ elif menu == "📋 Rechnungs-Ersteller":
     ck1, ck2 = st.columns(2)
     k_name = ck1.selectbox("Hof auswählen:", aktuelle_kunden) if aktuelle_kunden else ck1.text_input("Hofname:")
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
+    
+    # In-Game Datumsabfrage für die Rechnung
+    st.markdown("#### 📆 Wann findet die Leistung statt? (In-Game Zeit)")
+    col_re_m, col_re_j = st.columns(2)
+    re_monat = col_re_m.selectbox("In-Game Monat für Rechnung:", LISTE_MONATE)
+    re_jahr = col_re_j.number_input("In-Game Jahr für Rechnung:", min_value=1, value=1, step=1)
 
     if st.session_state.rechnungs_posten:
         st.write("---")
@@ -317,7 +329,8 @@ elif menu == "📋 Rechnungs-Ersteller":
         st.write("")
         col_b1, col_b2, col_b3 = st.columns(3)
         
-        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt, aktuelle_id)
+        full_ingame_date = f"Jahr {re_jahr} - {re_monat}"
+        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt, aktuelle_id, full_ingame_date)
         
         col_b1.download_button(
             label="📥 PDF herunterladen",
@@ -329,7 +342,9 @@ elif menu == "📋 Rechnungs-Ersteller":
         if col_b2.button("💾 Rechnung auf Server verbuchen", type="primary"):
             st._global_finanzen["einnahmen"] += total
             st._global_finanzen["historie"].append({
-                "Monat": get_current_month_year(),
+                "In-Game Datum": full_ingame_date,
+                "Sort_Jahr": re_jahr,
+                "Sort_Monat": re_monat,
                 "Typ": "Einnahme (Rechnung)",
                 "Nummer": f"#RE-{aktuelle_id:04d}",
                 "Details": f"Kunde: {k_name}",
@@ -411,7 +426,6 @@ elif menu == "🛒 Saatgut-Bestellung":
         order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
         
         if st.button("📝 Standard-Lagergüter hinzufügen"):
-            kosten = ((order_saat/1000)*p_saat) + ((order_kalk/1000)*p_kalk) + ((order_dueng/1000)*p_dueng) + ((order_herbi/1000)*p_herbi)
             if order_saat > 0:
                 art = f"Saatgut ({b_typ})" if b_typ else "Saatgut"
                 st._global_bestell_store.append({"artikel": art, "menge": order_saat, "einheit": "L"})
@@ -447,16 +461,25 @@ elif menu == "🛒 Saatgut-Bestellung":
         df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge", "Einheit"]
         st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
         
+        # Datumsabfrage für die Bezahlung des Einkaufs
+        st.markdown("#### 📆 In-Game Buchungsmonat für diesen Einkauf")
+        col_bs_m, col_bs_j = st.columns(2)
+        bs_monat = col_bs_m.selectbox("In-Game Monat für Einkauf:", LISTE_MONATE)
+        bs_jahr = col_bs_j.number_input("In-Game Jahr für Einkauf:", min_value=1, value=1, step=1)
+        
         tatsaechliche_kosten = st.number_input("Tatsächlicher Einkaufspreis beim Händler (EUR):", min_value=0.0, value=0.0, step=50.0)
         col_btn1, col_btn2 = st.columns(2)
         
-        order_pdf_data = generate_order_pdf(st._global_bestell_store, bestell_id)
+        full_bs_date = f"Jahr {bs_jahr} - {bs_monat}"
+        order_pdf_data = generate_order_pdf(st._global_bestell_store, bestell_id, full_bs_date)
         col_btn1.download_button(label="📥 Bestellzettel als PDF laden", data=bytes(order_pdf_data), file_name=f"Hof_Bestellung_BS-{bestell_id:04d}.pdf", mime="application/pdf")
         
         if col_btn2.button("✅ Einkäufe erledigt & Geld abziehen", type="primary"):
             st._global_finanzen["ausgaben"] += tatsaechliche_kosten
             st._global_finanzen["historie"].append({
-                "Monat": get_current_month_year(),
+                "In-Game Datum": full_bs_date,
+                "Sort_Jahr": bs_jahr,
+                "Sort_Monat": bs_monat,
                 "Typ": "Ausgabe (Einkauf)",
                 "Nummer": f"#BS-{bestell_id:04d}",
                 "Details": f"{len(st._global_bestell_store)} Artikel gekauft",
@@ -527,7 +550,7 @@ if st._global_finanzen["historie"]:
     st.write("---")
     
     # 1. Erstellung der Jahresabschluss Bilanz (Datenaggregation)
-    st.header("📊 Jahresabschluss-Bilanz & Monatsberichte")
+    st.header("📊 In-Game Jahresabschluss-Bilanz & Berichte")
     
     df_raw = pd.DataFrame(st._global_finanzen["historie"])
     
@@ -535,31 +558,35 @@ if st._global_finanzen["historie"]:
     df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Einnahme" in r["Typ"] else 0.0, axis=1)
     df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Ausgabe" in r["Typ"] else 0.0, axis=1)
     
-    # Gruppieren nach Monat
-    df_monat = df_raw.groupby("Monat").agg(
+    # Gruppieren nach In-Game Datum und exakte Sortierung nach Jahr & Monat-Präfix (01, 02...)
+    df_raw_sorted = df_raw.sort_values(by=["Sort_Jahr", "Sort_Monat"])
+    
+    df_monat = df_raw_sorted.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
         Einnahmen=("Einnahme_Wert", "sum"),
         Ausgaben=("Ausgabe_Wert", "sum")
     ).reset_index()
     
+    # Gewährleistet, dass die finale Tabelle chronologisch sortiert bleibt
+    df_monat = df_monat.sort_values(by=["Sort_Jahr", "Sort_Monat"])
     df_monat["Gewinn / Verlust"] = df_monat["Einnahmen"] - df_monat["Ausgaben"]
     
     # Anzeige der Bilanz-Tabelle
     col_bil1, col_bil2 = st.columns([5, 4])
     
     with col_bil1:
-        st.subheader("🗓️ Finanzergebnis nach Monaten")
+        st.subheader("🗓️ Finanzergebnis nach In-Game Monaten")
         # Formatierte Tabelle für die Anzeige bauen
         df_anzeige = df_monat.copy()
         df_anzeige["Einnahmen"] = df_anzeige["Einnahmen"].map(lambda x: f"+{fmt_float(x)} EUR")
         df_anzeige["Ausgaben"] = df_anzeige["Ausgaben"].map(lambda x: f"-{fmt_float(x)} EUR")
         df_anzeige["Gewinn / Verlust"] = df_anzeige["Gewinn / Verlust"].map(lambda x: f"{fmt_float(x)} EUR")
-        st.dataframe(df_anzeige, use_container_width=True, hide_index=True)
+        st.dataframe(df_anzeige[["In-Game Datum", "Einnahmen", "Ausgaben", "Gewinn / Verlust"]], use_container_width=True, hide_index=True)
         
     with col_bil2:
         st.subheader("📈 Reingewinn-Trend")
         # Kleines visuelles Balkendiagramm für den schnellen Überblick
-        st.bar_chart(data=df_monat, x="Monat", y="Gewinn / Verlust", color="#2e7d32")
+        st.bar_chart(data=df_monat, x="In-Game Datum", y="Gewinn / Verlust", color="#2e7d32")
 
     # 2. Die detaillierte Einzelposten-Liste
     with st.expander("📋 Komplettes Kassenbuch (Einzeltransaktionen anzeigen)"):
-        st.dataframe(df_raw[["Monat", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+        st.dataframe(df_raw_sorted[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
