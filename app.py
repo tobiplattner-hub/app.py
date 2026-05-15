@@ -18,7 +18,7 @@ if not hasattr(st, "_global_lager_store"):
 if not hasattr(st, "_global_bestell_store"):
     st._global_bestell_store = []
 
-# NEU: Globaler Finanzen- & Nummern-Speicher
+# Globaler Finanzen- & Nummern-Speicher
 if not hasattr(st, "_global_finanzen"):
     st._global_finanzen = {
         "einnahmen": 0.0,
@@ -190,6 +190,36 @@ gewinn = einn - ausg
 st.sidebar.metric("Einnahmen", f"+{fmt_float(einn)} EUR")
 st.sidebar.metric("Ausgaben", f"-{fmt_float(ausg)} EUR")
 st.sidebar.metric("Gewinn/Verlust", f"{fmt_float(gewinn)} EUR", delta=gewinn)
+
+# NEU: Manuelle Buchungsfunktion direkt in der Seitenleiste
+with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
+    m_typ = st.radio("Buchungsart:", ["Einnahme", "Ausgabe"], key="m_typ")
+    m_betrag = st.number_input("Betrag (EUR):", min_value=0.0, value=1000.0, step=100.0, key="m_betrag")
+    m_details = st.text_input("Zweck (z.B. Getreideverkauf):", value="", key="m_details")
+    
+    if st.button("💾 Buchung speichern"):
+        if m_details.strip() == "":
+            st.error("Bitte einen Verwendungszweck eingeben!")
+        else:
+            if m_typ == "Einnahme":
+                st._global_finanzen["einnahmen"] += m_betrag
+                st._global_finanzen["historie"].append({
+                    "Typ": "Manuelle Einnahme",
+                    "Nummer": "M-IN",
+                    "Details": m_details,
+                    "Betrag (EUR)": m_betrag
+                })
+            else:
+                st._global_finanzen["ausgaben"] += m_betrag
+                st._global_finanzen["historie"].append({
+                    "Typ": "Manuelle Ausgabe",
+                    "Nummer": "M-OUT",
+                    "Details": m_details,
+                    "Betrag (EUR)": m_betrag
+                })
+            st.success("Erfolgreich gebucht!")
+            st.rerun()
+
 if st.sidebar.button("🗑️ Kassenbuch zurücksetzen"):
     st._global_finanzen = {"einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
     st.rerun()
@@ -225,7 +255,7 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
-# --- SEITE 2: RECHNUNGS-ERSTELLER (MIT GEWINN-BUCHUNG) ---
+# --- SEITE 2: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
@@ -272,7 +302,6 @@ elif menu == "📋 Rechnungs-Ersteller":
             mime="application/pdf"
         )
         
-        # NEU: Button zum finalen Buchen & Festschreiben im Server
         if col_b2.button("💾 Rechnung auf Server verbuchen", type="primary"):
             st._global_finanzen["einnahmen"] += total
             st._global_finanzen["historie"].append({
@@ -290,7 +319,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: BESTELLUNGEN (MIT AUSGABEN-BUCHUNG & KOSTENRECHNER) ---
+# --- SEITE 3: BESTELLUNGEN ---
 elif menu == "🛒 Saatgut-Bestellung":
     st.title("🛒 Material- & Lagerverwaltung")
     
@@ -338,7 +367,6 @@ elif menu == "🛒 Saatgut-Bestellung":
     if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000 or b_herbi < 1000:
         st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
         
-        # NEU: Preisrechner für den Einkauf (Ungefähre Richtwerte aus dem LS)
         with st.expander("💰 Einkaufspreise schätzen"):
             col_p1, col_p2, col_p3, col_p4 = st.columns(4)
             p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
@@ -360,7 +388,6 @@ elif menu == "🛒 Saatgut-Bestellung":
         order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
         
         if st.button("📝 Auf gemeinsame Einkaufsliste setzen", type="primary"):
-            # Berechnung der ungefähren Kosten
             kosten = ((order_saat/1000)*p_saat) + ((order_kalk/1000)*p_kalk) + ((order_dueng/1000)*p_dueng) + ((order_herbi/1000)*p_herbi)
             
             if order_saat > 0:
@@ -378,7 +405,6 @@ elif menu == "🛒 Saatgut-Bestellung":
     else:
         st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald ein Bestand unter das Limit rutscht.")
 
-    # Sektion: Anzeige offener Bestellungen
     if st._global_bestell_store:
         st.write("---")
         bestell_id = st._global_finanzen["naechste_bestellung_id"]
@@ -388,7 +414,6 @@ elif menu == "🛒 Saatgut-Bestellung":
         df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge (Liter)"]
         st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
         
-        # Eingabe der tatsächlichen Kosten beim Händler
         tatsaechliche_kosten = st.number_input("Tatsächlicher Einkaufspreis beim Händler (EUR):", min_value=0.0, value=0.0, step=50.0)
         
         col_btn1, col_btn2 = st.columns(2)
@@ -401,7 +426,6 @@ elif menu == "🛒 Saatgut-Bestellung":
             mime="application/pdf"
         )
         
-        # NEU: Einkäufe abrechnen und von der Kasse abziehen
         if col_btn2.button("✅ Einkäufe erledigt & Geld abziehen", type="primary"):
             st._global_finanzen["ausgaben"] += tatsaechliche_kosten
             st._global_finanzen["historie"].append({
@@ -499,7 +523,7 @@ elif menu == "🏭 Produktions-Planer":
             st.rerun()
 
 
-# --- NEU: ANZEIGE DER HISTORIE AM SEITENENDE (URKUNDE/TRANSAKTIONEN) ---
+# --- ANZEIGE DER HISTORIE AM SEITENENDE (URKUNDE/TRANSAKTIONEN) ---
 if st._global_finanzen["historie"]:
     st.write("---")
     with st.expander("📊 Digitales Kassenbuch / Transaktionsverlauf anzeigen"):
