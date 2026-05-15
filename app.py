@@ -93,7 +93,9 @@ def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum
     summe = 0
     for p in posten:
         pdf.cell(80, 10, safe_str(p['name']), border=0)
-        pdf.cell(30, 10, f"{p['std']} h" if "h" in str(p.get('einheit', 'h')) else f"{p['std']}", border=0, align="C")
+        # Dynamische Einheitenanzeige im PDF (h oder ha)
+        einheit = p.get('einheit', 'h')
+        pdf.cell(30, 10, f"{p['menge']} {einheit}", border=0, align="C")
         pdf.cell(40, 10, f"{fmt_float(p['preis'])} EUR", border=0, align="R")
         pdf.cell(40, 10, f"{fmt_float(p['gesamt'])} EUR", border=0, align="R")
         pdf.ln(10)
@@ -198,7 +200,7 @@ st.sidebar.metric("Einnahmen Gesamtergebnis", f"+{fmt_float(einn)} EUR")
 st.sidebar.metric("Ausgaben Gesamtergebnis", f"-{fmt_float(ausg)} EUR")
 st.sidebar.metric("Hof-Gewinn", f"{fmt_float(gewinn)} EUR", delta=gewinn)
 
-# Manuelle Buchungsfunktion in der Seitenleiste (MIT SELEKTIVEM DATUM)
+# Manuelle Buchungsfunktion in der Seitenleiste
 with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_typ = st.radio("Buchungsart:", ["Einnahme", "Ausgabe"], key="m_typ")
     m_betrag = st.number_input("Betrag (EUR):", min_value=0.0, value=1000.0, step=100.0, key="m_betrag")
@@ -274,7 +276,7 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
-# --- SEITE 2: RECHNUNGS-ERSTELLER ---
+# --- SEITE 2: RECHNUNGS-ERSTELLER (JETZT MIT HA- UND STUNDEN-AUSWAHL) ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
@@ -282,30 +284,45 @@ elif menu == "📋 Rechnungs-Ersteller":
     st.caption(f"Nächste Rechnungsnummer: **#RE-{aktuelle_id:04d}**")
 
     with st.container(border=True):
-        manuell_aktiv = st.checkbox("⚙️ Sonderleistung / Manueller Posten (Nicht in Liste)")
+        # Abrechnungs-Modus auswählbar machen
+        abrechnungs_art = st.radio("Abrechnungsmethode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Freitext / Sonderposten"], horizontal=True)
+        
         c1, c2, c3 = st.columns([2, 1, 1])
         
-        if manuell_aktiv:
+        if abrechnungs_art == "Freitext / Sonderposten":
             auswahl = c1.text_input("Bezeichnung / Leistung:", value="", placeholder="z.B. Forstarbeiten, Ballentransport")
-            std = c2.number_input("Stunden / Menge:", min_value=0.1, value=1.0, step=0.1)
+            menge = c2.number_input("Menge:", min_value=0.1, value=1.0, step=0.1)
             e_p = c3.number_input("Preis (EUR / Einheit):", value=0.0, step=10.0)
-        else:
-            auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
-            std = c2.number_input("Stunden:", min_value=0.1, value=1.0, step=0.1)
-            e_p = c3.number_input("Preis (EUR/h):", value=float(preis_dict.get(auswahl, 0.0)))
+            einheit_str = "Stk"
+        elif abrechnungs_art == "Nach Feldfläche (ha)":
+            auswahl = c1.text_input("Arbeitsleistung (Fläche):", value="Maehen", placeholder="z.B. Mähen, Grubbern, Dreschen")
+            menge = c2.number_input("Fläche (ha):", min_value=0.1, value=1.0, step=0.1)
+            e_p = c3.number_input("Preis (EUR / ha):", value=50.0, step=5.0)
+            einheit_str = "ha"
+        else: # Nach Arbeitsstunden
+            auswahl = c1.selectbox("Maschine / Dienstleistung:", options=list(preis_dict.keys()) if preis_dict else ["Traktorenarbeit"])
+            menge = c2.number_input("Arbeitszeit (h):", min_value=0.1, value=1.0, step=0.1)
+            e_p = c3.number_input("Preis (EUR / h):", value=float(preis_dict.get(auswahl, 0.0)))
+            einheit_str = "h"
             
-        if st.button("➕ Hinzufuegen"):
-            if manuell_aktiv and auswahl.strip() == "":
-                st.error("Bitte gib einen Namen für die Sonderleistung ein!")
+        if st.button("➕ Zum Beleg hinzufügen"):
+            if auswahl.strip() == "":
+                st.error("Die Bezeichnung darf nicht leer sein!")
             else:
-                st.session_state.rechnungs_posten.append({"name": auswahl, "std": std, "preis": e_p, "gesamt": std * e_p})
+                st.session_state.rechnungs_posten.append({
+                    "name": auswahl, 
+                    "menge": menge, 
+                    "preis": e_p, 
+                    "einheit": einheit_str,
+                    "gesamt": menge * e_p
+                })
                 st.rerun()
 
     ck1, ck2 = st.columns(2)
     k_name = ck1.selectbox("Hof auswählen:", aktuelle_kunden) if aktuelle_kunden else ck1.text_input("Hofname:")
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
     
-    # In-Game Datumsabfrage für die Rechnung
+    # In-Game Datumsabfrage
     st.markdown("#### 📆 Wann findet die Leistung statt? (In-Game Zeit)")
     col_re_m, col_re_j = st.columns(2)
     re_monat = col_re_m.selectbox("In-Game Monat für Rechnung:", LISTE_MONATE)
@@ -315,9 +332,14 @@ elif menu == "📋 Rechnungs-Ersteller":
         st.write("---")
         st.subheader("📋 Aktuelle Posten")
         
+        # Umbenennung zur besseren Visualisierung im Datenblatt
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        df_preview.columns = ["Maschine / Leistung", "Menge/Stunden", "Einzelpreis (EUR)", "Gesamt (EUR)"]
-        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+        df_preview["Menge / Einheit"] = df_preview.apply(lambda r: f"{r['menge']} {r['einheit']}", axis=1)
+        
+        df_display = df_preview[["name", "Menge / Einheit", "preis", "gesamt"]].copy()
+        df_display.columns = ["Leistung / Maschine", "Menge & Einheit", "Einzelpreis (EUR)", "Gesamt (EUR)"]
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
         
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
         total = summe * (1 - rabatt/100)
@@ -347,7 +369,7 @@ elif menu == "📋 Rechnungs-Ersteller":
                 "Sort_Monat": re_monat,
                 "Typ": "Einnahme (Rechnung)",
                 "Nummer": f"#RE-{aktuelle_id:04d}",
-                "Details": f"Kunde: {k_name}",
+                "Details": f"Kunde: {k_name} ({len(st.session_state.rechnungs_posten)} Positionen)",
                 "Betrag (EUR)": total
             })
             st._global_finanzen["naechste_rechnung_id"] += 1
@@ -438,7 +460,7 @@ elif menu == "🛒 Saatgut-Bestellung":
             st.success(f"Standardgüter hinzugefügt!")
             st.rerun()
 
-    with st.expander("➕ Freitext / Sonderbestellung hinzufügen (Diesel, Futter, etc.)"):
+    with st.expander("➕ Freitext / Sonderbestellung hinzufügen"):
         col_m1, col_m2, col_m3 = st.columns([2, 1, 1])
         m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration", key="order_m_name")
         m_artikel_menge = col_m2.number_input("Menge:", min_value=1, value=1000, step=50, key="order_m_menge")
@@ -461,7 +483,7 @@ elif menu == "🛒 Saatgut-Bestellung":
         df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge", "Einheit"]
         st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
         
-        # Datumsabfrage für die Bezahlung des Einkaufs
+        # Datumsabfrage
         st.markdown("#### 📆 In-Game Buchungsmonat für diesen Einkauf")
         col_bs_m, col_bs_j = st.columns(2)
         bs_monat = col_bs_m.selectbox("In-Game Monat für Einkauf:", LISTE_MONATE)
@@ -548,8 +570,6 @@ elif menu == "🏭 Produktions-Planer":
 # --- ANZEIGE DER HISTORIE & JAHRESABSCHLUSS BILANZ ---
 if st._global_finanzen["historie"]:
     st.write("---")
-    
-    # 1. Erstellung der Jahresabschluss Bilanz (Datenaggregation)
     st.header("📊 In-Game Jahresabschluss-Bilanz & Berichte")
     
     df_raw = pd.DataFrame(st._global_finanzen["historie"])
@@ -558,7 +578,6 @@ if st._global_finanzen["historie"]:
     df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Einnahme" in r["Typ"] else 0.0, axis=1)
     df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Ausgabe" in r["Typ"] else 0.0, axis=1)
     
-    # Gruppieren nach In-Game Datum und exakte Sortierung nach Jahr & Monat-Präfix (01, 02...)
     df_raw_sorted = df_raw.sort_values(by=["Sort_Jahr", "Sort_Monat"])
     
     df_monat = df_raw_sorted.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
@@ -566,16 +585,13 @@ if st._global_finanzen["historie"]:
         Ausgaben=("Ausgabe_Wert", "sum")
     ).reset_index()
     
-    # Gewährleistet, dass die finale Tabelle chronologisch sortiert bleibt
     df_monat = df_monat.sort_values(by=["Sort_Jahr", "Sort_Monat"])
     df_monat["Gewinn / Verlust"] = df_monat["Einnahmen"] - df_monat["Ausgaben"]
     
-    # Anzeige der Bilanz-Tabelle
     col_bil1, col_bil2 = st.columns([5, 4])
     
     with col_bil1:
         st.subheader("🗓️ Finanzergebnis nach In-Game Monaten")
-        # Formatierte Tabelle für die Anzeige bauen
         df_anzeige = df_monat.copy()
         df_anzeige["Einnahmen"] = df_anzeige["Einnahmen"].map(lambda x: f"+{fmt_float(x)} EUR")
         df_anzeige["Ausgaben"] = df_anzeige["Ausgaben"].map(lambda x: f"-{fmt_float(x)} EUR")
@@ -584,9 +600,7 @@ if st._global_finanzen["historie"]:
         
     with col_bil2:
         st.subheader("📈 Reingewinn-Trend")
-        # Kleines visuelles Balkendiagramm für den schnellen Überblick
         st.bar_chart(data=df_monat, x="In-Game Datum", y="Gewinn / Verlust", color="#2e7d32")
 
-    # 2. Die detaillierte Einzelposten-Liste
     with st.expander("📋 Komplettes Kassenbuch (Einzeltransaktionen anzeigen)"):
         st.dataframe(df_raw_sorted[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
