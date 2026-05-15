@@ -7,7 +7,7 @@ from fpdf import FPDF
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN (DIESMAL TYP-SICHER) ---
+# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN ---
 class InvoicePDF(FPDF):
     def header(self):
         # Logo einbinden, wenn vorhanden
@@ -27,7 +27,6 @@ def safe_str(text):
     return txt
 
 def generate_pdf(kunden_name, posten, rabatt_prozent):
-    # FPDF ganz normal ohne fehlerhafte Zusatz-Parameter starten
     pdf = InvoicePDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
@@ -99,6 +98,7 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.set_font("Helvetica", "I", 10)
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
     
+    # Das output() muss als reiner Byte-String ausgegeben werden
     return pdf.output()
 
 # 2. Daten-Verbindung zu Google Sheets
@@ -197,10 +197,10 @@ elif menu == "📋 Rechnungs-Ersteller":
         # PDF im Hintergrund fehlerfrei bauen
         pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt)
         
-        # Der Download-Button
+        # JETZT FIXIERT: Wir wandeln pdf_data explizit in bytes() um, damit Streamlit nicht meckert
         col_b1.download_button(
             label="📥 Rechnung als PDF herunterladen",
-            data=pdf_data,
+            data=bytes(pdf_data),
             file_name=f"Rechnung_{safe_str(k_name)}_{date.today().strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
         )
