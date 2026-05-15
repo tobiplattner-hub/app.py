@@ -93,7 +93,6 @@ def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum
     summe = 0
     for p in posten:
         pdf.cell(80, 10, safe_str(p['name']), border=0)
-        # Dynamische Einheitenanzeige im PDF (h oder ha)
         einheit = p.get('einheit', 'h')
         pdf.cell(30, 10, f"{p['menge']} {einheit}", border=0, align="C")
         pdf.cell(40, 10, f"{fmt_float(p['preis'])} EUR", border=0, align="R")
@@ -125,19 +124,19 @@ def generate_order_pdf(bestell_liste, bestell_id, ingame_datum):
     
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
-    pdf.cell(65, 6, f"In-Game Datum: {ingame_datum}\nBestell-Nr: #BS-{bestell_id:04d}", align="R", ln=True)
+    pdf.cell(65, 6, f"In-Game Datum: {ingame_datum}\nAuftrags-Nr: #BS-{bestell_id:04d}", align="R", ln=True)
     
     pdf.ln(35)
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.cell(0, 15, "WARENBESTELLUNG", ln=True)
+    pdf.set_x(50)
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.cell(0, 15, "BESTELLUNG / ARBEITSAUFTRAG", ln=True)
     
     pdf.ln(15)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(8)
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(120, 10, "Artikel / Ware", border=0)
-    pdf.cell(60, 10, "Bestellmenge", border=0, align="R")
+    pdf.cell(120, 10, "Artikel oder Dienstleistung", border=0)
+    pdf.cell(60, 10, "Menge / Einheit", border=0, align="R")
     pdf.ln(10)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
@@ -145,13 +144,17 @@ def generate_order_pdf(bestell_liste, bestell_id, ingame_datum):
     for b in bestell_liste:
         pdf.cell(120, 10, safe_str(b["artikel"]), border=0)
         einheit = b.get("einheit", "L")
-        pdf.cell(60, 10, f"{fmt_int(b['menge'])} {einheit}", border=0, align="R")
+        # Unterscheidung ob Nachkommastellen nötig sind (z.B. bei Hektar)
+        if einheit in ["ha", "h"]:
+            pdf.cell(60, 10, f"{fmt_float(b['menge'])} {einheit}", border=0, align="R")
+        else:
+            pdf.cell(60, 10, f"{fmt_int(b['menge'])} {einheit}", border=0, align="R")
         pdf.ln(10)
         
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(30)
     pdf.set_font("Helvetica", "I", 10)
-    pdf.cell(0, 10, "Generiert ueber LS25 Hof-Manager. Bitte an den Landhandel uebermitteln.", align="C")
+    pdf.cell(0, 10, "Generiert ueber LS25 Hof-Manager. Bitte an Partnerhof/Lohnunternehmer uebermitteln.", align="C")
     return pdf.output()
 
 
@@ -211,7 +214,7 @@ with st.sidebar.expander("➕ Manuelle Buchung eintragen"):
     m_monat = col_m_m.selectbox("Monat:", LISTE_MONATE, key="m_monat")
     m_jahr = col_m_j.number_input("Jahr:", min_value=1, value=1, step=1, key="m_jahr")
     
-    if st.button("💾 Buchung speichern"):
+    if st.button("💾 Buchung保存"):
         if m_details.strip() == "":
             st.error("Bitte einen Verwendungszweck eingeben!")
         else:
@@ -246,7 +249,7 @@ if st.sidebar.button("🗑️ Kassenbuch zurücksetzen"):
     st.rerun()
 
 st.sidebar.write("---")
-menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "🛒 Saatgut-Bestellung", "🏭 Produktions-Planer"])
+menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "🛒 Material- & Auftragsverwaltung", "🏭 Produktions-Planer"])
 
 # --- SEITE 1 ---
 if menu == "💰 Ernte & Felder":
@@ -276,7 +279,7 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
-# --- SEITE 2: RECHNUNGS-ERSTELLER (JETZT MIT HA- UND STUNDEN-AUSWAHL) ---
+# --- SEITE 2: RECHNUNGS-ERSTELLER ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
     
@@ -284,9 +287,7 @@ elif menu == "📋 Rechnungs-Ersteller":
     st.caption(f"Nächste Rechnungsnummer: **#RE-{aktuelle_id:04d}**")
 
     with st.container(border=True):
-        # Abrechnungs-Modus auswählbar machen
         abrechnungs_art = st.radio("Abrechnungsmethode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Freitext / Sonderposten"], horizontal=True)
-        
         c1, c2, c3 = st.columns([2, 1, 1])
         
         if abrechnungs_art == "Freitext / Sonderposten":
@@ -299,7 +300,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             menge = c2.number_input("Fläche (ha):", min_value=0.1, value=1.0, step=0.1)
             e_p = c3.number_input("Preis (EUR / ha):", value=50.0, step=5.0)
             einheit_str = "ha"
-        else: # Nach Arbeitsstunden
+        else: 
             auswahl = c1.selectbox("Maschine / Dienstleistung:", options=list(preis_dict.keys()) if preis_dict else ["Traktorenarbeit"])
             menge = c2.number_input("Arbeitszeit (h):", min_value=0.1, value=1.0, step=0.1)
             e_p = c3.number_input("Preis (EUR / h):", value=float(preis_dict.get(auswahl, 0.0)))
@@ -310,11 +311,7 @@ elif menu == "📋 Rechnungs-Ersteller":
                 st.error("Die Bezeichnung darf nicht leer sein!")
             else:
                 st.session_state.rechnungs_posten.append({
-                    "name": auswahl, 
-                    "menge": menge, 
-                    "preis": e_p, 
-                    "einheit": einheit_str,
-                    "gesamt": menge * e_p
+                    "name": auswahl, "menge": menge, "preis": e_p, "einheit": einheit_str, "gesamt": menge * e_p
                 })
                 st.rerun()
 
@@ -322,7 +319,6 @@ elif menu == "📋 Rechnungs-Ersteller":
     k_name = ck1.selectbox("Hof auswählen:", aktuelle_kunden) if aktuelle_kunden else ck1.text_input("Hofname:")
     rabatt = ck2.slider("Rabatt (%)", 0, 50, 0)
     
-    # In-Game Datumsabfrage
     st.markdown("#### 📆 Wann findet die Leistung statt? (In-Game Zeit)")
     col_re_m, col_re_j = st.columns(2)
     re_monat = col_re_m.selectbox("In-Game Monat für Rechnung:", LISTE_MONATE)
@@ -332,10 +328,8 @@ elif menu == "📋 Rechnungs-Ersteller":
         st.write("---")
         st.subheader("📋 Aktuelle Posten")
         
-        # Umbenennung zur besseren Visualisierung im Datenblatt
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
         df_preview["Menge / Einheit"] = df_preview.apply(lambda r: f"{r['menge']} {r['einheit']}", axis=1)
-        
         df_display = df_preview[["name", "Menge / Einheit", "preis", "gesamt"]].copy()
         df_display.columns = ["Leistung / Maschine", "Menge & Einheit", "Einzelpreis (EUR)", "Gesamt (EUR)"]
         
@@ -364,13 +358,9 @@ elif menu == "📋 Rechnungs-Ersteller":
         if col_b2.button("💾 Rechnung auf Server verbuchen", type="primary"):
             st._global_finanzen["einnahmen"] += total
             st._global_finanzen["historie"].append({
-                "In-Game Datum": full_ingame_date,
-                "Sort_Jahr": re_jahr,
-                "Sort_Monat": re_monat,
-                "Typ": "Einnahme (Rechnung)",
-                "Nummer": f"#RE-{aktuelle_id:04d}",
-                "Details": f"Kunde: {k_name} ({len(st.session_state.rechnungs_posten)} Positionen)",
-                "Betrag (EUR)": total
+                "In-Game Datum": full_ingame_date, "Sort_Jahr": re_jahr, "Sort_Monat": re_monat,
+                "Typ": "Einnahme (Rechnung)", "Nummer": f"#RE-{aktuelle_id:04d}",
+                "Details": f"Kunde: {k_name} ({len(st.session_state.rechnungs_posten)} Positionen)", "Betrag (EUR)": total
             })
             st._global_finanzen["naechste_rechnung_id"] += 1
             st.session_state.rechnungs_posten = []
@@ -381,9 +371,9 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: BESTELLUNGEN ---
-elif menu == "🛒 Saatgut-Bestellung":
-    st.title("🛒 Material- & Lagerverwaltung")
+# --- SEITE 3: AUFTRÄGE & BESTELLUNGEN (ERWEITERT UM LOHNARBEITS-BESTELLUNG) ---
+elif menu == "🛒 Material- & Auftragsverwaltung":
+    st.title("🛒 Materialbestellungen & Fremdaufträge")
     
     st.subheader("📦 Aktueller Hof-Bestand (Server)")
     col_s, col_k, col_d, col_h = st.columns(4)
@@ -425,91 +415,114 @@ elif menu == "🛒 Saatgut-Bestellung":
         else: st.success(f"✅ Stabil: {fmt_int(b_herbi)} L")
             
     st.write("---")
-    st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
+    st.subheader("📝 Einkäufe & Lohnarbeiten auf Server-Liste setzen")
     
-    with st.expander("📉 Automatische Nachfüllung (Lager-Vorschlag)"):
-        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-        p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
-        p_kalk = col_p2.number_input("Kalk (EUR/1000L):", value=150)
-        p_dueng = col_p3.number_input("Dünger (EUR/1000L):", value=1200)
-        p_herbi = col_p4.number_input("Herbizid (EUR/1000L):", value=1000)
+    # NEU: AUSWAHL OB MATERIAL ODER FREMDE ARBEIT GEKAUFT WIRD
+    art_der_bestellung = st.radio("Was möchtest du in Auftrag geben / einkaufen?", ["🌾 Eigenes Lager auffüllen (Material)", "🚜 Externe Dienstleistung beauftragen (Mähen, Dreschen etc.)"], horizontal=True)
 
-        col_b1, col_b2 = st.columns(2)
-        init_saat = 2000 if b_saat < 1500 else 0
-        order_saat = col_b1.number_input("Saatgut Menge (Liter):", min_value=0, value=init_saat, step=500)
-        b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
-        
-        col_b3, col_b4, col_b5 = st.columns(3)
-        init_kalk = 5000 if b_kalk < 5000 else 0
-        order_kalk = col_b3.number_input("Kalk Menge (Liter):", min_value=0, value=init_kalk, step=1000)
-        init_dueng = 1000 if b_dueng < 1000 else 0
-        order_dueng = col_b4.number_input("Flüssigdünger Menge (Liter):", min_value=0, value=init_dueng, step=500)
-        init_herbi = 1000 if b_herbi < 1000 else 0
-        order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
-        
-        if st.button("📝 Standard-Lagergüter hinzufügen"):
-            if order_saat > 0:
-                art = f"Saatgut ({b_typ})" if b_typ else "Saatgut"
-                st._global_bestell_store.append({"artikel": art, "menge": order_saat, "einheit": "L"})
-            if order_kalk > 0:
-                st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk, "einheit": "L"})
-            if order_dueng > 0:
-                st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
-            if order_herbi > 0:
-                st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi, "einheit": "L"})
-            st.success(f"Standardgüter hinzugefügt!")
-            st.rerun()
+    if art_der_bestellung == "🚜 Externe Dienstleistung beauftragen (Mähen, Dreschen etc.)":
+        with st.container(border=True):
+            st.markdown("**Arbeitsauftrag für Lohnunternehmer / Nachbarhof**")
+            col_o1, col_o2, col_o3 = st.columns([2, 1, 1])
+            
+            lu_arbeit = col_o1.text_input("Welche Arbeit gibst du in Auftrag?", placeholder="z.B. Maehen Feld 12, Haeckseln", key="lu_arbeit")
+            lu_einheit = col_o2.selectbox("Einheit:", ["ha", "h"], key="lu_einheit")
+            lu_menge = col_o3.number_input(f"Menge ({lu_einheit}):", min_value=0.1, value=1.0, step=0.5, key="lu_menge")
+            
+            if st.button("📝 Dienstleistung auf die Liste setzen", type="secondary"):
+                if lu_arbeit.strip() == "":
+                    st.error("Bitte trage ein, welche Arbeit erledigt werden soll!")
+                else:
+                    st._global_bestell_store.append({
+                        "artikel": f"Auftrag LU: {lu_arbeit}",
+                        "menge": lu_menge,
+                        "einheit": lu_einheit
+                    })
+                    st.success(f"✅ '{lu_arbeit}' wurde der Liste hinzugefügt!")
+                    st.rerun()
+    else:
+        with st.expander("📉 Automatische Nachfüllung (Lager-Vorschlag)"):
+            col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+            p_saat = col_p1.number_input("Saatgut (EUR/1000L):", value=900)
+            p_kalk = col_p2.number_input("Kalk (EUR/1000L):", value=150)
+            p_dueng = col_p3.number_input("Dünger (EUR/1000L):", value=1200)
+            p_herbi = col_p4.number_input("Herbizid (EUR/1000L):", value=1000)
 
-    with st.expander("➕ Freitext / Sonderbestellung hinzufügen"):
-        col_m1, col_m2, col_m3 = st.columns([2, 1, 1])
-        m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration", key="order_m_name")
-        m_artikel_menge = col_m2.number_input("Menge:", min_value=1, value=1000, step=50, key="order_m_menge")
-        m_artikel_einheit = col_m3.selectbox("Einheit:", ["L", "Stk", "kg"], key="order_m_einheit")
-        
-        if st.button("📝 Sonderposten zur Einkaufsliste packen"):
-            if m_artikel_name.strip() == "":
-                st.error("Bitte gib einen Namen für das Produkt ein!")
-            else:
-                st._global_bestell_store.append({"artikel": m_artikel_name, "menge": m_artikel_menge, "einheit": m_artikel_einheit})
-                st.success(f"✅ '{m_artikel_name}' wurde hinzugefügt!")
+            col_b1, col_b2 = st.columns(2)
+            init_saat = 2000 if b_saat < 1500 else 0
+            order_saat = col_b1.number_input("Saatgut Menge (Liter):", min_value=0, value=init_saat, step=500)
+            b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
+            
+            col_b3, col_b4, col_b5 = st.columns(3)
+            init_kalk = 5000 if b_kalk < 5000 else 0
+            order_kalk = col_b3.number_input("Kalk Menge (Liter):", min_value=0, value=init_kalk, step=1000)
+            init_dueng = 1000 if b_dueng < 1000 else 0
+            order_dueng = col_b4.number_input("Flüssigdünger Menge (Liter):", min_value=0, value=init_dueng, step=500)
+            init_herbi = 1000 if b_herbi < 1000 else 0
+            order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
+            
+            if st.button("📝 Standard-Lagergüter hinzufügen"):
+                if order_saat > 0:
+                    art = f"Saatgut ({b_typ})" if b_typ else "Saatgut"
+                    st._global_bestell_store.append({"artikel": art, "menge": order_saat, "einheit": "L"})
+                if order_kalk > 0:
+                    st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk, "einheit": "L"})
+                if order_dueng > 0:
+                    st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng, "einheit": "L"})
+                if order_herbi > 0:
+                    st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi, "einheit": "L"})
+                st.success(f"Standardgüter hinzugefügt!")
                 st.rerun()
+
+        with st.expander("➕ Freitext / Andere Waren hinzufügen (Diesel, Futter, etc.)"):
+            col_m1, col_m2, col_m3 = st.columns([2, 1, 1])
+            m_artikel_name = col_m1.text_input("Artikelname:", placeholder="z.B. Diesel, Mischration", key="order_m_name")
+            m_artikel_menge = col_m2.number_input("Menge:", min_value=1, value=1000, step=50, key="order_m_menge")
+            m_artikel_einheit = col_m3.selectbox("Einheit:", ["L", "Stk", "kg"], key="order_m_einheit")
+            
+            if st.button("📝 Sonderposten zur Einkaufsliste packen"):
+                if m_artikel_name.strip() == "":
+                    st.error("Bitte gib einen Namen für das Produkt ein!")
+                else:
+                    st._global_bestell_store.append({"artikel": m_artikel_name, "menge": m_artikel_menge, "einheit": m_artikel_einheit})
+                    st.success(f"✅ '{m_artikel_name}' wurde hinzugefügt!")
+                    st.rerun()
 
     if st._global_bestell_store:
         st.write("---")
         bestell_id = st._global_finanzen["naechste_bestellung_id"]
-        st.subheader(f"📋 Offene Bestellungen auf dem Server (#BS-{bestell_id:04d})")
+        st.subheader(f"📋 Offene Posten & Aufträge auf dem Server (#BS-{bestell_id:04d})")
         
         df_bestellungen = pd.DataFrame(st._global_bestell_store)
-        df_bestellungen.columns = ["Artikel / Ware", "Bestellmenge", "Einheit"]
-        st.dataframe(df_bestellungen, use_container_width=True, hide_index=True)
+        # Schönere Darstellung der Mengen und Einheiten
+        df_bestellungen["Menge & Einheit"] = df_bestellungen.apply(lambda r: f"{r['menge']} {r['einheit']}", axis=1)
+        df_anzeige_b = df_bestellungen[["artikel", "Menge & Einheit"]].copy()
+        df_anzeige_b.columns = ["Artikel / Dienstleistung", "Menge & Einheit"]
         
-        # Datumsabfrage
-        st.markdown("#### 📆 In-Game Buchungsmonat für diesen Einkauf")
+        st.dataframe(df_anzeige_b, use_container_width=True, hide_index=True)
+        
+        st.markdown("#### 📆 In-Game Buchungsmonat für diesen Beleg")
         col_bs_m, col_bs_j = st.columns(2)
-        bs_monat = col_bs_m.selectbox("In-Game Monat für Einkauf:", LISTE_MONATE)
-        bs_jahr = col_bs_j.number_input("In-Game Jahr für Einkauf:", min_value=1, value=1, step=1)
+        bs_monat = col_bs_m.selectbox("In-Game Monat für Beleg:", LISTE_MONATE)
+        bs_jahr = col_bs_j.number_input("In-Game Jahr für Beleg:", min_value=1, value=1, step=1)
         
-        tatsaechliche_kosten = st.number_input("Tatsächlicher Einkaufspreis beim Händler (EUR):", min_value=0.0, value=0.0, step=50.0)
+        tatsaechliche_kosten = st.number_input("Tatsächliche Gesamtkosten (EUR):", min_value=0.0, value=0.0, step=50.0)
         col_btn1, col_btn2 = st.columns(2)
         
         full_bs_date = f"Jahr {bs_jahr} - {bs_monat}"
         order_pdf_data = generate_order_pdf(st._global_bestell_store, bestell_id, full_bs_date)
-        col_btn1.download_button(label="📥 Bestellzettel als PDF laden", data=bytes(order_pdf_data), file_name=f"Hof_Bestellung_BS-{bestell_id:04d}.pdf", mime="application/pdf")
+        col_btn1.download_button(label="📥 Bestell-/Auftragszettel als PDF", data=bytes(order_pdf_data), file_name=f"Hof_Auftrag_BS-{bestell_id:04d}.pdf", mime="application/pdf")
         
-        if col_btn2.button("✅ Einkäufe erledigt & Geld abziehen", type="primary"):
+        if col_btn2.button("✅ Posten erledigt & Geld abziehen", type="primary"):
             st._global_finanzen["ausgaben"] += tatsaechliche_kosten
             st._global_finanzen["historie"].append({
-                "In-Game Datum": full_bs_date,
-                "Sort_Jahr": bs_jahr,
-                "Sort_Monat": bs_monat,
-                "Typ": "Ausgabe (Einkauf)",
-                "Nummer": f"#BS-{bestell_id:04d}",
-                "Details": f"{len(st._global_bestell_store)} Artikel gekauft",
-                "Betrag (EUR)": tatsaechliche_kosten
+                "In-Game Datum": full_bs_date, "Sort_Jahr": bs_jahr, "Sort_Monat": bs_monat,
+                "Typ": "Ausgabe (Auftrag/Einkauf)", "Nummer": f"#BS-{bestell_id:04d}",
+                "Details": f"{len(st._global_bestell_store)} Positionen abgerechnet", "Betrag (EUR)": tatsaechliche_kosten
             })
             st._global_finanzen["naechste_bestellung_id"] += 1
             st._global_bestell_store = []
-            st.success("Einkauf im Kassenbuch abgerechnet!")
+            st.success("Erfolgreich im Kassenbuch als Ausgabe verbucht!")
             st.rerun()
 
 # --- SEITE 4: PRODUKTIONS-PLANER ---
@@ -574,7 +587,6 @@ if st._global_finanzen["historie"]:
     
     df_raw = pd.DataFrame(st._global_finanzen["historie"])
     
-    # Trennung der Beträge für die Berechnung nach Monat
     df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Einnahme" in r["Typ"] else 0.0, axis=1)
     df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if "Ausgabe" in r["Typ"] else 0.0, axis=1)
     
