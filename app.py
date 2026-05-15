@@ -12,11 +12,11 @@ st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="
 if not hasattr(st, "_global_hof_store"):
     st._global_hof_store = []
 
-# NEU: Globaler Speicher für Lagerbestände (Standardwerte, falls leer)
+# Globaler Speicher für Lagerbestände (Erweitert um Herbizid)
 if not hasattr(st, "_global_lager_store"):
-    st._global_lager_store = {"saat": 3000, "kalk": 10000, "dueng": 2000}
+    st._global_lager_store = {"saat": 3000, "kalk": 10000, "dueng": 2000, "herbi": 2000}
 
-# NEU: Globaler Speicher für die Einkaufsliste / Bestellungen
+# Globaler Speicher für die Einkaufsliste / Bestellungen
 if not hasattr(st, "_global_bestell_store"):
     st._global_bestell_store = []
 
@@ -105,7 +105,6 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
     return pdf.output()
 
-# NEU: Generiert PDF basierend auf den auf dem Server gespeicherten Bestellungen
 def generate_order_pdf(bestell_liste):
     pdf = InvoicePDF()
     pdf.add_page()
@@ -141,7 +140,7 @@ def generate_order_pdf(bestell_liste):
     return pdf.output()
 
 
-# 2. Daten-Verbindung zu Google Sheets (Preise & Höfe)
+# 2. Daten-Verbindung zu Google Sheets
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
 PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
 KUNDEN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=568043650"
@@ -184,10 +183,11 @@ menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Er
 if menu == "💰 Ernte & Felder":
     st.title("🚜 Ernte- & Feld-Manager")
     with st.expander("⚙️ Verbrauchs-Raten anpassen (pro Hektar)"):
-        col_r1, col_r2, col_r3 = st.columns(3)
+        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
         r_kalk = col_r1.number_input("Kalk (L/ha):", value=2000)
         r_duenger = col_r2.number_input("Dünger (L/ha):", value=160)
         r_saat = col_r3.number_input("Saatgut (L/ha):", value=150)
+        r_herbi = col_r4.number_input("Herbizid (L/ha):", value=100) # NEU
     
     col1, col2 = st.columns(2)
     with col1:
@@ -198,6 +198,7 @@ if menu == "💰 Ernte & Felder":
         * Kalk: **{fmt_int(ha * r_kalk)} L**
         * Dünger: **{fmt_int(ha * r_duenger)} L**
         * Saatgut: **{fmt_int(ha * r_saat)} L**
+        * Herbizid: **{fmt_int(ha * r_herbi)} L**
         """)
     with col2:
         st.subheader("Erloesrechner")
@@ -251,7 +252,7 @@ elif menu == "📋 Rechnungs-Ersteller":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3: NEU MIT SERVER-SYNCHRONISATION ---
+# --- SEITE 3 ---
 elif menu == "🛒 Saatgut-Bestellung":
     st.title("🛒 Material- & Lagerverwaltung")
     st.write("Diese Bestände und die Einkaufsliste sind **live für alle Spieler synchronisiert**.")
@@ -260,15 +261,14 @@ elif menu == "🛒 Saatgut-Bestellung":
         st.rerun()
         
     st.subheader("📦 Aktueller Hof-Bestand (Server)")
-    col_s, col_k, col_d = st.columns(3)
+    col_s, col_k, col_d, col_h = st.columns(4) # Auf 4 Spalten erweitert
     
-    # Zustand wird jetzt direkt im globalen Server-Dict gespeichert und editiert
     with col_s:
         st.markdown("### 🌱 Saatgut")
         v_saat = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500, key="nb_saat")
         g_saat = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_saat")
         b_saat = v_saat - g_saat
-        st._global_lager_store["saat"] = b_saat # Auf Server sichern
+        st._global_lager_store["saat"] = b_saat
         if b_saat < 1500: st.error(f"🚨 Kritisch: {fmt_int(b_saat)} L\n(Unter 1.500 L)")
         else: st.success(f"✅ Stabil: {fmt_int(b_saat)} L")
             
@@ -277,7 +277,7 @@ elif menu == "🛒 Saatgut-Bestellung":
         v_kalk = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store["kalk"]), step=1000, key="nb_kalk")
         g_kalk = st.number_input("Verbraucht (L):", min_value=0, value=0, step=500, key="g_kalk")
         b_kalk = v_kalk - g_kalk
-        st._global_lager_store["kalk"] = b_kalk # Auf Server sichern
+        st._global_lager_store["kalk"] = b_kalk
         if b_kalk < 5000: st.error(f"🚨 Kritisch: {fmt_int(b_kalk)} L\n(Unter 5.000 L)")
         else: st.success(f"✅ Stabil: {fmt_int(b_kalk)} L")
             
@@ -286,25 +286,36 @@ elif menu == "🛒 Saatgut-Bestellung":
         v_dueng = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store["dueng"]), step=500, key="nb_dueng")
         g_dueng = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_dueng")
         b_dueng = v_dueng - g_dueng
-        st._global_lager_store["dueng"] = b_dueng # Auf Server sichern
+        st._global_lager_store["dueng"] = b_dueng
         if b_dueng < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_dueng)} L\n(Unter 1.000 L)")
         else: st.success(f"✅ Stabil: {fmt_int(b_dueng)} L")
+
+    with col_h: # NEU: Herbizid Bestandsschutz
+        st.markdown("### 🌿 Herbizid")
+        v_herbi = st.number_input("Vorhanden (L):", min_value=0, value=int(st._global_lager_store.get("herbi", 2000)), step=500, key="nb_herbi")
+        g_herbi = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_herbi")
+        b_herbi = v_herbi - g_herbi
+        st._global_lager_store["herbi"] = b_herbi
+        if b_herbi < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_herbi)} L\n(Unter 1.000 L)")
+        else: st.success(f"✅ Stabil: {fmt_int(b_herbi)} L")
             
     st.write("---")
     
-    # Sektion: Nachbestellungen aufgeben (Schreibt direkt auf den Server)
-    if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000:
+    # Sektion: Nachbestellungen (Inklusive Herbizid)
+    if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000 or b_herbi < 1000:
         st.subheader("🛒 Artikel auf Server-Einkaufsliste setzen")
         col_b1, col_b2 = st.columns(2)
         init_saat = 2000 if b_saat < 1500 else 0
         order_saat = col_b1.number_input("Saatgut Menge (Liter):", min_value=0, value=init_saat, step=500)
         b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
         
-        col_b3, col_b4 = st.columns(2)
+        col_b3, col_b4, col_b5 = st.columns(3) # Auf 3 Spalten erweitert für die Eingaben
         init_kalk = 5000 if b_kalk < 5000 else 0
         order_kalk = col_b3.number_input("Kalk Menge (Liter):", min_value=0, value=init_kalk, step=1000)
         init_dueng = 1000 if b_dueng < 1000 else 0
         order_dueng = col_b4.number_input("Flüssigdünger Menge (Liter):", min_value=0, value=init_dueng, step=500)
+        init_herbi = 1000 if b_herbi < 1000 else 0
+        order_herbi = col_b5.number_input("Herbizid Menge (Liter):", min_value=0, value=init_herbi, step=500)
         
         if st.button("📝 Auf gemeinsame Einkaufsliste setzen", type="primary"):
             if order_saat > 0:
@@ -314,12 +325,14 @@ elif menu == "🛒 Saatgut-Bestellung":
                 st._global_bestell_store.append({"artikel": "Kalk", "menge": order_kalk})
             if order_dueng > 0:
                 st._global_bestell_store.append({"artikel": "Fluessigduenger", "menge": order_dueng})
+            if order_herbi > 0:
+                st._global_bestell_store.append({"artikel": "Herbizid", "menge": order_herbi})
             st.success("Erfolgreich zur Server-Einkaufsliste hinzugefügt!")
             st.rerun()
     else:
         st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald ein Bestand unter das Limit rutscht.")
 
-    # Sektion: Anzeige der globalen Bestellungen & PDF Export
+    # Sektion: Anzeige & PDF Export
     if st._global_bestell_store:
         st.write("---")
         st.subheader("📋 Offene Bestellungen auf dem Server")
@@ -343,7 +356,7 @@ elif menu == "🛒 Saatgut-Bestellung":
             st.success("Einkaufsliste wurde erfolgreich geleert!")
             st.rerun()
 
-# --- SEITE 4: PRODUKTIONS-PLANER (LIVE SERVER SPEICHER) ---
+# --- SEITE 4 ---
 elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
     st.write("Füge hier deine Fabriken hinzu. Diese Liste wird **live mit allen Spielern auf dem Hof synchronisiert**!")
