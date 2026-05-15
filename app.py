@@ -9,14 +9,13 @@ st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="
 
 # --- HILFSFUNKTION FÜR UMLAUTE ---
 def safe_str(text):
-    """Ersetzt deutsche Umlaute, falls sie die PDF zum Absturz bringen"""
     replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
     txt = str(text)
     for r, v in replacements.items():
         txt = txt.replace(r, v)
     return txt
 
-# --- RECHNUNGS-PDF KLASSE ---
+# --- PDF KLASSEN ---
 class InvoicePDF(FPDF):
     def header(self):
         if os.path.exists("logo.png"):
@@ -89,14 +88,11 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
     return pdf.output()
 
-
-# --- NEU: BESTELL-PDF KLASSE ---
 def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
-    pdf = InvoicePDF() # Nutzt das gleiche Logo-Header-System
+    pdf = InvoicePDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
     
-    # Datum oben rechts
     pdf.set_x(130)
     pdf.cell(65, 6, f"Datum: {date.today().strftime('%d.%m.%Y')}", align="R", ln=True)
     
@@ -107,7 +103,6 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(8)
     
-    # Tabelle Header
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(120, 10, "Artikel / Ware", border=0)
     pdf.cell(60, 10, "Bestellmenge (Liter)", border=0, align="R")
@@ -116,7 +111,6 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
     
-    # Posten eintragen (nur wenn Menge > 0)
     if kalk_l > 0:
         pdf.cell(120, 10, "Kalk", border=0)
         pdf.cell(60, 10, f"{kalk_l:,} L", border=0, align="R")
@@ -132,12 +126,10 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
         pdf.ln(10)
         
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    
     pdf.ln(30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.cell(0, 10, "Generiert ueber LS25 Hof-Manager. Bitte an den Landhandel uebermitteln.", align="C")
     return pdf.output()
-
 
 # 2. Daten-Verbindung zu Google Sheets
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
@@ -153,7 +145,6 @@ def load_data(url):
     except: 
         return pd.DataFrame()
 
-# Daten laden
 df_preise = load_data(PREIS_URL)
 preis_dict = dict(zip(df_preise['Geraet'], df_preise['Preis'])) if not df_preise.empty else {}
 df_kunden = load_data(KUNDEN_URL)
@@ -162,13 +153,12 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
-# --- NAVIGATION (JETZT MIT BESTELLUNG) ---
+# --- NAVIGATION ---
 menu = st.sidebar.radio("Navigation", ["💰 Ernte & Felder", "📋 Rechnungs-Ersteller", "🛒 Saatgut-Bestellung"])
 
-# --- BEREICH 1: ERNTE & KALKULATION ---
+# --- SEITE 1 ---
 if menu == "💰 Ernte & Felder":
     st.title("🚜 Ernte- & Feld-Manager")
-    
     with st.expander("⚙️ Verbrauchs-Raten anpassen (pro Hektar)"):
         col_r1, col_r2, col_r3 = st.columns(3)
         r_kalk = col_r1.number_input("Kalk (L/ha):", value=2000)
@@ -185,7 +175,6 @@ if menu == "💰 Ernte & Felder":
         * Dünger: **{int(ha * r_duenger):,} L**
         * Saatgut: **{int(ha * r_saat):,} L**
         """)
-    
     with col2:
         st.subheader("Erloesrechner")
         menge = st.number_input("Liter im Silo:", value=10000)
@@ -193,10 +182,9 @@ if menu == "💰 Ernte & Felder":
         erloes = (menge / 1000) * preis_pro_1000
         st.success(f"**Voraussichtlicher Erloes:**\n### {erloes:,.2f} EUR")
 
-# --- BEREICH 2: RECHNUNGS-ERSTELLER ---
+# --- SEITE 2 ---
 elif menu == "📋 Rechnungs-Ersteller":
     st.title("📋 Rechnungs-Ersteller")
-    
     with st.container(border=True):
         c1, c2, c3 = st.columns([2, 1, 1])
         auswahl = c1.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["-"])
@@ -234,46 +222,44 @@ elif menu == "📋 Rechnungs-Ersteller":
             file_name=f"Rechnung_{safe_str(k_name)}_{date.today().strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
         )
-        
         if col_b2.button("🗑️ Rechnung leeren"):
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- NEU: BEREICH 3: SAATGUT-BESTELLUNG ---
+# --- SEITE 3 (UMSCHRIEBEN, DAMIT SIE NIE WIEDER LEER BLEIBT) ---
 elif menu == "🛒 Saatgut-Bestellung":
-    st.title("🛒 Saatgut- & Material-Bestellung")
-    st.write("Gib hier die gewünschten Mengen ein, um eine Bestellliste für den Landhandel zu generieren.")
+    st.title("🛒 Saatgut- & Materialverwaltung")
     
-    with st.container(border=True):
+    st.subheader("📦 Aktueller Hof-Bestand")
+    col_s1, col_s2 = st.columns(2)
+    vorhanden = col_s1.number_input("Vorhandenes Saatgut am Hof (Liter):", min_value=0, value=3000, step=500)
+    verbraucht = col_s2.number_input("Auf den Feldern verbraucht (Liter):", min_value=0, value=0, step=100)
+    
+    aktueller_bestand = vorhanden - verbraucht
+    
+    if aktueller_bestand < 1500:
+        st.error(f"🚨 Kritischer Bestand! Restmenge: {aktueller_bestand:,} L")
+        st.write("---")
+        st.subheader("🛒 Nachbestellung aufgeben")
+        
         col_b1, col_b2 = st.columns(2)
-        b_kalk = col_b1.number_input("Kalk bestellen (Liter):", min_value=0, value=0, step=500)
-        b_duenger = col_b2.number_input("Flüssigdünger bestellen (Liter):", min_value=0, value=0, step=100)
+        b_saat = col_b1.number_input("Saatgut nachbestellen (Liter):", min_value=0, value=2000, step=500)
+        b_typ = col_b2.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
         
         col_b3, col_b4 = st.columns(2)
-        b_saat = col_b3.number_input("Saatgut bestellen (Liter):", min_value=0, value=0, step=100)
-        b_typ = col_b4.text_input("Fruchtsorte (z.B. Weizen, Raps):", value="")
+        b_kalk = col_b3.number_input("Gleichzeitig Kalk mitbestellen (Liter):", min_value=0, value=0, step=500)
+        b_duenger = col_b4.number_input("Gleichzeitig Flüssigdünger mitbestellen (Liter):", min_value=0, value=0, step=100)
         
-    if b_kalk > 0 or b_duenger > 0 or b_saat > 0:
-        st.write("---")
-        st.subheader("📋 Vorschau deiner Bestellung")
-        
-        # Kleine Live-Übersicht in der App
-        daten_liste = []
-        if b_kalk > 0: daten_liste.append({"Ware": "Kalk", "Menge": f"{b_kalk:,} L"})
-        if b_duenger > 0: daten_liste.append({"Ware": "Flüssigdünger", "Menge": f"{b_duenger:,} L"})
-        if b_saat > 0: daten_liste.append({"Ware": f"Saatgut ({b_typ if b_typ else 'Allgemein'})", "Menge": f"{b_saat:,} L"})
-        
-        st.table(pd.DataFrame(daten_liste))
-        
-        # PDF im Hintergrund generieren
-        order_pdf_data = generate_order_pdf(b_kalk, b_duenger, b_saat, b_typ)
-        
-        # Download Button für die Bestellung
-        st.download_button(
-            label="📥 Bestellzettel als PDF herunterladen",
-            data=bytes(order_pdf_data),
-            file_name=f"Bestellung_{date.today().strftime('%Y%m%d')}.pdf",
-            mime="application/pdf"
-        )
+        if b_saat > 0 or b_kalk > 0 or b_duenger > 0:
+            order_pdf_data = generate_order_pdf(b_kalk, b_duenger, b_saat, b_typ)
+            st.write("")
+            st.download_button(
+                label="📥 Bestellzettel als PDF herunterladen",
+                data=bytes(order_pdf_data),
+                file_name=f"Bestellung_{date.today().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf"
+            )
     else:
-        st.info("Gib oben bei mindestens einem Produkt eine Menge ein, um die Bestellung zu aktivieren.")
+        st.success(f"✅ Bestand stabil. Restmenge: {aktueller_bestand:,} L")
+        st.write("---")
+        st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald der Bestand unter 1.500 Liter fällt.")
