@@ -7,7 +7,7 @@ from fpdf import FPDF
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN (SICHER GEGEN UMLAUTE & EURO-FEHLER) ---
+# --- FUNKTION: RECHNUNGS-PDF ERSTELLEN (DIESMAL TYP-SICHER) ---
 class InvoicePDF(FPDF):
     def header(self):
         # Logo einbinden, wenn vorhanden
@@ -18,9 +18,17 @@ class InvoicePDF(FPDF):
             self.cell(0, 10, "LU-BETRIEB", ln=True)
         self.ln(20)
 
+def safe_str(text):
+    """Hilfsfunktion: Ersetzt deutsche Umlaute, falls sie die PDF zum Absturz bringen"""
+    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
+    txt = str(text)
+    for r, v in replacements.items():
+        txt = txt.replace(r, v)
+    return txt
+
 def generate_pdf(kunden_name, posten, rabatt_prozent):
-    # 'core_fonts_encoding="utf-8"' sorgt dafür, dass Umlaute kein Problem machen
-    pdf = InvoicePDF(core_fonts_encoding="utf-8")
+    # FPDF ganz normal ohne fehlerhafte Zusatz-Parameter starten
+    pdf = InvoicePDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
     
@@ -31,9 +39,9 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     # Empfänger
     pdf.ln(10)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 6, "Empfaenger:", ln=True)  # Sicher ohne Umlaut im Code
+    pdf.cell(0, 6, "Empfaenger:", ln=True)
     pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 6, str(kunden_name), ln=True)
+    pdf.cell(0, 6, safe_str(kunden_name), ln=True)
     
     # Titel
     pdf.ln(15)
@@ -56,10 +64,10 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.set_font("Helvetica", size=11)
     
-    # Posten eintragen (Wir nutzen EUR statt dem abstürzenden €-Zeichen)
+    # Posten eintragen
     summe = 0
     for p in posten:
-        pdf.cell(80, 10, str(p['name']), border=0)
+        pdf.cell(80, 10, safe_str(p['name']), border=0)
         pdf.cell(30, 10, f"{p['std']} h", border=0, align="C")
         pdf.cell(40, 10, f"{p['preis']:.2f} EUR", border=0, align="R")
         pdf.cell(40, 10, f"{p['gesamt']:.2f} EUR", border=0, align="R")
@@ -193,7 +201,7 @@ elif menu == "📋 Rechnungs-Ersteller":
         col_b1.download_button(
             label="📥 Rechnung als PDF herunterladen",
             data=pdf_data,
-            file_name=f"Rechnung_{k_name}_{date.today().strftime('%Y%m%d')}.pdf",
+            file_name=f"Rechnung_{safe_str(k_name)}_{date.today().strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
         )
         
