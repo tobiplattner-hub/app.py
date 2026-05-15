@@ -7,13 +7,22 @@ from fpdf import FPDF
 # 1. Seiteneinstellungen
 st.set_page_config(layout="centered", page_title="LS25 Hof-Manager", page_icon="🚜")
 
-# --- HILFSFUNKTION FÜR UMLAUTE ---
+# --- HILFSFUNKTIONEN FÜR FORMATIERUNG UND UMLAUTE ---
 def safe_str(text):
     replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
     txt = str(text)
     for r, v in replacements.items():
         txt = txt.replace(r, v)
     return txt
+
+def fmt_int(wert):
+    """Formatiert Ganzzahlen mit Punkt als Tausendertrenner (z.B. 10.000)"""
+    return f"{wert:,.0f}".replace(",", ".")
+
+def fmt_float(wert):
+    """Formatiert Geldbeträge mit Punkt als Tausendertrenner und Komma als Dezimaltrenner (z.B. 1.250,50)"""
+    # Temporärer Tausch, da Python standardmäßig US-Formate nutzt
+    return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # --- PDF KLASSEN ---
 class InvoicePDF(FPDF):
@@ -52,8 +61,8 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     for p in posten:
         pdf.cell(80, 10, safe_str(p['name']), border=0)
         pdf.cell(30, 10, f"{p['std']} h", border=0, align="C")
-        pdf.cell(40, 10, f"{p['preis']:.2f} EUR", border=0, align="R")
-        pdf.cell(40, 10, f"{p['gesamt']:.2f} EUR", border=0, align="R")
+        pdf.cell(40, 10, f"{fmt_float(p['preis'])} EUR", border=0, align="R")
+        pdf.cell(40, 10, f"{fmt_float(p['gesamt'])} EUR", border=0, align="R")
         pdf.ln(10)
         summe += p['gesamt']
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
@@ -61,14 +70,14 @@ def generate_pdf(kunden_name, posten, rabatt_prozent):
     rabatt_betrag = summe * (rabatt_prozent / 100)
     total = summe - rabatt_betrag
     pdf.cell(150, 6, "Zwischensumme:", align="R")
-    pdf.cell(40, 6, f"{summe:.2f} EUR", align="R", ln=True)
+    pdf.cell(40, 6, f"{fmt_float(summe)} EUR", align="R", ln=True)
     if rabatt_prozent > 0:
         pdf.cell(150, 6, f"Rabatt ({rabatt_prozent}%):", align="R")
-        pdf.cell(40, 6, f"-{rabatt_betrag:.2f} EUR", align="R", ln=True)
+        pdf.cell(40, 6, f"-{fmt_float(rabatt_betrag)} EUR", align="R", ln=True)
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
-    pdf.cell(40, 10, f"{total:.2f} EUR", align="R", ln=True)
+    pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     pdf.ln(30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.cell(0, 10, "Vielen Dank fuer die gute Zusammenarbeit! Der Betrag ist sofort faellig.", align="C")
@@ -93,16 +102,16 @@ def generate_order_pdf(kalk_l, duenger_l, saatgut_l, saaten_typ):
     pdf.set_font("Helvetica", size=11)
     if kalk_l > 0:
         pdf.cell(120, 10, "Kalk", border=0)
-        pdf.cell(60, 10, f"{kalk_l:,} L", border=0, align="R")
+        pdf.cell(60, 10, f"{fmt_int(kalk_l)} L", border=0, align="R")
         pdf.ln(10)
     if duenger_l > 0:
         pdf.cell(120, 10, "Fluessigduenger", border=0)
-        pdf.cell(60, 10, f"{duenger_l:,} L", border=0, align="R")
+        pdf.cell(60, 10, f"{fmt_int(duenger_l)} L", border=0, align="R")
         pdf.ln(10)
     if saatgut_l > 0:
         art_name = f"Saatgut ({saaten_typ})" if saaten_typ else "Saatgut"
         pdf.cell(120, 10, safe_str(art_name), border=0)
-        pdf.cell(60, 10, f"{saatgut_l:,} L", border=0, align="R")
+        pdf.cell(60, 10, f"{fmt_int(saatgut_l)} L", border=0, align="R")
         pdf.ln(10)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(30)
@@ -132,7 +141,7 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
-# --- DATA FOR PRODUCTIONS (LS-Standardwerte pro Monat im 24h Betrieb) ---
+# --- DATA FOR PRODUCTIONS ---
 PROD_DATA = {
     "Getreidemühle: Weizen zu Mehl": (36000, 27000, "Weizen (L)", "Mehl (L)"),
     "Getreidemühle: Gerste zu Mehl": (36000, 27000, "Gerste (L)", "Mehl (L)"),
@@ -165,16 +174,16 @@ if menu == "💰 Ernte & Felder":
         ha = st.number_input("Hektar (ha):", min_value=0.1, value=1.0, step=0.1)
         st.info(f"""
         **Benötigte Mengen für {ha} ha:**
-        * Kalk: **{int(ha * r_kalk):,} L**
-        * Dünger: **{int(ha * r_duenger):,} L**
-        * Saatgut: **{int(ha * r_saat):,} L**
+        * Kalk: **{fmt_int(ha * r_kalk)} L**
+        * Dünger: **{fmt_int(ha * r_duenger)} L**
+        * Saatgut: **{fmt_int(ha * r_saat)} L**
         """)
     with col2:
         st.subheader("Erloesrechner")
         menge = st.number_input("Liter im Silo:", value=10000)
         preis_pro_1000 = st.number_input("EUR pro 1000L:", value=1200)
         erloes = (menge / 1000) * preis_pro_1000
-        st.success(f"**Voraussichtlicher Erloes:**\n### {erloes:,.2f} EUR")
+        st.success(f"**Voraussichtlicher Erloes:**\n### {fmt_float(erloes)} EUR")
 
 # --- SEITE 2 ---
 elif menu == "📋 Rechnungs-Ersteller":
@@ -195,16 +204,18 @@ elif menu == "📋 Rechnungs-Ersteller":
     if st.session_state.rechnungs_posten:
         st.write("---")
         st.subheader("📋 Aktuelle Posten")
+        
+        # Für die Streamlit-Tabelle formatieren wir eine Kopie der Daten
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        df_preview.columns = ["Maschine", "Stunden", "Einzelpreis", "Gesamt"]
+        df_preview.columns = ["Maschine", "Stunden", "Einzelpreis (EUR)", "Gesamt (EUR)"]
         st.dataframe(df_preview, use_container_width=True, hide_index=True)
         
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
         total = summe * (1 - rabatt/100)
         
         col_m1, col_m2 = st.columns(2)
-        col_m1.metric("Zwischensumme", f"{summe:.2f} EUR")
-        col_m2.metric("Endbetrag", f"{total:.2f} EUR")
+        col_m1.metric("Zwischensumme", f"{fmt_float(summe)} EUR")
+        col_m2.metric("Endbetrag", f"{fmt_float(total)} EUR")
 
         st.write("")
         col_b1, col_b2 = st.columns(2)
@@ -231,24 +242,24 @@ elif menu == "🛒 Saatgut-Bestellung":
         v_saat = st.number_input("Vorhanden (L):", min_value=0, value=3000, step=500, key="v_saat")
         g_saat = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_saat")
         b_saat = v_saat - g_saat
-        if b_saat < 1500: st.error(f"🚨 Kritisch: {b_saat:,} L\n(Unter 1.500 L)")
-        else: st.success(f"✅ Stabil: {b_saat:,} L")
+        if b_saat < 1500: st.error(f"🚨 Kritisch: {fmt_int(b_saat)} L\n(Unter 1.500 L)")
+        else: st.success(f"✅ Stabil: {fmt_int(b_saat)} L")
             
     with col_k:
         st.markdown("### ⚪ Kalk")
         v_kalk = st.number_input("Vorhanden (L):", min_value=0, value=10000, step=1000, key="v_kalk")
         g_kalk = st.number_input("Verbraucht (L):", min_value=0, value=0, step=500, key="g_kalk")
         b_kalk = v_kalk - g_kalk
-        if b_kalk < 5000: st.error(f"🚨 Kritisch: {b_kalk:,} L\n(Unter 5.000 L)")
-        else: st.success(f"✅ Stabil: {b_kalk:,} L")
+        if b_kalk < 5000: st.error(f"🚨 Kritisch: {fmt_int(b_kalk)} L\n(Unter 5.000 L)")
+        else: st.success(f"✅ Stabil: {fmt_int(b_kalk)} L")
             
     with col_d:
         st.markdown("### 🧪 Flüssigdünger")
         v_dueng = st.number_input("Vorhanden (L):", min_value=0, value=2000, step=500, key="v_dueng")
         g_dueng = st.number_input("Verbraucht (L):", min_value=0, value=0, step=100, key="g_dueng")
         b_dueng = v_dueng - g_dueng
-        if b_dueng < 1000: st.error(f"🚨 Kritisch: {b_dueng:,} L\n(Unter 1.000 L)")
-        else: st.success(f"✅ Stabil: {b_dueng:,} L")
+        if b_dueng < 1000: st.error(f"🚨 Kritisch: {fmt_int(b_dueng)} L\n(Unter 1.000 L)")
+        else: st.success(f"✅ Stabil: {fmt_int(b_dueng)} L")
             
     st.write("---")
     if b_saat < 1500 or b_kalk < 5000 or b_dueng < 1000:
@@ -271,7 +282,7 @@ elif menu == "🛒 Saatgut-Bestellung":
     else:
         st.info("ℹ️ Die Bestellfunktion schaltet sich automatisch frei, sobald einer deiner Bestände ins Minus bzw. unter das Limit rutscht.")
 
-# --- NEUER OPTIMIERTER BEREICH 4: PRODUKTIONS-PLANER ---
+# --- SEITE 4: PRODUKTIONS-PLANER ---
 elif menu == "🏭 Produktions-Planer":
     st.title("🏭 LS-Produktionsketten Rechner")
     st.write("Berechne den genauen Jahresverbrauch deiner Standard-Fabriken oder trage eigene Mod-Rezepte ein.")
@@ -279,7 +290,6 @@ elif menu == "🏭 Produktions-Planer":
     with st.container(border=True):
         rezept = st.selectbox("Wähle deine Produktion/Rezept aus:", options=list(PROD_DATA.keys()))
         
-        # Falls ein eigenes Rezept gewählt wird, dynamische Zusatzfelder anzeigen
         if rezept == "➕ Eigenes / Mod-Rezept hinzufügen":
             st.write("---")
             st.subheader("⚙️ Eigenes Rezept konfigurieren")
@@ -293,11 +303,9 @@ elif menu == "🏭 Produktions-Planer":
             custom_out_menge = col_custom4.number_input(f"Menge {out_name} pro Zyklus:", min_value=1, value=4)
             zyklen_pro_std = col_custom5.number_input("Zyklen pro Stunde (laut Spiel):", min_value=1, value=30)
             
-            # Umrechnung in die monatliche Basis (24 Std * 30 Tage = 720 Stunden pro LS-Monat)
             base_in = custom_in_menge * zyklen_pro_std * 24 * 30
             base_out = custom_out_menge * zyklen_pro_std * 24 * 30
         else:
-            # Werte aus Standarddatenbank laden
             base_in, base_out, in_name, out_name = PROD_DATA[rezept]
             
         st.write("---")
@@ -305,7 +313,6 @@ elif menu == "🏭 Produktions-Planer":
         monate = col_time1.slider("Betriebsdauer im Jahr (Monate):", min_value=1, max_value=12, value=12)
         anzahl_fabriken = col_time2.number_input("Anzahl dieser Produktionslinien:", min_value=1, value=1, step=1)
     
-    # Finale Jahreshochrechnung
     gesamt_input = base_in * monate * anzahl_fabriken
     gesamt_output = base_out * monate * anzahl_fabriken
     
@@ -317,16 +324,16 @@ elif menu == "🏭 Produktions-Planer":
     with col_p1:
         st.info(f"""
         **Benötigter Rohstoff ({in_name}):**
-        ### {gesamt_input:,} Liter
+        ### {fmt_int(gesamt_input)} Liter
         Ernteziel pro Jahr für {monate} Monate Betrieb.
         """)
         
     with col_p2:
         st.success(f"""
         **Erzeugte Produkte ({out_name}):**
-        ### {gesamt_output:,} Liter / Einheiten
+        ### {fmt_int(gesamt_output)} Liter / Einheiten
         Erwarteter Ertrag am Ausgangstrigger.
         """)
         
     st.write("")
-    st.caption(f"💡 *Verarbeitungsrate: Diese Produktionslinie verarbeitet im Dauerbetrieb exakt {int(base_in/24):,} L pro Ingame-Tag.*")
+    st.caption(f"💡 *Verarbeitungsrate: Diese Produktionslinie verarbeitet im Dauerbetrieb exakt {fmt_int(base_in/24)} L pro Ingame-Tag.*")
