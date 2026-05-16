@@ -112,7 +112,7 @@ class ManagementPDF(FPDF):
             self.set_x(10)
             
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
+        self.cell(0, 10, "AGRARSERVICE PLATTNER & AUER", ln=True)
         self.line(10, 25, 200, 25)
         self.ln(15)
         
