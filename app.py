@@ -118,7 +118,7 @@ class ManagementPDF(FPDF):
             self.set_x(10)
             
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
+        self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
         self.line(10, 27, 200, 27) 
         self.ln(15)
         
@@ -172,28 +172,35 @@ def generate_single_order_pdf(auftrag):
     pdf = ManagementPDF()
     pdf.add_page()
     
+    # Überschrift leicht nach rechts rücken
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 18)
     pdf.cell(0, 10, "LU-AUFTRAGSBELEG / BESTELLUNG", ln=True)
     pdf.ln(5)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(10)
     
+    # Alle Datenfelder auf X=65 setzen, damit links Platz fürs Logo bleibt
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(50, 8, "Kunde / Hofname:", border=0)
     pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 8, safe_str(auftrag["Kunde"]), border=0, ln=True)
     
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(50, 8, "In-Game Datum:", border=0)
     pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 8, safe_str(auftrag["Eingang"]), border=0, ln=True)
     
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(50, 8, "Vereinbarter Preis:", border=0)
     pdf.set_font("Helvetica", size=12)
     auftrags_preis = auftrag.get("Preis", 0.0)
     pdf.cell(0, 8, f"{fmt_float(auftrags_preis)} EUR", border=0, ln=True)
     
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(50, 8, "Aktueller Status:", border=0)
     pdf.set_font("Helvetica", size=12)
@@ -203,9 +210,11 @@ def generate_single_order_pdf(auftrag):
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(10)
     
+    pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(0, 8, "Arbeitsbeschreibung / Details:", ln=True)
     pdf.ln(2)
+    pdf.set_x(65)
     pdf.set_font("Helvetica", size=12)
     pdf.multi_cell(0, 8, safe_str(auftrag["Aufgabe"]))
     
@@ -610,114 +619,101 @@ elif menu == "🛒 Material & Aufträge":
         if st.button("💾 Auftrag im System speichern", type="primary", use_container_width=True):
             if a_aufgabe.strip() and a_kunde:
                 st.session_state._global_bestell_store.append({
-                    "Kunde": a_kunde, "Aufgabe": a_aufgabe, "Eingang": f"J{a_jahr}-{a_monat}", "Status": a_status, "Preis": a_preis
+                    "Kunde": a_kunde, "Aufgabe": a_aufgabe, "Preis": a_preis, "Status": a_status, "Eingang": f"J{a_jahr}-{a_monat}"
                 })
                 speichere_gesamte_daten()
                 st.rerun()
                 
         st.write("---")
+        st.subheader("📋 Registrierte LU-Aufträge")
         if st.session_state._global_bestell_store:
-            for idx, auf in enumerate(st.session_state._global_bestell_store):
-                with st.container(border=True):
-                    c_det, c_stat, c_btn, c_pdf = st.columns([3, 1, 1, 1])
-                    cur_preis = auf.get("Preis", 0.0)
-                    c_det.markdown(f"**{auf['Kunde']}**: {auf['Aufgabe']} ({auf['Eingang']}) — **{fmt_float(cur_preis)} €**")
-                    c_stat.markdown(f"`{auf['Status']}`")
+            for idx, a in enumerate(st.session_state._global_bestell_store):
+                with st.expander(f"📋 [{a['Status']}] {a['Kunde']} - {a['Aufgabe']} ({a['Eingang']})"):
+                    st.write(f"**Preis:** {fmt_float(a.get('Preis', 0.0))} EUR")
+                    st.write(f"**Beschreibung:** {a['Aufgabe']}")
                     
+                    c_st, c_pdf, c_del = st.columns(3)
+                    
+                    neuer_status = c_st.selectbox("Status ändern:", ["Offen ⏳", "In Arbeit 🚜", "Erledigt 🌾"], key=f"status_select_{idx}", index=["Offen ⏳", "In Arbeit 🚜", "Erledigt 🌾"].index(a['Status']))
+                    if neuer_status != a['Status']:
+                        st.session_state._global_bestell_store[idx]['Status'] = neuer_status
+                        speichere_gesamte_daten()
+                        st.rerun()
+                        
                     try:
-                        order_pdf_bytes = generate_single_order_pdf(auf)
-                        dateiname_clean = safe_str(auf['Kunde']).replace(" ", "_")
+                        single_pdf_bytes = generate_single_order_pdf(a)
                         c_pdf.download_button(
-                            "📥 Auftrag als PDF", 
-                            data=order_pdf_bytes, 
-                            file_name=f"Auftrag_{dateiname_clean}_{idx}.pdf", 
+                            "📥 PDF Beleg", 
+                            data=single_pdf_bytes, 
+                            file_name=f"LU_Auftrag_{idx+1}_{a['Kunde']}.pdf", 
                             mime="application/pdf", 
-                            key=f"pdf_order_{idx}",
+                            key=f"dl_pdf_{idx}",
                             use_container_width=True
                         )
-                    except Exception as pdf_err:
-                        c_pdf.error("PDF Fehler")
-
-                    if "Erledigt" not in auf["Status"]:
-                        if c_btn.button("✔️ Abschließen", key=f"d_btn_{idx}", use_container_width=True):
-                            st.session_state._global_bestell_store[idx]["Status"] = "Erledigt"
-                            speichere_gesamte_daten()
-                            st.rerun()
-                            
-            if st.button("🗑️ Alle erledigten Aufträge löschen", use_container_width=True):
-                st.session_state._global_bestell_store = [a for a in st.session_state._global_bestell_store if "Erledigt" not in a["Status"]]
-                speichere_gesamte_daten()
-                st.rerun()
+                    except Exception as e:
+                        c_pdf.error(f"Fehler: {e}")
+                        
+                    if c_del.button("🗑️ Löschen", key=f"del_a_{idx}", use_container_width=True):
+                        st.session_state._global_bestell_store.pop(idx)
+                        speichere_gesamte_daten()
+                        st.rerun()
+        else:
+            st.info("Aktuell keine aktiven LU-Aufträge erfasst.")
 
 # ---------------------------------------------------------
 # SEITE 5: PRODUKTIONEN
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktions-Kapazitäten")
-    st.info("Hier registrierte Fabriken simulieren Jahresumsätze.")
+    st.title("🏭 Meine Produktionen & Betriebe")
+    st.info("Hier kannst du deine Produktionsketten, Fabriken und aktuellen Füllstände verwalten.")
+    st.warning("Feature in Entwicklung — Daten werden in Kürze integriert.")
 
 # ---------------------------------------------------------
-# SEITE 6: DETEILLIERTES KASSENBUCH
+# SEITE 6: DETAILLIERTES KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
-    st.title("📖 Detailliertes Kassenbuch & Manuelle Buchungen")
+    st.title("📖 Detailliertes Kassenbuch & Finanzhistorie")
     
-    with st.expander("➕ Manuelle Buchung / Kassen-Korrektur vornehmen", expanded=False):
-        st.subheader("Trage hier Beträge direkt in die Kasse ein")
-        
-        col_kb1, col_kb2, col_kb3 = st.columns([1, 1, 1])
-        man_typ = col_kb1.selectbox("Art der Buchung:", ["Manuelle Einnahme ➕", "Manuelle Ausgabe ➖", "Startkontostand überschreiben ⚙️"])
-        man_betrag = col_kb2.number_input("Betrag (€):", min_value=0.0, step=100.0, format="%.2f")
-        man_details = col_kb3.text_input("Zweck / Beschreibung:", placeholder="z.B. LS-Kredit, Admin-Korrektur...")
-        
-        col_kb_m, col_kb_j = st.columns(2)
-        man_monat = col_kb_m.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
-        man_jahr = col_kb_j.number_input("In-Game Jahr:", min_value=1, value=1, key="man_j")
-        
-        if st.button("🚀 Buchung jetzt ausführen", type="primary", use_container_width=True):
-            f_date = f"J{man_jahr}-{man_monat}"
+    col_k1, col_k2 = st.columns(2)
+    with col_k1:
+        st.subheader("🏁 Saldo / Startkapital ändern")
+        neu_start = st.number_input("Startkapital (€):", value=float(st.session_state._global_finanzen.get("start_saldo", 0.0)))
+        if st.button("💾 Startkapital aktualisieren", use_container_width=True):
+            st.session_state._global_finanzen["start_saldo"] = neu_start
+            speichere_gesamte_daten()
+            st.rerun()
             
-            if man_typ == "Manuelle Einnahme ➕":
-                st.session_state._global_finanzen["einnahmen"] += man_betrag
-                st.session_state._global_finanzen["historie"].append({
-                    "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
-                    "Typ": "Einnahme", "Nummer": "#MAN-EIN",
-                    "Details": f"Manuell: {man_details}", "Betrag (EUR)": man_betrag
-                })
-                st.success(f"{fmt_float(man_betrag)} € erfolgreich als Einnahme gebucht!")
-                
-            elif man_typ == "Manuelle Ausgabe ➖":
-                st.session_state._global_finanzen["ausgaben"] += man_betrag
-                st.session_state._global_finanzen["historie"].append({
-                    "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
-                    "Typ": "Ausgabe", "Nummer": "#MAN-AUS",
-                    "Details": f"Manuell: {man_details}", "Betrag (EUR)": man_betrag
-                })
-                st.success(f"{fmt_float(man_betrag)} € erfolgreich als Ausgabe gebucht!")
-                
-            elif man_typ == "Startkontostand überschreiben ⚙️":
-                st.session_state._global_finanzen["start_saldo"] = man_betrag
-                st.session_state._global_finanzen["historie"].append({
-                    "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
-                    "Typ": "Korrektur", "Nummer": "#SALDO-RESET",
-                    "Details": f"Basis-Konto angepasst: {man_details}", "Betrag (EUR)": man_betrag
-                })
-                st.success(f"Der Basis-Umsatz wurde auf {fmt_float(man_betrag)} € gesetzt!")
-                
+    with col_k2:
+        st.subheader("🧼 Kassenbuch bereinigen")
+        if st.button("🚨 ALLE FINANZDATEN ZURÜCKSETZEN", type="secondary", use_container_width=True):
+            st.session_state._global_finanzen = {
+                "start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0,
+                "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []
+            }
             speichere_gesamte_daten()
             st.rerun()
-
+            
     st.write("---")
-    st.subheader("📜 Bisherige Buchungshistorie")
+    st.subheader("📊 Kontobewegungen (Chronologische Buchungen)")
+    
     if st.session_state._global_finanzen["historie"]:
-        st.dataframe(pd.DataFrame(st.session_state._global_finanzen["historie"])[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+        df_hist = pd.DataFrame(st.session_state._global_finanzen["historie"])
         
-        if st.button("🚨 Gesamtes Kassenbuch zurücksetzen (Löschen)", type="secondary", use_container_width=True):
-            st.session_state._global_finanzen["start_saldo"] = 0.0
-            st.session_state._global_finanzen["einnahmen"] = 0.0
-            st.session_state._global_finanzen["ausgaben"] = 0.0
-            st.session_state._global_finanzen["historie"] = []
-            speichere_gesamte_daten()
-            st.rerun()
+        monat_sort_mapping = {
+            "01 - Jan": 1, "02 - Feb": 2, "03 - Mrz": 3, "04 - Apr": 4, 
+            "05 - Mai": 5, "06 - Jun": 6, "07 - Jul": 7, "08 - Aug": 8, 
+            "09 - Sep": 9, "10 - Okt": 10, "11 - Nov": 11, "12 - Dez": 12
+        }
+        
+        if "Sort_Jahr" in df_hist.columns and "Sort_Monat" in df_hist.columns:
+            df_hist["M_Num"] = df_hist["Sort_Monat"].map(monat_sort_mapping).fillna(1).astype(int)
+            df_hist = df_hist.sort_values(by=["Sort_Jahr", "M_Num", "Nummer"], ascending=[False, False, False])
+            df_hist = df_hist.drop(columns=["Sort_Jahr", "Sort_Monat", "M_Num"], errors="ignore")
+            
+        df_display = df_hist.copy()
+        if "Betrag (EUR)" in df_display.columns:
+            df_display["Betrag (EUR)"] = df_display["Betrag (EUR)"].apply(fmt_float)
+            
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
-        st.info("Keine Buchungen vorhanden.")
+        st.info("Das Kassenbuch enthält aktuell noch keine Einträge.")
