@@ -681,7 +681,7 @@ elif menu == "🛒 Material & Aufträge":
             st.info("Aktuell keine aktiven LU-Aufträge erfasst.")
 
 # ---------------------------------------------------------
-# SEITE 5: PRODUKTIONEN (NEU AUSGEBAUT)
+# SEITE 5: PRODUKTIONEN (ÄNDERUNG: JETZT MIT REZEPT-FUNKTION)
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
     st.title("🏭 Fabrikverwaltung & Paletten-Logistik")
@@ -696,8 +696,9 @@ elif menu == "🏭 Produktionen":
             prod_input = st.text_input("Eingangs-Rohstoff (Input):", placeholder="z.B. Weizen, Holz")
         with col_p2:
             prod_output = st.text_input("Ausgangs-Ware (Output):", placeholder="z.B. Brot, Bretter")
-            prod_zyklen = st.number_input("Zyklen pro Monat:", min_value=1, value=24, step=1)
+            prod_rezept = st.text_input("Rezept / Verhältnis (optional):", placeholder="z.B. 2x Weizen -> 1x Brot")
         with col_p3:
+            prod_zyklen = st.number_input("Zyklen pro Monat:", min_value=1, value=24, step=1)
             prod_status = st.selectbox("Aktueller Betriebsstatus:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"])
             
         if st.button("💾 Fabrik registrieren", type="primary", use_container_width=True):
@@ -706,6 +707,7 @@ elif menu == "🏭 Produktionen":
                     "Name": prod_name.strip(),
                     "Input": prod_input.strip() if prod_input.strip() else "Keiner",
                     "Output": prod_output.strip() if prod_output.strip() else "Keiner",
+                    "Rezept": prod_rezept.strip() if prod_rezept.strip() else "Standard",
                     "Zyklen": prod_zyklen,
                     "Status": prod_status
                 })
@@ -720,7 +722,8 @@ elif menu == "🏭 Produktionen":
                     col_info, col_status_edit, col_delete = st.columns([3, 2, 1])
                     with col_info:
                         st.markdown(f"### {p['Name']}")
-                        st.write(f"🔄 **Zyklen/Monat:** {p['Zyklen']} | 📥 **Input:** {p['Input']} ➡️ 📤 **Output:** {p['Output']}")
+                        st.write(f"📜 **Rezept:** {p.get('Rezept', 'Standard')} | 🔄 **Zyklen/Monat:** {p['Zyklen']}")
+                        st.write(f"📥 **Input:** {p['Input']} ➡️ 📤 **Output:** {p['Output']}")
                     with col_status_edit:
                         neuer_p_status = st.selectbox(f"Status ändern:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"], key=f"p_status_{idx}", index=["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"].index(p['Status']))
                         if neuer_p_status != p['Status']:
