@@ -126,7 +126,7 @@ class ManagementPDF(FPDF):
             self.set_x(10)
             
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
+        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
         self.line(10, 27, 200, 27) 
         self.ln(15)
         
@@ -287,7 +287,7 @@ menu = st.sidebar.radio("Hauptmenü Navigation", [
 ])
 
 # ---------------------------------------------------------
-# SEITE 1: ERNTE & VERBRAUCHSRATEN
+# SEITE 1: ERNTE & VERBRAUCHSRATEN (MODIFIZIERT: NEUER ERNTE-ERLÖS-RECHNER HINZUGEFÜGT)
 # ---------------------------------------------------------
 if menu == "💰 Ernte & Verbrauchsraten":
     st.title("🚜 Ernte-Kalkulator & Globale Raten")
@@ -300,7 +300,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.session_state.global_verbrauch_saat = st.number_input("Saatgut Bedarf (L/ha):", value=st.session_state.global_verbrauch_saat)
         st.session_state.global_verbrauch_herbi = st.number_input("Herbizid Bedarf (L/ha):", value=st.session_state.global_verbrauch_herbi)
         
-    with col2:
+        st.write("---")
         st.subheader("🧪 Schneller Feldbedarf-Rechner")
         ha = st.number_input("Hektar Testfläche (ha):", min_value=0.1, value=1.0, step=0.1)
         st.markdown(f"### Benötigtes Material für {ha} ha:")
@@ -308,6 +308,46 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.write(f"🧪 Dünger: **{fmt_int(ha * st.session_state.global_verbrauch_dueng)} Liter**")
         st.write(f"🌱 Saatgut: **{fmt_int(ha * st.session_state.global_verbrauch_saat)} Liter**")
         st.write(f"🌿 Herbizid: **{fmt_int(ha * st.session_state.global_verbrauch_herbi)} Liter**")
+        
+    with col2:
+        st.subheader("💰 Ernte-Erlös & Verkaufskalkulator")
+        st.markdown("Berechne hier schnell, welchen finanziellen Ertrag dein geerntetes Getreide bringt.")
+        
+        calc_frucht = st.selectbox("Verkaufte Fruchtart:", st.session_state._global_fruchtarten, key="calc_erloes_frucht")
+        calc_menge = st.number_input("Geerntete Gesamtmenge (in Litern):", min_value=0, value=10000, step=1000, key="calc_erloes_menge")
+        calc_preis_pro_1k = st.number_input("Marktpreis (€ pro 1.000 Liter):", min_value=0.0, value=850.0, step=50.0, key="calc_erloes_preis")
+        
+        # Berechnung des Gewinns
+        errechneter_erloes = (calc_menge / 1000.0) * calc_preis_pro_1k
+        
+        st.markdown("### 📊 Voraussichtlicher Ertrag:")
+        st.success(f"💵 Gesamterlös: **{fmt_float(errechneter_erloes)} €**")
+        
+        st.write("---")
+        st.markdown("##### 📥 Erlös direkt verbuchen:")
+        c_em, c_ej = st.columns(2)
+        erloes_monat = c_em.selectbox("Verkauf im Monat:", LISTE_MONATE, key="erloes_m")
+        erloes_jahr = c_ej.number_input("Verkauf im Jahr:", min_value=1, value=1, key="erloes_j")
+        
+        if st.button("📈 Gewinn in Hof-Kasse einbuchen", type="primary", use_container_width=True):
+            if errechneter_erloes > 0:
+                full_ingame_date = f"J{erloes_jahr}-{erloes_monat}"
+                st.session_state._global_finanzen["einnahmen"] += errechneter_erloes
+                st.session_state._global_finanzen["historie"].append({
+                    "In-Game Datum": full_ingame_date, 
+                    "Sort_Jahr": int(erloes_jahr), 
+                    "Sort_Monat": erloes_monat,
+                    "Typ": "Einnahme", 
+                    "Nummer": f"#EV-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}",
+                    "Details": f"Ernteverkauf: {fmt_int(calc_menge)}L {calc_frucht}", 
+                    "Betrag (EUR)": errechneter_erloes
+                })
+                st.session_state._global_finanzen["naechste_rechnung_id"] += 1
+                speichere_gesamte_daten()
+                st.success(f"✔️ {fmt_float(errechneter_erloes)} € wurden als Einnahme registriert!")
+                st.rerun()
+            else:
+                st.error("Der berechnete Erlös muss größer als 0 € sein.")
 
 # ---------------------------------------------------------
 # SEITE 2: MEINE FELDER & ANBAU
@@ -682,7 +722,7 @@ elif menu == "🛒 Material & Aufträge":
             st.info("Aktuell keine aktiven LU-Aufträge erfasst.")
 
 # ---------------------------------------------------------
-# SEITE 5: PRODUKTIONEN (ÄNDERUNG: REZEPT-EINHÄNGUNG FÜR BRUCH-VERHÄLTNISSE WIE 9 ZU 15)
+# SEITE 5: PRODUKTIONEN
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
     st.title("🏭 Fabrikverwaltung & Paletten-Logistik")
@@ -728,7 +768,6 @@ elif menu == "🏭 Produktionen":
                     col_info, col_status_edit, col_delete = st.columns([3, 2, 1])
                     with col_info:
                         st.markdown(f"### {p['Name']}")
-                        # Kompatibilität mit alten Daten sichern
                         in_r = p.get("In_Ratio", 1)
                         out_r = p.get("Out_Ratio", 1)
                         st.write(f"📜 **Rezept-Verhältnis:** {in_r}x {p['Input']} ➡️ ergibt {out_r}x {p['Output']} | 🔄 **Zyklen:** {p['Zyklen']}")
@@ -756,7 +795,6 @@ elif menu == "🏭 Produktionen":
             fabriken_namen = [p["Name"] for p in st.session_state._global_produktionen_store]
             ausgewaehlte_fabrik_name = st.selectbox("Wähle die aktive Fabrik aus:", fabriken_namen)
             
-            # Die gewählte Fabrik aus dem Speicher holen
             fabrik = next(p for p in st.session_state._global_produktionen_store if p["Name"] == ausgewaehlte_fabrik_name)
             
             in_ratio = fabrik.get("In_Ratio", 1)
@@ -768,13 +806,10 @@ elif menu == "🏭 Produktionen":
             with col_calc1:
                 eingangs_menge = st.number_input(f"Eingesetzte Menge an {fabrik['Input']} (in Litern):", min_value=0, value=900, step=100)
             
-            # Exakte Output-Berechnung auf Basis des Verhältnisses (Menge / Input_Verhältnis * Output_Verhältnis)
             if in_ratio <= 0:
                 in_ratio = 1
                 
             errechneter_output_liter = (eingangs_menge / in_ratio) * out_ratio
-            
-            # Paletten berechnen (1000 Liter pro Palette, kaufmännisch aufgerundet)
             anzahl_paletten = math.ceil(errechneter_output_liter / 1000) if errechneter_output_liter > 0 else 0
             
             with col_calc2:
@@ -785,8 +820,6 @@ elif menu == "🏭 Produktionen":
             if st.button("🏭 Produktion ausführen & Paletten ins Lager buchen", type="primary", use_container_width=True):
                 if anzahl_paletten > 0:
                     produkt_name = fabrik['Output'].strip()
-                    
-                    # Zum bestehenden Palettenlager hinzurechnen
                     aktueller_bestand = st.session_state._global_paletten_lager.get(produkt_name, 0)
                     st.session_state._global_paletten_lager[produkt_name] = aktueller_bestand + anzahl_paletten
                     
