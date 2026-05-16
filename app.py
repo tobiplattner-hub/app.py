@@ -190,7 +190,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.write(f"🌱 Saatgut: **{fmt_int(ha * st.session_state.global_verbrauch_saat)} Liter**")
         st.write(f"🌿 Herbizid: **{fmt_int(ha * st.session_state.global_verbrauch_herbi)} Liter**")
 
-# --- SEITE 2: MEINE FELDER & ANBAU (MIT AUTO-ABZUG & FLEXIBLEN FRÜCHTEN) ---
+# --- SEITE 2: MEINE FELDER & ANBAU ---
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
     st.markdown("Verwalte deine Felder für **The Pichonniere Valley**. Führe Feldarbeiten direkt hier aus, um Material live aus dem Silo zu entnehmen!")
@@ -202,15 +202,13 @@ elif menu == "🚜 Meine Felder & Anbau":
         f_nummer = st.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
         f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
         
-        # NEU: Fruchtart-Auswahl kombiniert mit manueller Option
         f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st._global_fruchtarten)
         
-        # NEU: Eigene Frucht hinzufügen falls nicht in Liste vorhanden
         neue_frucht = st.text_input("➕ Fehlende Fruchtart hinzufügen (z.B. Ackerbohnen):", placeholder="Hier eintippen...")
         if st.button("✨ Fruchtart registrieren"):
             if neue_frucht.strip() and neue_frucht.strip() not in st._global_fruchtarten:
                 st._global_fruchtarten.append(neue_frucht.strip())
-                st._global_fruchtarten.sort() # Alphabetisch sortieren
+                st._global_fruchtarten.sort()
                 st.success(f"'{neue_frucht.strip()}' wurde zur Liste hinzugefügt!")
                 st.rerun()
         
@@ -300,7 +298,7 @@ elif menu == "🚜 Meine Felder & Anbau":
             st._global_felder_store = [f for f in st._global_felder_store if f["nummer"] != f_del]
             st.rerun()
 
-# --- SEITE 4: RECHNUNGEN ---
+# --- SEITE 3: RECHNUNGEN ---
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
     st.info(f"Nächste Rechnungsnummer auf dem Server: **#RE-{st._global_finanzen['naechste_rechnung_id']:04d}**")
@@ -366,56 +364,101 @@ elif menu == "📋 Rechnungen":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 5: MATERIAL & AUFTRÄGE (EINKAUF) ---
+# --- SEITE 4: MATERIAL & AUFTRÄGE (JETZT MIT UNTER-REITERN / TABS) ---
 elif menu == "🛒 Material & Aufträge":
-    st.title("🛒 Materialeinkauf & Lagerverwaltung")
+    st.title("🛒 Material & LU-Bestellungen")
     
-    st.subheader("📦 Manuelle Lager-Korrektur / Silo-Befüllung")
-    c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
+    # Erstellung von Unter-Reitern (Tabs) innerhalb der Seite
+    tab_lager, tab_auftraege = st.tabs(["📦 Silo & Einkauf", "📝 LU-Auftragsbuch"])
     
-    v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500)
-    v_kalk = c_l2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]), step=1000)
-    v_dueng = c_l3.number_input("Dünger (L):", min_value=0, value=int(st._global_lager_store["dueng"]), step=500)
-    v_herbi = c_l4.number_input("Herbizid (L):", min_value=0, value=int(st._global_lager_store["herbi"]), step=500)
-    v_diesel = c_l5.number_input("Diesel (L):", min_value=0, value=int(st._global_lager_store["diesel"]), step=500)
-    
-    if st.button("💾 Lagerbestände manuell überschreiben", use_container_width=True):
-        st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
-        st.rerun()
-            
-    st.write("---")
-    st.subheader("📉 Einkaufswagen für neues Material")
-    
-    order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, value=0, step=1000)
-    order_kalk = st.number_input("Kalk kaufen (L):", min_value=0, value=0, step=1000)
-    order_dueng = st.number_input("Dünger kaufen (L):", min_value=0, value=0, step=1000)
-    
-    tatsaechliche_kosten = st.number_input("Rechnungsendbetrag beim Händler (€):", min_value=0.0)
-    
-    col_bm, col_bj = st.columns(2)
-    bs_monat = col_bm.selectbox("Kauf im Monat:", LISTE_MONATE)
-    bs_jahr = col_bj.number_input("Kauf im Jahr:", min_value=1, value=1)
-    
-    if st.button("💳 Einkauf bezahlen & ins Silo füllen", type="primary", use_container_width=True):
-        st._global_lager_store["saat"] += order_saat
-        st._global_lager_store["kalk"] += order_kalk
-        st._global_lager_store["dueng"] += order_dueng
+    with tab_lager:
+        st.subheader("⚙️ Manuelle Lager-Korrektur / Silo-Befüllung")
+        c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
         
-        st._global_finanzen["ausgaben"] += tatsaechliche_kosten
-        st._global_finanzen["historie"].append({
-            "In-Game Datum": f"J{bs_jahr}-{bs_monat}", "Sort_Jahr": bs_jahr, "Sort_Monat": bs_monat,
-            "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
-            "Details": f"Silo befüllt (+{order_saat}L Saat, +{order_kalk}L Kalk, +{order_dueng}L Dünger)", "Betrag (EUR)": tatsaechliche_kosten
-        })
-        st._global_finanzen["naechste_bestellung_id"] += 1
-        st.success("Einkauf gebucht und Lager gefüllt!")
-        st.rerun()
+        v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500)
+        v_kalk = c_l2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]), step=1000)
+        v_dueng = c_l3.number_input("Dünger (L):", min_value=0, value=int(st._global_lager_store["dueng"]), step=500)
+        v_herbi = c_l4.number_input("Herbizid (L):", min_value=0, value=int(st._global_lager_store["herbi"]), step=500)
+        v_diesel = c_l5.number_input("Diesel (L):", min_value=0, value=int(st._global_lager_store["diesel"]), step=500)
+        
+        if st.button("💾 Lagerbestände manuell überschreiben", use_container_width=True):
+            st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
+            st.rerun()
+                
+        st.write("---")
+        st.subheader("📉 Einkaufswagen für neues Material")
+        
+        order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, value=0, step=1000)
+        order_kalk = st.number_input("Kalk kaufen (L):", min_value=0, value=0, step=1000)
+        order_dueng = st.number_input("Dünger kaufen (L):", min_value=0, value=0, step=1000)
+        
+        tatsaechliche_kosten = st.number_input("Rechnungsendbetrag beim Händler (€):", min_value=0.0)
+        
+        col_bm, col_bj = st.columns(2)
+        bs_monat = col_bm.selectbox("Kauf im Monat:", LISTE_MONATE, key="eink_m")
+        bs_jahr = col_bj.number_input("Kauf im Jahr:", min_value=1, value=1, key="eink_j")
+        
+        if st.button("💳 Einkauf bezahlen & ins Silo füllen", type="primary", use_container_width=True):
+            st._global_lager_store["saat"] += order_saat
+            st._global_lager_store["kalk"] += order_kalk
+            st._global_lager_store["dueng"] += order_dueng
+            
+            st._global_finanzen["ausgaben"] += tatsaechliche_kosten
+            st._global_finanzen["historie"].append({
+                "In-Game Datum": f"J{bs_jahr}-{bs_monat}", "Sort_Jahr": bs_jahr, "Sort_Monat": bs_monat,
+                "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
+                "Details": f"Silo befüllt (+{order_saat}L Saat, +{order_kalk}L Kalk, +{order_dueng}L Dünger)", "Betrag (EUR)": tatsaechliche_kosten
+            })
+            st._global_finanzen["naechste_bestellung_id"] += 1
+            st.success("Einkauf gebucht und Lager gefüllt!")
+            st.rerun()
 
-# --- SEITE 6: PRODUKTIONEN ---
+    with tab_auftraege:
+        st.subheader("📝 Neuen LU-Auftrag / Bestellung erfassen")
+        
+        col_au1, col_au2 = st.columns(2)
+        with col_au1:
+            a_kunde = st.selectbox("Auftraggeber (Kunde):", aktuelle_kunden, key="auf_k") if aktuelle_kunden else st.text_input("Auftraggeber (Hofname):", key="auf_k_txt")
+            a_aufgabe = st.text_input("Welche Arbeit soll erledigt werden?", placeholder="z.B. Feld 12 dreschen, Ballen pressen...")
+            a_status = st.selectbox("Aktueller Status:", ["Offen ⏳", "In Arbeit 🚜", "Erledigt (Wartet auf Abrechnung) 🌾"])
+        
+        with col_au2:
+            a_monat = st.selectbox("Angenommen im Monat:", LISTE_MONATE, key="auf_m")
+            a_jahr = st.number_input("Angenommen im Jahr:", min_value=1, value=1, key="auf_j")
+        
+        if st.button("💾 Auftrag im System speichern", type="primary", use_container_width=True):
+            if a_aufgabe.strip() and a_kunde:
+                st._global_bestell_store.append({
+                    "Kunde": a_kunde,
+                    "Aufgabe": a_aufgabe,
+                    "Eingang": f"J{a_jahr}-{a_monat}",
+                    "Status": a_status
+                })
+                st.success("Auftrag erfolgreich ins Auftragsbuch eingetragen!")
+                st.rerun()
+                
+        st.write("---")
+        st.subheader("📋 Aktuelle Aufträge im Logbuch")
+        if st._global_bestell_store:
+            df_auftraege = pd.DataFrame(st._global_bestell_store)
+            st.dataframe(df_auftraege, use_container_width=True)
+            
+            if st.button("🗑️ Alle erledigten Aufträge aus dem Buch löschen"):
+                st._global_bestell_store = [a for a in st._global_bestell_store if "Erledigt" not in a["Status"]]
+                st.rerun()
+        else:
+            st.info("Momentan liegen keine offenen Bestellungen oder Aufträge vor.")
+
+# --- SEITE 5: PRODUKTIONEN ---
 elif menu == "🏭 Produktionen":
     st.title("🏭 Produktions-Kapazitäten")
     st.info("Hier registrierte Fabriken simulieren Jahresumsätze über In-Game Zyklen.")
 
-# --- SEITE 7: DETILLIERTES KASSENBUCH ---
+# --- SEITE 6: DETILLIERTES KASSENBUCH ---
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch")
+    if st._global_finanzen["historie"]:
+        df_historie = pd.DataFrame(st._global_finanzen["historie"])
+        st.dataframe(df_historie[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+    else:
+        st.info("Noch keine Buchungen im Kassenbuch vorhanden.")
