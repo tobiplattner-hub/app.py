@@ -49,7 +49,7 @@ LISTE_MONATE = [
 
 # --- HILFSFUNKTIONEN ---
 def safe_str(text):
-    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
+    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR', '⏳': '', '🚜': '', '🌾': ''}
     txt = str(text)
     for r, v in replacements.items():
         txt = txt.replace(r, v)
@@ -59,18 +59,24 @@ def fmt_int(wert):
     return f"{wert:,.0f}".replace(",", ".")
 
 def fmt_float(wert):
-    return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{fmt_float(wert)}" if isinstance(wert, str) else f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 # --- PDF GENERATOR ---
-class InvoicePDF(FPDF):
+class ManagementPDF(FPDF):
     def header(self):
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "LU-BETRIEB MANAGEMENT", ln=True)
-        self.ln(20)
+        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
+        self.line(10, 20, 200, 20)
+        self.ln(15)
+        
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.cell(0, 10, f"Seite {self.page_no()}", align="C")
 
-def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum):
-    pdf = InvoicePDF()
+def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum):
+    pdf = ManagementPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
     pdf.set_x(130)
@@ -107,6 +113,75 @@ def generate_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
+    return pdf.output()
+
+# PDF Generator für das komplette Auftragsbuch
+def generate_auftragslog_pdf(auftraege_liste):
+    pdf = ManagementPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "AKTUELL REGISTRIERTE LU-AUFTRAEGE", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(40, 8, "Kunde / Hof", border=1)
+    pdf.cell(80, 8, "Aufgabe / Beschreibung", border=1)
+    pdf.cell(30, 8, "In-Game Datum", border=1)
+    pdf.cell(40, 8, "Status", border=1)
+    pdf.ln(8)
+    
+    pdf.set_font("Helvetica", size=10)
+    for a in auftraege_liste:
+        pdf.cell(40, 8, safe_str(a['Kunde']), border=1)
+        pdf.cell(80, 8, safe_str(a['Aufgabe']), border=1)
+        pdf.cell(30, 8, safe_str(a['Eingang']), border=1)
+        pdf.cell(40, 8, safe_str(a['Status']), border=1)
+        pdf.ln(8)
+        
+    return pdf.output()
+
+# NEU: PDF Generator für einen EINZELNEN Auftrag (Arbeitsnachweis / Lieferschein)
+def generate_einzel_auftrag_pdf(auftrag):
+    pdf = ManagementPDF()
+    pdf.add_page()
+    
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 12, "ARBEITSNACHWEIS / DIENSTLEISTUNG", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(45, 8, "Kunde / Empfaenger:", border=0)
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 8, safe_str(auftrag['Kunde']), border=0, ln=True)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(45, 8, "Datum der Erfassung:", border=0)
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 8, safe_str(auftrag['Eingang']), border=0, ln=True)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(45, 8, "Bearbeitungs-Status:", border=0)
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 8, safe_str(auftrag['Status']), border=0, ln=True)
+    
+    pdf.ln(10)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+    
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, "Durchgefuehrte Arbeiten / Bestellung:", ln=True)
+    pdf.ln(4)
+    
+    pdf.set_font("Helvetica", size=12)
+    pdf.multi_cell(0, 8, f"- {safe_str(auftrag['Aufgabe'])}", border=1)
+    
+    pdf.ln(30)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(90, 8, "Unterschrift Lohnunternehmer", border="T", align="C")
+    pdf.set_x(120)
+    pdf.cell(80, 8, "Unterschrift Kunde", border="T", align="C")
+    
     return pdf.output()
 
 
@@ -348,7 +423,7 @@ elif menu == "📋 Rechnungen":
         total = summe - (summe * (rabatt / 100))
         
         full_ingame_date = f"J{re_jahr}-{re_monat}"
-        pdf_data = generate_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
+        pdf_data = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
         
         col_b1, col_b2 = st.columns(2)
         col_b1.download_button("📥 PDF laden", data=bytes(pdf_data), file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
@@ -364,11 +439,10 @@ elif menu == "📋 Rechnungen":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 4: MATERIAL & AUFTRÄGE (JETZT MIT UNTER-REITERN / TABS) ---
+# --- SEITE 4: MATERIAL & AUFTRÄGE ---
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Material & LU-Bestellungen")
     
-    # Erstellung von Unter-Reitern (Tabs) innerhalb der Seite
     tab_lager, tab_auftraege = st.tabs(["📦 Silo & Einkauf", "📝 LU-Auftragsbuch"])
     
     with tab_lager:
@@ -443,9 +517,45 @@ elif menu == "🛒 Material & Aufträge":
             df_auftraege = pd.DataFrame(st._global_bestell_store)
             st.dataframe(df_auftraege, use_container_width=True)
             
-            if st.button("🗑️ Alle erledigten Aufträge aus dem Buch löschen"):
+            # PDF Export-Button für das gesamte Logbuch
+            pdf_log_data = generate_auftragslog_pdf(st._global_bestell_store)
+            
+            col_pdf1, col_pdf2 = st.columns(2)
+            col_pdf1.download_button(
+                "📥 Ganzes Auftragsbuch als PDF exportieren", 
+                data=bytes(pdf_log_data), 
+                file_name="LU_Auftragsbuch_Gesamt.pdf", 
+                mime="application/pdf", 
+                use_container_width=True
+            )
+            
+            if col_pdf2.button("🗑️ Alle erledigten Aufträge aus dem Buch löschen", use_container_width=True):
                 st._global_bestell_store = [a for a in st._global_bestell_store if "Erledigt" not in a["Status"]]
                 st.rerun()
+                
+            # NEU: Einzellisten-Verteiler für die Spieler / Kunden auf dem Server
+            st.write("---")
+            st.subheader("📄 Einzelne Arbeitsnachweise (PDF) generieren")
+            st.markdown("Wähle hier eine bestimmte Arbeit aus, um ein separates Dokument für diesen spezifischen Kunden herunterzuladen:")
+            
+            # Erstelle eine lesbare Optionsliste
+            auftrag_optionen = [f"[{a['Eingang']}] {a['Kunde']} - {a['Aufgabe'][:30]}..." for a in st._global_bestell_store]
+            ausgewaehlter_index = st.selectbox("Auszuführender Auftrag für Einzelnachweis:", range(len(auftrag_optionen)), format_func=lambda x: auftrag_optionen[x])
+            
+            if ausgewaehlter_index is not None:
+                ziel_auftrag = st._global_bestell_store[ausgewaehlter_index]
+                einzel_pdf = generate_einzel_auftrag_pdf(ziel_auftrag)
+                
+                # Generiere Dateiname basierend auf dem Kundennamen
+                clean_kunden_name = ziel_auftrag['Kunde'].replace(" ", "_")
+                st.download_button(
+                    f"📥 Arbeitsnachweis für {ziel_auftrag['Kunde']} herunterladen",
+                    data=bytes(einzel_pdf),
+                    file_name=f"Arbeitsnachweis_{clean_kunden_name}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="secondary"
+                )
         else:
             st.info("Momentan liegen keine offenen Bestellungen oder Aufträge vor.")
 
