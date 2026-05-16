@@ -315,10 +315,7 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.write("---")
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
         for idx, f in enumerate(st._global_felder_store):
-            # Fruchtart aus den Daten auslesen (falls bei alten Daten nicht vorhanden, Standardwert)
             aktuelle_frucht = f.get("frucht", "Keine Angabe")
-            
-            # Anzeige der Fruchtart direkt im Titel des Expanders hinzugefügt:
             with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — 🌾 {aktuelle_frucht}"):
                 c_inf, c_act1, c_act2, c_act3, c_act4 = st.columns([2, 1, 1, 1, 1])
                 bedarf_kalk = f["groesse"] * st.session_state.global_verbrauch_kalk
@@ -352,7 +349,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN
+# SEITE 3: RECHNUNGEN (INKLUSIVE MANUELLER LÖSCHFUNKTION)
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
@@ -420,6 +417,29 @@ elif menu == "📋 Rechnungen":
             st.session_state.rechnungs_posten = []
             speichere_gesamte_daten()
             st.rerun()
+
+    # --- NUR DIESER ABSCHNITT WURDE FÜR DAS GEFRAGTE LÖSCH-MENÜ ERGÄNZT ---
+    st.write("---")
+    st.subheader("📑 Ausgestellte Rechnungen verwalten")
+    rechnungs_liste = [h for h in st._global_finanzen["historie"] if h["Typ"] == "Einnahme" and h["Nummer"].startswith("#RE-")]
+    
+    if rechnungs_liste:
+        for idx, rechnung in enumerate(rechnungs_liste):
+            with st.container(border=True):
+                col_info, col_del = st.columns([4, 1])
+                with col_info:
+                    st.markdown(f"**Rechnung {rechnung['Nummer']}** ({rechnung['In-Game Datum']}) — {rechnung['Details']} — **{fmt_float(rechnung['Betrag (EUR)'])} €**")
+                with col_del:
+                    if st.button("🗑️ Rechnung Löschen", key=f"del_re_{idx}", type="secondary", use_container_width=True):
+                        # Betrag von den Einnahmen abziehen
+                        st._global_finanzen["einnahmen"] -= rechnung["Betrag (EUR)"]
+                        # Aus der Historie löschen
+                        st._global_finanzen["historie"] = [h for h in st._global_finanzen["historie"] if not (h["Nummer"] == rechnung["Nummer"] and h["Typ"] == "Einnahme")]
+                        speichere_gesamte_daten()
+                        st.success(f"Rechnung {rechnung['Nummer']} wurde erfolgreich gelöscht!")
+                        st.rerun()
+    else:
+        st.info("Noch keine Rechnungen im System vorhanden.")
 
 # ---------------------------------------------------------
 # SEITE 4: MATERIAL & AUFTRÄGE
