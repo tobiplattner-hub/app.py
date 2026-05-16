@@ -105,9 +105,17 @@ def fmt_float(wert):
 # ---------------------------------------------------------
 class ManagementPDF(FPDF):
     def header(self):
+        # Logo Einbindung mit automatischem Fehler-Schutz
+        try:
+            # Falls deine Logo-Datei anders heißt, passe "logo.png" hier an:
+            self.image("logo.png", 10, 8, 33) 
+            self.set_x(48) # Schiebt den Text nach rechts, damit das Logo Platz hat
+        except:
+            self.set_x(10) # Fallback, falls das Logo fehlt
+            
         self.set_font("Helvetica", "B", 16)
         self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
-        self.line(10, 20, 200, 20)
+        self.line(10, 25, 200, 25) # Linie wegen Logo leicht nach unten verschoben
         self.ln(15)
         
     def footer(self):
@@ -153,7 +161,7 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
-    return bytes(pdf.output())  # Hier explizit zu bytes umgewandelt
+    return bytes(pdf.output())
 
 def generate_auftragslog_pdf(auftraege_liste):
     pdf = ManagementPDF()
@@ -177,7 +185,7 @@ def generate_auftragslog_pdf(auftraege_liste):
         pdf.cell(40, 8, safe_str(a['Status']), border=1)
         pdf.ln(8)
         
-    return bytes(pdf.output())  # Hier explizit zu bytes umgewandelt
+    return bytes(pdf.output())
 
 # ---------------------------------------------------------
 # DATEN-LOAD AUS GOOGLE SHEETS
