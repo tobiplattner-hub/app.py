@@ -64,7 +64,7 @@ def speichere_gesamte_daten():
     except Exception as e:
         st.error(f"Fehler beim Sichern: {e}")
 
-# Initialisierung über session_state (Sicher vor Attribut-Fehlern)
+# Initialisierung über session_state
 if "_global_daten_geladen" not in st.session_state:
     gespeicherte_daten = lade_gesamte_daten()
     st.session_state._global_hof_store = gespeicherte_daten["hof_store"]
@@ -86,7 +86,10 @@ LISTE_MONATE = [
 # HILFSFUNKTIONEN
 # ---------------------------------------------------------
 def safe_str(text):
-    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR', '⏳': '', '🚜': '', '🌾': ''}
+    replacements = {
+        'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 
+        'ß': 'ss', '€': 'EUR', '⏳': '', '🚜': '', '🌾': '', '✔️': '', '❌': ''
+    }
     txt = str(text)
     for r, v in replacements.items():
         txt = txt.replace(r, v)
@@ -164,28 +167,48 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return bytes(pdf.output())
 
-def generate_auftragslog_pdf(auftraege_liste):
+def generate_single_order_pdf(auftrag):
+    """Generiert ein sauberes PDF-Datenblatt für einen einzelnen LU-Auftrag/Bestellung"""
     pdf = ManagementPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "AKTUELL REGISTRIERTE LU-AUFTRAEGE", ln=True)
+    
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "LU-AUFTRAGSBELEG / BESTELLUNG", ln=True)
     pdf.ln(5)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
     
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(35, 8, "Kunde / Hof", border=1)
-    pdf.cell(85, 8, "Aufgabe / Beschreibung", border=1)
-    pdf.cell(30, 8, "In-Game Datum", border=1)
-    pdf.cell(40, 8, "Status", border=1)
-    pdf.ln(8)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(50, 8, "Kunde / Hofname:", border=0)
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 8, safe_str(auftrag["Kunde"]), border=0, ln=True)
     
-    pdf.set_font("Helvetica", size=10)
-    for a in auftraege_liste:
-        pdf.cell(35, 8, safe_str(a['Kunde']), border=1)
-        pdf.cell(85, 8, safe_str(a['Aufgabe']), border=1)
-        pdf.cell(30, 8, safe_str(a['Eingang']), border=1)
-        pdf.cell(40, 8, safe_str(a['Status']), border=1)
-        pdf.ln(8)
-        
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(50, 8, "In-Game Datum:", border=0)
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 8, safe_str(auftrag["Eingang"]), border=0, ln=True)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(50, 8, "Aktueller Status:", border=0)
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 8, safe_str(auftrag["Status"]), border=0, ln=True)
+    
+    pdf.ln(10)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+    
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, "Arbeitsbeschreibung / Details:", ln=True)
+    pdf.ln(2)
+    pdf.set_font("Helvetica", size=12)
+    pdf.multi_cell(0, 8, safe_str(auftrag["Aufgabe"]))
+    
+    pdf.ln(20)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 8, "Generiert via LS25 Hof-Manager. Zur Abrechnung bitte das Rechnungs-Tool nutzen.", ln=True, align="C")
+    
     return bytes(pdf.output())
 
 # ---------------------------------------------------------
@@ -589,9 +612,25 @@ elif menu == "🛒 Material & Aufträge":
         if st.session_state._global_bestell_store:
             for idx, auf in enumerate(st.session_state._global_bestell_store):
                 with st.container(border=True):
-                    c_det, c_stat, c_btn = st.columns([3, 1, 1])
+                    c_det, c_stat, c_btn, c_pdf = st.columns([3, 1, 1, 1])
                     c_det.markdown(f"**{auf['Kunde']}**: {auf['Aufgabe']} ({auf['Eingang']})")
                     c_stat.markdown(f"`{auf['Status']}`")
+                    
+                    # PDF-Button für die Bestellung generieren
+                    try:
+                        order_pdf_bytes = generate_single_order_pdf(auf)
+                        dateiname_clean = safe_str(auf['Kunde']).replace(" ", "_")
+                        c_pdf.download_button(
+                            "📥 Auftrag als PDF", 
+                            data=order_pdf_bytes, 
+                            file_name=f"Auftrag_{dateiname_clean}_{idx}.pdf", 
+                            mime="application/pdf", 
+                            key=f"pdf_order_{idx}",
+                            use_container_width=True
+                        )
+                    except Exception as pdf_err:
+                        c_pdf.error("PDF Fehler")
+
                     if "Erledigt" not in auf["Status"]:
                         if c_btn.button("✔️ Abschließen", key=f"d_btn_{idx}", use_container_width=True):
                             st.session_state._global_bestell_store[idx]["Status"] = "Erledigt"
