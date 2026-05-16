@@ -135,7 +135,6 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
-# LS25 Standard-Werte: (Input je Zyklus, Output je Zyklus, Standard-Zyklen pro Monat, Rohstoff, Endprodukt)
 PROD_DATA = {
     "Getreidemühle: Weizen zu Mehl": (15, 11, 2400, "Weizen", "Mehl"),
     "Bäckerei: Brot": (18, 9, 1200, "Mehl", "Brot"),
@@ -145,7 +144,7 @@ PROD_DATA = {
 }
 
 # --- SIDEBAR FINANZ-MANAGEMENT ---
-st.sidebar.title("💰 Hof-Kasse (Server-Live)")
+st.sidebar.title("💰 Hof-Kasse (Live)")
 
 einn = st._global_finanzen["einnahmen"]
 ausg = st._global_finanzen["ausgaben"]
@@ -154,38 +153,18 @@ aktuelle_hof_kasse = st._global_finanzen["start_saldo"] + einn - ausg
 st.sidebar.metric("Aktueller Kontostand", f"{fmt_float(aktuelle_hof_kasse)} €")
 st.sidebar.write(f"📈 Gesamteinnahmen: {fmt_float(einn)} €")
 st.sidebar.write(f"📉 Gesamtausgaben: {fmt_float(ausg)} €")
-
 st.sidebar.markdown("---")
-st.sidebar.subheader("Manuelle Buchung / Startkapital")
-st._global_finanzen["start_saldo"] = st.sidebar.number_input("Start-Saldo (€):", min_value=0.0, value=float(st._global_finanzen.get("start_saldo", 0.0)), step=10000.0)
 
-m_typ = st.sidebar.radio("Buchungs-Typ:", ["Einnahme", "Ausgabe"])
-m_betrag = st.sidebar.number_input("Betrag (€):", min_value=0.0, value=1000.0)
-m_details = st.sidebar.text_input("Verwendungszweck:")
-m_monat = st.sidebar.selectbox("In-Game Monat:", LISTE_MONATE, key="sb_m")
-m_jahr = st.sidebar.number_input("In-Game Jahr:", min_value=1, value=1, key="sb_j")
+# Hauptmenü Navigation
+menu = st.sidebar.radio("Hauptmenü Navigation", [
+    "💰 Ernte & Felder", 
+    "📋 Rechnungen", 
+    "🛒 Material & Aufträge", 
+    "🏭 Produktionen",
+    "📖 Detailliertes Kassenbuch"
+])
 
-if st.sidebar.button("💾 Buchung speichern", use_container_width=True):
-    if m_details.strip():
-        in_game_datum_str = f"J{m_jahr}-{m_monat}"
-        if m_typ == "Einnahme":
-            st._global_finanzen["einnahmen"] += m_betrag
-        else:
-            st._global_finanzen["ausgaben"] += m_betrag
-        st._global_finanzen["historie"].append({
-            "In-Game Datum": in_game_datum_str, "Sort_Jahr": m_jahr, "Sort_Monat": m_monat,
-            "Typ": m_typ, "Nummer": "MANUELL", "Details": m_details, "Betrag (EUR)": m_betrag
-        })
-        st.rerun()
-
-if st.sidebar.button("🗑️ Kassenbuch komplett zurücksetzen", use_container_width=True):
-    st._global_finanzen = {"start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
-    st.rerun()
-
-st.sidebar.markdown("---")
-menu = st.sidebar.radio("Hauptmenü Navigation", ["💰 Ernte & Felder", "📋 Rechnungen", "🛒 Material & Aufträge", "🏭 Produktionen"])
-
-# --- SEITE 1 ---
+# --- SEITE 1: ERNTE & FELDER ---
 if menu == "💰 Ernte & Felder":
     st.title("🚜 Ernte-Kalkulator & Saatgut-Planer")
     
@@ -214,7 +193,7 @@ if menu == "💰 Ernte & Felder":
     erloes = (menge / 1000) * preis_pro_1000
     st.success(f"## 💵 Erwarteter Umsatz: {fmt_float(erloes)} EUR")
 
-# --- SEITE 2 ---
+# --- SEITE 2: RECHNUNGEN ---
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
     st.info(f"Nächste Rechnungsnummer auf dem Server: **#RE-{st._global_finanzen['naechste_rechnung_id']:04d}**")
@@ -290,7 +269,7 @@ elif menu == "📋 Rechnungen":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# --- SEITE 3 ---
+# --- SEITE 3: MATERIAL & AUFTRÄGE ---
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Materialeinkauf & Externe Dienstleistungen")
     
@@ -385,7 +364,7 @@ elif menu == "🛒 Material & Aufträge":
                 st._global_finanzen["naechste_bestellung_id"] += 1
                 st.rerun()
 
-# --- SEITE 4 (PRODUKTIONEN INKLUSIVE ZYKLEN-BERECHNUNG) ---
+# --- SEITE 4: PRODUKTIONEN ---
 elif menu == "🏭 Produktionen":
     st.title("🏭 Produktions-Kapazitäten & Zyklen-Planer")
     
@@ -411,7 +390,6 @@ elif menu == "🏭 Produktionen":
         anzahl_fabriken = c_f1.number_input("Anzahl aktiver Linien:", min_value=1, value=1, step=1)
         monate = c_f2.slider("Betriebsmonate pro Jahr:", 1, 12, 12)
         
-        # Dynamische Live-Vorschau der Zyklen vor dem Speichern
         gesamt_zyklen_monat = zyklen_pro_monat * anzahl_fabriken
         st.info(f"ℹ️ Ausgewähltes Rezept läuft mit **{fmt_int(zyklen_pro_monat)} Zyklen/Monat** je Linie "
                 f"(Gesamt: {fmt_int(gesamt_zyklen_monat)} Zyklen/Monat)")
@@ -419,17 +397,12 @@ elif menu == "🏭 Produktionen":
         aktueller_lagerbestand = st.number_input(f"📦 Aktueller Lagerbestand für '{in_name}' (Liter):", min_value=0, value=0, step=1000)
         
         if st.button("💾 Produktion für den Server speichern", type="primary", use_container_width=True):
-            # Berechnung basierend auf: Menge_je_Zyklus * Zyklen_pro_Monat * Monate * Linien
             st._global_hof_store.append({
-                "name": name_anzeige, 
-                "monate": monate, 
-                "linien": anzahl_fabriken,
-                "in_typ": in_name, 
-                "in_menge": custom_in_zyklus * zyklen_pro_monat * monate * anzahl_fabriken, 
-                "out_typ": out_name, 
-                "out_menge": custom_out_zyklus * zyklen_pro_monat * monate * anzahl_fabriken,
+                "name": name_anzeige, "monate": monate, "linien": anzahl_fabriken,
+                "in_typ": in_name, "in_menge": custom_in_zyklus * zyklen_pro_monat * monate * anzahl_fabriken, 
+                "out_typ": out_name, "out_menge": custom_out_zyklus * zyklen_pro_monat * monate * anzahl_fabriken,
                 "lager_ist": aktueller_lagerbestand,
-                "basis_monat_input": custom_in_zyklus * zyklen_pro_monat, # Input-Bedarf für 1 vollen Monat (1 Linie)
+                "basis_monat_input": custom_in_zyklus * zyklen_pro_monat,
                 "zyklen_pro_monat": zyklen_pro_monat
             })
             st.rerun()
@@ -441,11 +414,8 @@ elif menu == "🏭 Produktionen":
         tabelle_daten = []
         for idx, item in enumerate(st._global_hof_store):
             linien = item.get("linien", 1)
-            # Migration/Sicherheit: Falls zyklen_pro_monat fehlt, kalkulieren wir es aus der alten Basis
             zyklen_m = item.get("zyklen_pro_monat", 1)
             lager_ist = item.get("lager_ist", 0)
-            
-            # Monatlicher Gesamtverbrauch aller Linien dieser Fabrik
             monatlicher_verbrauch = item.get("basis_monat_input", 0) * linien
             
             if monatlicher_verbrauch > 0 and lager_ist > 0:
@@ -478,26 +448,81 @@ elif menu == "🏭 Produktionen":
             st._global_hof_store = []
             st.rerun()
 
-# --- FINANZ-HISTORIE DESKTOP-TABELLE ---
-if st._global_finanzen["historie"]:
-    st.write("---")
-    st.subheader("📊 In-Game Monatsberichte & Finanzhistorie")
-    df_raw = pd.DataFrame(st._global_finanzen["historie"])
+# --- SEITE 5: EXKLUSIVES KASSENBUCH (NEU!) ---
+elif menu == "📖 Detailliertes Kassenbuch":
+    st.title("📖 Detailliertes Kassenbuch & Monatsabschlüsse")
+    st.markdown("Hier verwaltest du das Startkapital, erstellst manuelle Serverbuchungen und siehst die geordneten Finanzberichte.")
     
-    df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if r["Typ"] == "Einnahme" else 0.0, axis=1)
-    df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if r["Typ"] == "Ausgabe" else 0.0, axis=1)
+    col_manuell, col_kapital = st.columns(2)
     
-    df_monat = df_raw.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
-        Einnahmen=("Einnahme_Wert", "sum"),
-        Ausgaben=("Ausgabe_Wert", "sum")
-    ).reset_index().sort_values(by=["Sort_Jahr", "Sort_Monat"])
-    
-    df_monat["Gewinn"] = df_monat["Einnahmen"] - df_monat["Ausgaben"]
-    
-    c_tab1, c_tab2 = st.columns(2)
-    with c_tab1:
-        st.markdown("**Zusammenfassung nach In-Game Monaten:**")
-        st.dataframe(df_monat[["In-Game Datum", "Einnahmen", "Ausgaben", "Gewinn"]], use_container_width=True, hide_index=True)
-    with c_tab2:
-        st.markdown("**Einzelbuchungen (Letzte zuerst):**")
-        st.dataframe(df_raw[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]].iloc[::-1], use_container_width=True, hide_index=True)
+    with col_manuell:
+        st.subheader("➕ Manuelle Buchung hinzufügen")
+        m_typ = st.radio("Buchungs-Typ:", ["Einnahme", "Ausgabe"], horizontal=True)
+        m_betrag = st.number_input("Betrag (€):", min_value=0.0, value=1000.0, step=100.0)
+        m_details = st.text_input("Verwendungszweck / Details:")
+        
+        c_bm, c_bj = st.columns(2)
+        m_monat = c_bm.selectbox("In-Game Monat:", LISTE_MONATE, key="kb_m")
+        m_jahr = c_bj.number_input("In-Game Jahr:", min_value=1, value=1, key="kb_j")
+        
+        if st.button("💾 Buchung speichern", use_container_width=True):
+            if m_details.strip():
+                in_game_datum_str = f"J{m_jahr}-{m_monat}"
+                if m_typ == "Einnahme":
+                    st._global_finanzen["einnahmen"] += m_betrag
+                else:
+                    st._global_finanzen["ausgaben"] += m_betrag
+                st._global_finanzen["historie"].append({
+                    "In-Game Datum": in_game_datum_str, "Sort_Jahr": m_jahr, "Sort_Monat": m_monat,
+                    "Typ": m_typ, "Nummer": "MANUELL", "Details": m_details, "Betrag (EUR)": m_betrag
+                })
+                st.success("Buchung erfolgreich gespeichert!")
+                st.rerun()
+            else:
+                st.error("Bitte gib einen Verwendungszweck an!")
+
+    with col_kapital:
+        st.subheader("⚙️ Server-Kontoeinstellungen")
+        st._global_finanzen["start_saldo"] = st.number_input(
+            "Startkapital des Hofes (€):", 
+            min_value=0.0, 
+            value=float(st._global_finanzen.get("start_saldo", 0.0)), 
+            step=10000.0
+        )
+        st.info("Das Ändern des Startkapitals berechnet den Kontostand in der Sidebar sofort neu.")
+        
+        st.write("---")
+        st.warning("⚠️ Gefahrenbereich")
+        if st.button("🗑️ Kassenbuch komplett zurücksetzen", use_container_width=True, type="secondary"):
+            st._global_finanzen = {
+                "start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0, 
+                "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []
+            }
+            st.rerun()
+
+    # Auswertung der Historie
+    if st._global_finanzen["historie"]:
+        st.write("---")
+        st.subheader("📊 In-Game Finanzberichte & Auswertungen")
+        
+        df_raw = pd.DataFrame(st._global_finanzen["historie"])
+        df_raw["Einnahme_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if r["Typ"] == "Einnahme" else 0.0, axis=1)
+        df_raw["Ausgabe_Wert"] = df_raw.apply(lambda r: r["Betrag (EUR)"] if r["Typ"] == "Ausgabe" else 0.0, axis=1)
+        
+        df_monat = df_raw.groupby(["In-Game Datum", "Sort_Jahr", "Sort_Monat"]).agg(
+            Einnahmen=("Einnahme_Wert", "sum"),
+            Ausgaben=("Ausgabe_Wert", "sum")
+        ).reset_index().sort_values(by=["Sort_Jahr", "Sort_Monat"])
+        
+        df_monat["Gewinn / Verlust"] = df_monat["Einnahmen"] - df_monat["Ausgaben"]
+        
+        c_tab1, c_tab2 = st.columns([2, 3])
+        with c_tab1:
+            st.markdown("**📈 Bilanz nach In-Game Monaten:**")
+            st.dataframe(df_monat[["In-Game Datum", "Einnahmen", "Ausgaben", "Gewinn / Verlust"]], use_container_width=True, hide_index=True)
+        with c_tab2:
+            st.markdown("**📋 Chronologische Einzelbuchungen (Neueste oben):**")
+            st.dataframe(df_raw[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]].iloc[::-1], use_container_width=True, hide_index=True)
+    else:
+        st.write("---")
+        st.info("ℹ️ Noch keine Einträge im Kassenbuch vorhanden. Erstelle Rechnungen oder nutze das manuelle Buchungsfeld.")
