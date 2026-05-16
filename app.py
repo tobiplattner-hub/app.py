@@ -32,7 +32,9 @@ def lade_gesamte_daten():
             "naechste_rechnung_id": 1,
             "naechste_bestellung_id": 1,
             "historie": []
-        }
+        },
+        # Fallback für die neuen Grenzwerte
+        "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000}
     }
     
     if os.path.exists(DATA_FILE):
@@ -54,7 +56,8 @@ def speichere_gesamte_daten():
         "bestell_store": st._global_bestell_store,
         "felder_store": st._global_felder_store,
         "fruchtarten": st._global_fruchtarten,
-        "finanzen": st._global_finanzen
+        "finanzen": st._global_finanzen,
+        "lager_grenzwerte": st._global_lager_grenzwerte
     }
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -71,6 +74,7 @@ if not hasattr(st, "_global_daten_geladen"):
     st._global_felder_store = gespeicherte_daten["felder_store"]
     st._global_fruchtarten = gespeicherte_daten["fruchtarten"]
     st._global_finanzen = gespeicherte_daten["finanzen"]
+    st._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000})
     st._global_daten_geladen = True
 
 LISTE_MONATE = [
@@ -264,7 +268,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.write(f"🌿 Herbizid: **{fmt_int(ha * st.session_state.global_verbrauch_herbi)} Liter**")
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU (INKLUSIVE LÖSCH-FUNKTION)
+# SEITE 2: MEINE FELDER & ANBAU
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
@@ -360,12 +364,10 @@ elif menu == "🚜 Meine Felder & Anbau":
                     speichere_gesamte_daten()
                     st.rerun()
                 
-                # --- HIER IST DER NEUE LÖSCH-BUTTON FÜR DAS JOWEILIGE FELD ---
                 if c_del.button(f"🗑️ Feld Löschen", key=f"del_f_{idx}", type="secondary"):
                     st._global_felder_store.pop(idx)
                     speichere_gesamte_daten()
                     st.rerun()
-                # -------------------------------------------------------------
 
 # ---------------------------------------------------------
 # SEITE 3: RECHNUNGEN
@@ -458,28 +460,96 @@ elif menu == "📋 Rechnungen":
         st.info("Noch keine Rechnungen im System vorhanden.")
 
 # ---------------------------------------------------------
-# SEITE 4: MATERIAL & AUFTRÄGE
+# SEITE 4: MATERIAL & AUFTRÄGE (INKLUSIVE GRENZWERTE & AUTOMATISCHER BESTELLUNG)
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Material & LU-Bestellungen")
     tab_lager, tab_auftraege = st.tabs(["📦 Silo & Einkauf", "📝 LU-Auftragsbuch"])
     
     with tab_lager:
-        st.subheader("⚙️ Manuelle Lager-Korrektur")
-        c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
-        v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]))
-        v_kalk = c_l2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]))
-        v_dueng = c_l3.number_input("Dünger (L):", min_value=0, value=int(st._global_lager_store["dueng"]))
-        v_herbi = c_l4.number_input("Herbizid (L):", min_value=0, value=int(st._global_lager_store["herbi"]))
-        v_diesel = c_l5.number_input("Diesel (L):", min_value=0, value=int(st._global_lager_store["diesel"]))
+        # --- ABSCHNITT 1: LAGER-GRENZWERTE PRÜFEN & ANZEIGEN ---
+        st.subheader("⚠️ Automatische Bestandsüberwachung")
         
-        if st.button("💾 Lagerbestände manuell überschreiben", use_container_width=True):
+        # Datengrundlage für Schleife und automatischen Einkauf vorbereiten
+        materialien = {
+            "saat": {"name": "🌱 Saatgut", "einheit": "L"},
+            "kalk": {"name": "⚪ Kalk", "einheit": "L"},
+            "dueng": {"name": "🧪 Dünger", "einheit": "L"},
+            "herbi": {"name": "🌿 Herbizid", "einheit": "L"},
+            "diesel": {"name": "⛽ Diesel", "einheit": "L"}
+        }
+        
+        warnungen_aktiv = False
+        
+        # Automatischer Bestellvorschlag via Alert-Boxen
+        for key, info in materialien.items():
+            aktueller_bestand = st._global_lager_store[key]
+            grenzwert = st._global_lager_grenzwerte.get(key, 1000)
+            
+            if aktueller_bestand < grenzwert:
+                warnungen_aktiv = True
+                fehlmenge = grenzwert - aktueller_bestand
+                # Vorschlag auf volle 1.000er runden für realistische Bestellmengen
+                empfohlene_bestellmenge = int(((fehlmenge + 999) // 1000) * 1000)
+                
+                col_warn, col_auto_buy = st.columns([3, 1])
+                with col_warn:
+                    st.warning(f"**Niedriger Bestand!** {info['name']} liegt mit **{fmt_int(aktueller_bestand)} {info['einheit']}** unter dem Grenzwert von {fmt_int(grenzwert)} {info['einheit']}.")
+                with col_auto_buy:
+                    # Dynamischer Schnellkauf-Button direkt in der Warnung
+                    if st.button(f"🛒 {info['name']} auffüllen (+{fmt_int(empfohlene_bestellmenge)}L)", key=f"auto_buy_{key}", use_container_width=True):
+                        st._global_lager_store[key] += empfohlene_bestellmenge
+                        st._global_finanzen["ausgaben"] += 0.0  # Kosten können manuell im Kassenbuch korrigiert werden oder hier auf 0 gelassen
+                        st._global_finanzen["historie"].append({
+                            "In-Game Datum": "Automatisch", "Sort_Jahr": 1, "Sort_Monat": "01 - Jan",
+                            "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
+                            "Details": f"Automatische Nachbestellung: {info['name']} (+{empfohlene_bestellmenge}L)", "Betrag (EUR)": 0.0
+                        })
+                        st._global_finanzen["naechste_bestellung_id"] += 1
+                        speichere_gesamte_daten()
+                        st.rerun()
+                        
+        if not warnungen_aktiv:
+            st.success("✅ Alle Bestände sind im grünen Bereich. Keine Nachbestellungen notwendig.")
+            
+        st.write("---")
+        
+        # --- ABSCHNITT 2: MANUELLE LAGER- & GRENZWERT-KORREKTUR ---
+        st.subheader("⚙️ Lagerbestände & Mindest-Grenzwerte konfigurieren")
+        
+        c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
+        
+        with c_l1:
+            st.markdown("**🌱 Saatgut**")
+            v_saat = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["saat"]), key="edit_saat")
+            g_saat = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("saat", 1000)), key="grenz_saat")
+        with c_l2:
+            st.markdown("**⚪ Kalk**")
+            v_kalk = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["kalk"]), key="edit_kalk")
+            g_kalk = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("kalk", 3000)), key="grenz_kalk")
+        with c_l3:
+            st.markdown("**🧪 Dünger**")
+            v_dueng = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["dueng"]), key="edit_dueng")
+            g_dueng = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("dueng", 1000)), key="grenz_dueng")
+        with c_l4:
+            st.markdown("**🌿 Herbizid**")
+            v_herbi = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["herbi"]), key="edit_herbi")
+            g_herbi = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("herbi", 500)), key="grenz_herbi")
+        with c_l5:
+            st.markdown("**⛽ Diesel**")
+            v_diesel = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["diesel"]), key="edit_diesel")
+            g_diesel = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("diesel", 1000)), key="grenz_diesel")
+        
+        if st.button("💾 Lagerbestände & Grenzwerte speichern", use_container_width=True, type="primary"):
             st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
+            st._global_lager_grenzwerte.update({"saat": g_saat, "kalk": g_kalk, "dueng": g_dueng, "herbi": g_herbi, "diesel": g_diesel})
             speichere_gesamte_daten()
             st.rerun()
                 
         st.write("---")
-        st.subheader("📉 Einkaufswagen für neues Material")
+        
+        # --- ABSCHNITT 3: TRADITIONELLER MANUELLER EINKAUF ---
+        st.subheader("📉 Reiner Material-Einkaufswagen")
         order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, step=1000)
         order_kalk = st.number_input("Kalk kaufen (L):", min_value=0, step=1000)
         order_dueng = st.number_input("Dünger kaufen (L):", min_value=0, step=1000)
@@ -489,7 +559,7 @@ elif menu == "🛒 Material & Aufträge":
         bs_monat = col_bm.selectbox("Kauf im Monat:", LISTE_MONATE, key="eink_m")
         bs_jahr = col_bj.number_input("Kauf im Jahr:", min_value=1, value=1, key="eink_j")
         
-        if st.button("💳 Einkauf bezahlen & ins Silo füllen", type="primary", use_container_width=True):
+        if st.button("💳 Einkauf bezahlen & ins Silo füllen", use_container_width=True):
             st._global_lager_store["saat"] += order_saat
             st._global_lager_store["kalk"] += order_kalk
             st._global_lager_store["dueng"] += order_dueng
