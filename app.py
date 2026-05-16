@@ -118,7 +118,7 @@ class ManagementPDF(FPDF):
             self.set_x(10)
             
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
+        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
         self.line(10, 27, 200, 27) 
         self.ln(15)
         
@@ -168,11 +168,9 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     return bytes(pdf.output())
 
 def generate_single_order_pdf(auftrag):
-    """Generiert ein sauberes PDF-Datenblatt für einen einzelnen LU-Auftrag/Bestellung"""
     pdf = ManagementPDF()
     pdf.add_page()
     
-    # Überschrift leicht nach rechts rücken
     pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 18)
     pdf.cell(0, 10, "LU-AUFTRAGSBELEG / BESTELLUNG", ln=True)
@@ -180,7 +178,6 @@ def generate_single_order_pdf(auftrag):
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(10)
     
-    # Alle Datenfelder auf X=65 setzen, damit links Platz fürs Logo bleibt
     pdf.set_x(65)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(50, 8, "Kunde / Hofname:", border=0)
@@ -632,13 +629,30 @@ elif menu == "🛒 Material & Aufträge":
                     st.write(f"**Preis:** {fmt_float(a.get('Preis', 0.0))} EUR")
                     st.write(f"**Beschreibung:** {a['Aufgabe']}")
                     
-                    c_st, c_pdf, c_del = st.columns(3)
+                    c_st, c_pay, c_pdf, c_del = st.columns(4)
                     
                     neuer_status = c_st.selectbox("Status ändern:", ["Offen ⏳", "In Arbeit 🚜", "Erledigt 🌾"], key=f"status_select_{idx}", index=["Offen ⏳", "In Arbeit 🚜", "Erledigt 🌾"].index(a['Status']))
                     if neuer_status != a['Status']:
                         st.session_state._global_bestell_store[idx]['Status'] = neuer_status
                         speichere_gesamte_daten()
                         st.rerun()
+                    
+                    # ÄNDERUNG: Direktes Abbuchen von Preisen/Kosten aus dem Auftragstagebuch
+                    auftrags_preis = a.get('Preis', 0.0)
+                    if auftrags_preis > 0:
+                        if c_pay.button("💳 Als Ausgabe abbuchen", key=f"pay_a_{idx}", use_container_width=True, type="primary"):
+                            st.session_state._global_finanzen["ausgaben"] += auftrags_preis
+                            st.session_state._global_finanzen["historie"].append({
+                                "In-Game Datum": a["Eingang"], "Sort_Jahr": int(a["Eingang"].split("-")[0].replace("J", "")), "Sort_Monat": a["Eingang"].split("-")[1] if "-" in a["Eingang"] else "01 - Jan",
+                                "Typ": "Ausgabe", "Nummer": f"#AB-{st.session_state._global_finanzen['naechste_bestellung_id']:04d}",
+                                "Details": f"LU-Auftrag/Kosten für: {a['Kunde']} ({a['Aufgabe']})", "Betrag (EUR)": auftrags_preis
+                            })
+                            st.session_state._global_finanzen["naechste_bestellung_id"] += 1
+                            speichere_gesamte_daten()
+                            st.success(f"{fmt_float(auftrags_preis)} € erfolgreich als Ausgabe gebucht!")
+                            st.rerun()
+                    else:
+                        c_pay.write("Keine Kosten")
                         
                     try:
                         single_pdf_bytes = generate_single_order_pdf(a)
@@ -653,7 +667,7 @@ elif menu == "🛒 Material & Aufträge":
                     except Exception as e:
                         c_pdf.error(f"Fehler: {e}")
                         
-                    if c_del.button("🗑️ Löschen", key=f"del_a_{idx}", use_container_width=True):
+                    if c_del.button("🗑_ Löschen", key=f"del_a_{idx}", use_container_width=True):
                         st.session_state._global_bestell_store.pop(idx)
                         speichere_gesamte_daten()
                         st.rerun()
@@ -692,6 +706,39 @@ elif menu == "📖 Detailliertes Kassenbuch":
             }
             speichere_gesamte_daten()
             st.rerun()
+            
+    # ÄNDERUNG: Neues Eingabeformular für manuelle Ein- und Ausgänge
+    st.write("---")
+    st.subheader("📝 Manuellen Buchungssatz erstellen")
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1:
+        m_typ = st.selectbox("Buchungs-Typ:", ["Einnahme", "Ausgabe"])
+        m_betrag = st.number_input("Betrag in EUR (€):", min_value=0.01, step=10.0, value=100.0)
+    with col_m2:
+        m_monat = st.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
+        m_jahr = st.number_input("In-Game Jahr:", min_value=1, value=1, key="man_j")
+    with col_m3:
+        m_details = st.text_input("Buchungstext / Details:", placeholder="z.B. Getreideverkauf, Helferlohn...")
+    
+    if st.button("💾 Manuelle Buchung durchführen", type="primary", use_container_width=True):
+        full_date = f"J{m_jahr}-{m_monat}"
+        if m_typ == "Einnahme":
+            st.session_state._global_finanzen["einnahmen"] += m_betrag
+            b_id = f"#MRE-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}"
+            st.session_state._global_finanzen["naechste_rechnung_id"] += 1
+        else:
+            st.session_state._global_finanzen["ausgaben"] += m_betrag
+            b_id = f"#MBS-{st.session_state._global_finanzen['naechste_bestellung_id']:04d}"
+            st.session_state._global_finanzen["naechste_bestellung_id"] += 1
+            
+        st.session_state._global_finanzen["historie"].append({
+            "In-Game Datum": full_date, "Sort_Jahr": int(m_jahr), "Sort_Monat": m_monat,
+            "Typ": m_typ, "Nummer": b_id, "Details": m_details if m_details.strip() else "Manuelle Buchung",
+            "Betrag (EUR)": m_betrag
+        })
+        speichere_gesamte_daten()
+        st.success("Buchung erfolgreich erfasst!")
+        st.rerun()
             
     st.write("---")
     st.subheader("📊 Kontobewegungen (Chronologische Buchungen)")
