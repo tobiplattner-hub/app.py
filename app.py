@@ -19,7 +19,7 @@ if not hasattr(st, "_global_fruchtarten"):
     st._global_fruchtarten = ["Weizen", "Gerste", "Hafer", "Raps", "Sonnenblumen", "Sojabohnen", "Mais", "Kartoffeln", "Zuckerrüben", "Gras", "Luzerne", "Spinat"]
 
 if not hasattr(st, "_global_finanzen"):
-    st._global_finanzen = {"start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
+    st._global_finanzen = {"start_saldo": 250000.0, "einnahmen": 0.0, "ausgaben": 0.0, "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []}
 
 LISTE_MONATE = ["01 - Jan", "02 - Feb", "03 - Mrz", "04 - Apr", "05 - Mai", "06 - Jun", "07 - Jul", "08 - Aug", "09 - Sep", "10 - Okt", "11 - Nov", "12 - Dez"]
 
@@ -33,7 +33,56 @@ def safe_str(text):
 def fmt_int(wert): return f"{wert:,.0f}".replace(",", ".")
 def fmt_float(wert): return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# --- DATA LOADING ---
+# --- PDF GENERATOR ---
+class ManagementPDF(FPDF):
+    def header(self):
+        self.set_font("Helvetica", "B", 16)
+        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
+        self.line(10, 20, 200, 20)
+        self.ln(15)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.cell(0, 10, f"Seite {self.page_no()}", align="C")
+
+def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum):
+    pdf = ManagementPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=11)
+    pdf.set_x(130)
+    pdf.multi_cell(65, 6, f"In-Game Datum: {ingame_datum}\nRechnung-Nr: #RE-{rechnungs_id:04d}", align="R")
+    pdf.ln(15)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, "Empfaenger:", ln=True)
+    pdf.cell(0, 6, safe_str(kunden_name), ln=True)
+    pdf.ln(20)
+    pdf.set_x(65)
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.cell(0, 15, "RECHNUNG", ln=True)
+    pdf.ln(10)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    summe = 0
+    for p in posten:
+        pdf.set_font("Helvetica", size=11)
+        pdf.cell(80, 10, safe_str(p['name']), border=0)
+        pdf.cell(30, 10, f"{p['menge']} {p['einheit']}", border=0, align="C")
+        pdf.cell(40, 10, f"{fmt_float(p['preis'])} EUR", border=0, align="R")
+        pdf.cell(40, 10, f"{fmt_float(p['gesamt'])} EUR", border=0, align="R")
+        pdf.ln(10)
+        summe += p['gesamt']
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    total = summe - (summe * (rabatt_prozent / 100))
+    pdf.cell(150, 6, "Zwischensumme:", align="R")
+    pdf.cell(40, 6, f"{fmt_float(summe)} EUR", align="R", ln=True)
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
+    pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
+    return pdf.output()
+
+# --- DATEN-LOAD ---
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
 PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
 KUNDEN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=568043650"
@@ -49,9 +98,17 @@ def load_data(url):
 df_preise = load_data(PREIS_URL)
 preis_dict = dict(zip(df_preise['Geraet'], df_preise['Preis'])) if not df_preise.empty else {}
 df_kunden = load_data(KUNDEN_URL)
-aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.empty else ["Mein eigener Hof"]
+aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.empty else ["Haupt-Hof", "Hof Alpha", "Lohnbetrieb West"]
 
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
+
+# --- IN-GAME DATUM CONTROLLER ---
+col_time1, col_time2 = st.columns(2)
+with col_time1:
+    ig_jahr = st.number_input("In-Game Jahr:", min_value=1, max_value=99, value=1, step=1)
+with col_time2:
+    ig_monat = st.selectbox("In-Game Monat:", LISTE_MONATE, index=4)
+formatiertes_datum = f"Jahr {ig_jahr}, {ig_monat[5:]}"
 
 # --- SIDEBAR LIVE-ANZEIGE ---
 st.sidebar.title("💰 Hof-Kasse (Live)")
@@ -65,6 +122,8 @@ st.sidebar.title("📦 Live-Lagerbestand")
 st.sidebar.write(f"🌱 Saatgut: **{fmt_int(st._global_lager_store['saat'])} L**")
 st.sidebar.write(f"⚪ Kalk: **{fmt_int(st._global_lager_store['kalk'])} L**")
 st.sidebar.write(f"🧪 Dünger: **{fmt_int(st._global_lager_store['dueng'])} L**")
+st.sidebar.write(f"🌿 Herbizid: **{fmt_int(st._global_lager_store['herbi'])} L**")
+st.sidebar.write(f"⛽ Diesel: **{fmt_int(st._global_lager_store['diesel'])} L**")
 
 menu = st.sidebar.radio("Navigation", [
     "💰 Ernte & Verbrauchsraten", "🚜 Meine Felder & Anbau",
@@ -73,36 +132,130 @@ menu = st.sidebar.radio("Navigation", [
 
 # --- MENÜ: ERNTE & VERBRAUCHSRATEN ---
 if menu == "💰 Ernte & Verbrauchsraten":
-    st.title("🚜 Ernte-Kalkulator & Globale Raten")
-    st.info("Hier siehst du die aktuellen globalen Logistik-Raten.")
+    st.title("🌾 Ernte-Kalkulator & Preisliste")
     
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        st.subheader("🌾 Ertragsfaktoren")
-        st.write("Standard-Raten für Getreide und Feldfrüchte sind aktiv.")
-    with col_r2:
-        st.subheader("📈 Preislisten-Übersicht")
-        if not df_preise.empty:
-            st.dataframe(df_preise, use_container_width=True, hide_index=True)
-        else:
-            st.warning("Keine externen Preislisten-Daten geladen.")
+    c_e1, c_e2, c_e3 = st.columns(3)
+    f_fläche = c_e1.number_input("Feldfläche in Hektar (ha):", min_value=0.1, value=2.5)
+    f_frucht = c_e2.selectbox("Fruchtart:", st._global_fruchtarten)
+    f_ertrag_pro_ha = c_e3.number_input("Erwarteter Ertrag pro ha (Liter):", min_value=100, value=8500)
+    
+    gesamtertrag_calc = f_fläche * f_ertrag_pro_ha
+    st.metric(f"Berechnete Gesamternte ({f_frucht})", f"{fmt_int(gesamtertrag_calc)} Liter")
+    
+    st.markdown("---")
+    st.subheader("📈 Aktuelle LU-Dienstleistungspreise (Google Sheets)")
+    if not df_preise.empty:
+        st.dataframe(df_preise, use_container_width=True, hide_index=True)
+    else:
+        st.warning("Keine Preisdaten verfügbar.")
 
 # --- MENÜ: MEINE FELDER & ANBAU ---
 elif menu == "🚜 Meine Felder & Anbau":
-    st.title("🚜 Feld-Verwaltung")
-    st.write("Verwalte hier deine aktiven Felder und Fruchtfolgen.")
+    st.title("🚜 Feld-Verwaltung & Anbauplanung")
+    
+    col_f1, col_f2 = st.columns([1, 2])
+    with col_f1:
+        st.subheader("📍 Neues Feld erfassen")
+        f_nr = st.number_input("Feldnummer:", min_value=1, value=12)
+        f_groesse = st.number_input("Größe (ha):", min_value=0.0, value=3.4)
+        f_akt_frucht = st.selectbox("Aktuelle Frucht:", st._global_fruchtarten)
+        
+        if st.button("➕ Feld hinzufügen", use_container_width=True):
+            st._global_felder_store.append({"Feld": f_nr, "Größe (ha)": f_groesse, "Frucht": f_akt_frucht})
+            st.success(f"Feld {f_nr} gespeichert!")
+            st.rerun()
+            
+    with col_f2:
+        st.subheader("📋 Feld-Kataster")
+        if st._global_felder_store:
+            df_fel = pd.DataFrame(st._global_felder_store)
+            st.dataframe(df_fel, use_container_width=True, hide_index=True)
+            if st.button("🗑️ Alle Felder löschen"):
+                st._global_felder_store = []
+                st.rerun()
+        else:
+            st.info("Noch keine Felder registriert.")
 
 # --- MENÜ: RECHNUNGEN ---
 elif menu == "📋 Rechnungen":
-    st.title("📋 Dienstleistungs-Rechnungen")
-    st.info("Hier können Rechnungen erstellt und verwaltet werden.")
+    st.title("📋 Dienstleistungs-Rechnungen erstellen")
+    
+    c_r1, c_r2 = st.columns(2)
+    kunde_wähl = c_r1.selectbox("Kunde / Ziel-Hof:", aktuelle_kunden)
+    rabatt = c_r2.slider("Rabatt (%)", 0, 50, 0)
+    
+    st.markdown("### 🛒 Posten hinzufügen")
+    c_p1, c_p2, c_p3 = st.columns(3)
+    arbeit = c_p1.selectbox("Arbeitsschritt / Gerät:", list(preis_dict.keys()) if preis_dict else ["Dreschen", "Säen", "Grubbern"])
+    menge = c_p2.number_input("Menge (z.B. ha oder Std):", min_value=0.1, value=1.0)
+    einheit = c_p3.selectbox("Einheit:", ["ha", "Std", "Fuhren", "L"])
+    
+    preis_stueck = preis_dict.get(arbeit, 50.0)
+    st.write(f"Stückpreis laut Liste: **{fmt_float(preis_stueck)} €**")
+    
+    if st.button("➕ Posten zur Rechnung hinzufügen"):
+        st.session_state.rechnungs_posten.append({
+            "name": arbeit, "menge": menge, "einheit": einheit, "preis": preis_stueck, "gesamt": preis_stueck * menge
+        })
+        
+    if st.session_state.rechnungs_posten:
+        st.markdown("### Aktuelle Rechnungsaufstellung")
+        df_posten = pd.DataFrame(st.session_state.rechnungs_posten)
+        st.dataframe(df_posten, use_container_width=True)
+        
+        summe = df_posten["gesamt"].sum()
+        endbetrag = summe - (summe * (rabatt / 100))
+        
+        st.write(f"**Gesamtsumme (inkl. Rabatt): {fmt_float(endbetrag)} €**")
+        
+        if st.button("💾 Rechnung finalisieren & buchen", type="primary"):
+            r_id = st._global_finanzen["naechste_rechnung_id"]
+            st._global_finanzen["einnahmen"] += endbetrag
+            st._global_finanzen["historie"].append({
+                "In-Game Datum": formatiertes_datum, "Sort_Jahr": ig_jahr, "Sort_Monat": ig_monat[:2],
+                "Typ": "Einnahme", "Nummer": f"#RE-{r_id:04d}", "Details": f"Rechnung an {kunde_wähl}", "Betrag (EUR)": endbetrag
+            })
+            
+            # PDF Erzeugen
+            pdf_data = generate_invoice_pdf(kunde_wähl, st.session_state.rechnungs_posten, rabatt, r_id, formatiertes_datum)
+            st.download_button("📥 PDF-Rechnung herunterladen", data=pdf_data, file_name=f"Rechnung_RE-{r_id}.pdf", mime="application/pdf")
+            
+            st._global_finanzen["naechste_rechnung_id"] += 1
+            st.session_state.rechnungs_posten = []
+            st.success("Rechnung erfolgreich verbucht!")
 
 # --- MENÜ: MATERIAL & AUFTRÄGE ---
 elif menu == "🛒 Material & Aufträge":
-    st.title("🛒 Logistik & Aufträge")
-    st.write("Bestellungen für Saatgut, Kalk und Dünger.")
+    st.title("🛒 Wareneinkauf & Logistik")
+    
+    st.subheader("🏪 Saatgut & Düngemittel einkaufen")
+    c_m1, c_m2 = st.columns(2)
+    ware = c_m1.selectbox("Ware:", ["Saatgut", "Kalk", "Dünger", "Herbizid", "Diesel"])
+    menge_kauf = c_m2.number_input("Menge in Liter (L):", min_value=100, value=1000, step=100)
+    
+    preise_logistik = {"Saatgut": 0.90, "Kalk": 0.15, "Dünger": 0.60, "Herbizid": 1.20, "Diesel": 1.40}
+    kosten_log = menge_kauf * preise_logistik[ware]
+    
+    st.write(f"Gesamtkosten Einkauf: **{fmt_float(kosten_log)} €**")
+    
+    if st.button("🛒 Kostenpflichtig bestellen & einlagern", type="primary"):
+        if aktuelle_hof_kasse >= kosten_log:
+            st._global_finanzen["ausgaben"] += kosten_log
+            
+            # Lagerzuordnung
+            key_map = {"Saatgut": "saat", "Kalk": "kalk", "Dünger": "dueng", "Herbizid": "herbi", "Diesel": "diesel"}
+            st._global_lager_store[key_map[ware]] += menge_kauf
+            
+            st._global_finanzen["historie"].append({
+                "In-Game Datum": formatiertes_datum, "Sort_Jahr": ig_jahr, "Sort_Monat": ig_monat[:2],
+                "Typ": "Ausgabe", "Nummer": "#LOG-EINK", "Details": f"{menge_kauf}L {ware} gekauft", "Betrag (EUR)": kosten_log
+            })
+            st.success(f"{menge_kauf}L {ware} wurden ins Hof-Lager eingebucht!")
+            st.rerun()
+        else:
+            st.error("Zu wenig Geld auf dem Konto!")
 
-# --- MENÜ: PRODUKTIONEN (JETZT GEGEN KEYERROR ABGESICHERT) ---
+# --- MENÜ: PRODUKTIONEN ---
 elif menu == "🏭 Produktionen":
     st.title("🏭 Interaktive Fabrik- & Lagerverwaltung")
     st.markdown("Registriere Fabriken, bearbeite Input/Output-Lager manuell oder starte Zyklen-Simulationen!")
@@ -137,7 +290,6 @@ elif menu == "🏭 Produktionen":
     with col_summary:
         st.subheader("📊 Registrierte Wirtschaftsobjekte")
         
-        # SPERRE GEGEN KEYERROR: Falls der Speicher leer ist, fangen wir das hier sauber ab!
         if st._global_fabriken_store:
             df_f = pd.DataFrame(st._global_fabriken_store)
         else:
@@ -200,7 +352,7 @@ elif menu == "🏭 Produktionen":
                         
                         st._global_finanzen["ausgaben"] += ges_kosten
                         st._global_finanzen["historie"].append({
-                            "In-Game Datum": "Simulation", "Sort_Jahr": 1, "Sort_Monat": "01",
+                            "In-Game Datum": formatiertes_datum, "Sort_Jahr": ig_jahr, "Sort_Monat": ig_monat[:2],
                             "Typ": "Ausgabe", "Nummer": "#FAB-PROD",
                             "Details": f"Betriebskosten für {fab['Name']} ({anzahl_zyklen} Zyklen)", "Betrag (EUR)": ges_kosten
                         })
@@ -211,7 +363,7 @@ elif menu == "🏭 Produktionen":
 
 # --- MENÜ: KASSENBUCH ---
 elif menu == "📖 Kassenbuch":
-    st.title("📖 Kassenbuch")
+    st.title("📖 Kassenbuch & Finanzhistorie")
     if st._global_finanzen["historie"]:
         st.dataframe(pd.DataFrame(st._global_finanzen["historie"])[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
     else:
