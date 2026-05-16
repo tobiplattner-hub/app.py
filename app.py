@@ -503,12 +503,11 @@ elif menu == "🏭 Produktionen":
     st.info("Hier registrierte Fabriken simulieren Jahresumsätze.")
 
 # ---------------------------------------------------------
-# SEITE 6: DETEILLIERTES KASSENBUCH (JETZT MIT MANUELLER KORREKTUR)
+# SEITE 6: DETEILLIERTES KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch & Manuelle Buchungen")
     
-    # NEUER ABSCHNITT: MANUELLE KASSEN-STEUERUNG
     with st.expander("➕ Manuelle Buchung / Kassen-Korrektur vornehmen", expanded=False):
         st.subheader("Trage hier Beträge direkt in die Kasse ein")
         
@@ -518,4 +517,53 @@ elif menu == "📖 Detailliertes Kassenbuch":
         man_details = col_kb3.text_input("Zweck / Beschreibung:", placeholder="z.B. LS-Kredit, Admin-Korrektur...")
         
         col_kb_m, col_kb_j = st.columns(2)
-        man_monat = col_kb_m.selectbox("In
+        man_monat = col_kb_m.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
+        man_jahr = col_kb_j.number_input("In-Game Jahr:", min_value=1, value=1, key="man_j")
+        
+        if st.button("🚀 Buchung jetzt ausführen", type="primary", use_container_width=True):
+            f_date = f"J{man_jahr}-{man_monat}"
+            
+            if man_typ == "Manuelle Einnahme ➕":
+                st._global_finanzen["einnahmen"] += man_betrag
+                st._global_finanzen["historie"].append({
+                    "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
+                    "Typ": "Einnahme", "Nummer": "#MAN-EIN",
+                    "Details": f"Manuell: {man_details}", "Betrag (EUR)": man_betrag
+                })
+                st.success(f"{fmt_float(man_betrag)} € erfolgreich als Einnahme gebucht!")
+                
+            elif man_typ == "Manuelle Ausgabe ➖":
+                st._global_finanzen["ausgaben"] += man_betrag
+                st._global_finanzen["historie"].append({
+                    "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
+                    "Typ": "Ausgabe", "Nummer": "#MAN-AUS",
+                    "Details": f"Manuell: {man_details}", "Betrag (EUR)": man_betrag
+                })
+                st.success(f"{fmt_float(man_betrag)} € erfolgreich als Ausgabe gebucht!")
+                
+            elif man_typ == "Startkontostand überschreiben ⚙️":
+                st._global_finanzen["start_saldo"] = man_betrag
+                st._global_finanzen["historie"].append({
+                    "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
+                    "Typ": "Korrektur", "Nummer": "#SALDO-RESET",
+                    "Details": f"Basis-Konto angepasst: {man_details}", "Betrag (EUR)": man_betrag
+                })
+                st.success(f"Der Basis-Umsatz wurde auf {fmt_float(man_betrag)} € gesetzt!")
+                
+            speichere_gesamte_daten()
+            st.rerun()
+
+    st.write("---")
+    st.subheader("📜 Bisherige Buchungshistorie")
+    if st._global_finanzen["historie"]:
+        st.dataframe(pd.DataFrame(st._global_finanzen["historie"])[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+        
+        if st.button("🚨 Gesamtes Kassenbuch zurücksetzen (Löschen)", type="secondary", use_container_width=True):
+            st._global_finanzen["start_saldo"] = 0.0
+            st._global_finanzen["einnahmen"] = 0.0
+            st._global_finanzen["ausgaben"] = 0.0
+            st._global_finanzen["historie"] = []
+            speichere_gesamte_daten()
+            st.rerun()
+    else:
+        st.info("Keine Buchungen vorhanden.")
