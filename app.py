@@ -33,7 +33,6 @@ def lade_gesamte_daten():
             "naechste_bestellung_id": 1,
             "historie": []
         },
-        # Fallback für die neuen Grenzwerte
         "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000}
     }
     
@@ -51,13 +50,13 @@ def lade_gesamte_daten():
 
 def speichere_gesamte_daten():
     daten_zum_speichern = {
-        "hof_store": st._global_hof_store,
-        "lager_store": st._global_lager_store,
-        "bestell_store": st._global_bestell_store,
-        "felder_store": st._global_felder_store,
-        "fruchtarten": st._global_fruchtarten,
-        "finanzen": st._global_finanzen,
-        "lager_grenzwerte": st._global_lager_grenzwerte
+        "hof_store": st.session_state._global_hof_store,
+        "lager_store": st.session_state._global_lager_store,
+        "bestell_store": st.session_state._global_bestell_store,
+        "felder_store": st.session_state._global_felder_store,
+        "fruchtarten": st.session_state._global_fruchtarten,
+        "finanzen": st.session_state._global_finanzen,
+        "lager_grenzwerte": st.session_state._global_lager_grenzwerte
     }
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -65,17 +64,17 @@ def speichere_gesamte_daten():
     except Exception as e:
         st.error(f"Fehler beim Sichern: {e}")
 
-# Initialisierung
-if not hasattr(st, "_global_daten_geladen"):
+# Initialisierung über session_state (Sicher vor Attribut-Fehlern)
+if "_global_daten_geladen" not in st.session_state:
     gespeicherte_daten = lade_gesamte_daten()
-    st._global_hof_store = gespeicherte_daten["hof_store"]
-    st._global_lager_store = gespeicherte_daten["lager_store"]
-    st._global_bestell_store = gespeicherte_daten["bestell_store"]
-    st._global_felder_store = gespeicherte_daten["felder_store"]
-    st._global_fruchtarten = gespeicherte_daten["fruchtarten"]
-    st._global_finanzen = gespeicherte_daten["finanzen"]
-    st._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000})
-    st._global_daten_geladen = True
+    st.session_state._global_hof_store = gespeicherte_daten["hof_store"]
+    st.session_state._global_lager_store = gespeicherte_daten["lager_store"]
+    st.session_state._global_bestell_store = gespeicherte_daten["bestell_store"]
+    st.session_state._global_felder_store = gespeicherte_daten["felder_store"]
+    st.session_state._global_fruchtarten = gespeicherte_daten["fruchtarten"]
+    st.session_state._global_finanzen = gespeicherte_daten["finanzen"]
+    st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000})
+    st.session_state._global_daten_geladen = True
 
 LISTE_MONATE = [
     "01 - Jan", "02 - Feb", "03 - Mrz", "04 - Apr", 
@@ -222,17 +221,17 @@ if "global_verbrauch_herbi" not in st.session_state: st.session_state.global_ver
 # SIDEBAR LIVE-ANZEIGE
 # ---------------------------------------------------------
 st.sidebar.title("💰 Hof-Kasse (Live)")
-einn = st._global_finanzen["einnahmen"]
-ausg = st._global_finanzen["ausgaben"]
-aktuelle_hof_kasse = st._global_finanzen["start_saldo"] + einn - ausg
+einn = st.session_state._global_finanzen["einnahmen"]
+ausg = st.session_state._global_finanzen["ausgaben"]
+aktuelle_hof_kasse = st.session_state._global_finanzen["start_saldo"] + einn - ausg
 st.sidebar.metric("Aktueller Kontostand", f"{fmt_float(aktuelle_hof_kasse)} €")
 
 st.sidebar.markdown("---")
 st.sidebar.title("📦 Live-Lagerbestand")
-st.sidebar.write(f"🌱 Saatgut: **{fmt_int(st._global_lager_store['saat'])} L**")
-st.sidebar.write(f"⚪ Kalk: **{fmt_int(st._global_lager_store['kalk'])} L**")
-st.sidebar.write(f"🧪 Dünger: **{fmt_int(st._global_lager_store['dueng'])} L**")
-st.sidebar.write(f"🌿 Herbizid: **{fmt_int(st._global_lager_store['herbi'])} L**")
+st.sidebar.write(f"🌱 Saatgut: **{fmt_int(st.session_state._global_lager_store['saat'])} L**")
+st.sidebar.write(f"⚪ Kalk: **{fmt_int(st.session_state._global_lager_store['kalk'])} L**")
+st.sidebar.write(f"🧪 Dünger: **{fmt_int(st.session_state._global_lager_store['dueng'])} L**")
+st.sidebar.write(f"🌿 Herbizid: **{fmt_int(st.session_state._global_lager_store['herbi'])} L**")
 
 st.sidebar.markdown("---")
 menu = st.sidebar.radio("Hauptmenü Navigation", [
@@ -278,7 +277,7 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.subheader("📝 Neues Feld registrieren")
         f_nummer = st.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
         f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
-        f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st._global_fruchtarten)
+        f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st.session_state._global_fruchtarten)
         
         st.markdown("##### ⚙️ Spezifische Verbrauchsraten für dieses Feld (L/ha):")
         f_rate_kalk = st.number_input("Kalk-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_kalk))
@@ -287,18 +286,18 @@ elif menu == "🚜 Meine Felder & Anbau":
 
         neue_frucht = st.text_input("➕ Feldfrüchte erweitern:", placeholder="Hier eintippen...")
         if st.button("✨ Fruchtart registrieren"):
-            if neue_frucht.strip() and neue_frucht.strip() not in st._global_fruchtarten:
-                st._global_fruchtarten.append(neue_frucht.strip())
-                st._global_fruchtarten.sort()
+            if neue_frucht.strip() and neue_frucht.strip() not in st.session_state._global_fruchtarten:
+                st.session_state._global_fruchtarten.append(neue_frucht.strip())
+                st.session_state._global_fruchtarten.sort()
                 speichere_gesamte_daten()
                 st.rerun()
         
         if st.button("💾 Feld in Datenbank eintragen", type="primary", use_container_width=True):
             if f_nummer.strip():
                 existiert = False
-                for idx, feld in enumerate(st._global_felder_store):
+                for idx, feld in enumerate(st.session_state._global_felder_store):
                     if feld["nummer"].lower() == f_nummer.strip().lower():
-                        st._global_felder_store[idx] = {
+                        st.session_state._global_felder_store[idx] = {
                             "nummer": f_nummer.strip(), "groesse": f_groesse, "frucht": f_frucht,
                             "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0,
                             "rate_kalk": f_rate_kalk, "rate_saat": f_rate_saat, "rate_dueng": f_rate_dueng
@@ -306,7 +305,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                         existiert = True
                         break
                 if not existiert:
-                    st._global_felder_store.append({
+                    st.session_state._global_felder_store.append({
                         "nummer": f_nummer.strip(), "groesse": f_groesse, "frucht": f_frucht,
                         "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0,
                         "rate_kalk": f_rate_kalk, "rate_saat": f_rate_saat, "rate_dueng": f_rate_dueng
@@ -316,16 +315,16 @@ elif menu == "🚜 Meine Felder & Anbau":
 
     with col_feld_stats:
         st.subheader("📊 Betriebszusammenfassung")
-        if st._global_felder_store:
-            ges_ha = sum(f["groesse"] for f in st._global_felder_store)
+        if st.session_state._global_felder_store:
+            ges_ha = sum(f["groesse"] for f in st.session_state._global_felder_store)
             st.metric("Gesamtfläche unter Bewirtschaftung", f"{fmt_float(ges_ha)} ha")
         else:
             st.info("Noch keine Felder registriert.")
 
-    if st._global_felder_store:
+    if st.session_state._global_felder_store:
         st.write("---")
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
-        for idx, f in enumerate(st._global_felder_store):
+        for idx, f in enumerate(st.session_state._global_felder_store):
             aktuelle_frucht = f.get("frucht", "Keine Angabe")
             
             r_kalk = f.get("rate_kalk", st.session_state.global_verbrauch_kalk)
@@ -342,30 +341,30 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L (Rate: {r_kalk})\n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L (Rate: {r_saat})\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L (Rate: {r_dueng})")
                 
                 if c_act1.button(f"⚪ Kalken ({fmt_int(bedarf_kalk)}L)", key=f"kalk_{idx}"):
-                    if st._global_lager_store["kalk"] >= bedarf_kalk:
-                        st._global_lager_store["kalk"] -= bedarf_kalk
-                        st._global_felder_store[idx]["kalk_verbraucht"] += bedarf_kalk
+                    if st.session_state._global_lager_store["kalk"] >= bedarf_kalk:
+                        st.session_state._global_lager_store["kalk"] -= bedarf_kalk
+                        st.session_state._global_felder_store[idx]["kalk_verbraucht"] += bedarf_kalk
                         speichere_gesamte_daten()
                         st.rerun()
                 if c_act2.button(f"🌱 Säen ({fmt_int(bedarf_saat)}L)", key=f"saat_{idx}"):
-                    if st._global_lager_store["saat"] >= bedarf_saat:
-                        st._global_lager_store["saat"] -= bedarf_saat
-                        st._global_felder_store[idx]["saat_verbraucht"] += bedarf_saat
+                    if st.session_state._global_lager_store["saat"] >= bedarf_saat:
+                        st.session_state._global_lager_store["saat"] -= bedarf_saat
+                        st.session_state._global_felder_store[idx]["saat_verbraucht"] += bedarf_saat
                         speichere_gesamte_daten()
                         st.rerun()
                 if c_act3.button(f"🧪 Düngen ({fmt_int(bedarf_dueng)}L)", key=f"dueng_{idx}"):
-                    if st._global_lager_store["dueng"] >= bedarf_dueng:
-                        st._global_lager_store["dueng"] -= bedarf_dueng
-                        st._global_felder_store[idx]["dueng_verbraucht"] += bedarf_dueng
+                    if st.session_state._global_lager_store["dueng"] >= bedarf_dueng:
+                        st.session_state._global_lager_store["dueng"] -= bedarf_dueng
+                        st.session_state._global_felder_store[idx]["dueng_verbraucht"] += bedarf_dueng
                         speichere_gesamte_daten()
                         st.rerun()
                 if c_act4.button(f"🔄 Reset Feld", key=f"res_{idx}"):
-                    st._global_felder_store[idx] = {k: 0.0 if "verbraucht" in k else v for k, v in st._global_felder_store[idx].items()}
+                    st.session_state._global_felder_store[idx] = {k: 0.0 if "verbraucht" in k else v for k, v in st.session_state._global_felder_store[idx].items()}
                     speichere_gesamte_daten()
                     st.rerun()
                 
                 if c_del.button(f"🗑️ Feld Löschen", key=f"del_f_{idx}", type="secondary"):
-                    st._global_felder_store.pop(idx)
+                    st.session_state._global_felder_store.pop(idx)
                     speichere_gesamte_daten()
                     st.rerun()
 
@@ -374,7 +373,7 @@ elif menu == "🚜 Meine Felder & Anbau":
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
-    st.info(f"Nächste Rechnungsnummer: #RE-{st._global_finanzen['naechste_rechnung_id']:04d}")
+    st.info(f"Nächste Rechnungsnummer: #RE-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}")
 
     col_eingabe, col_liste = st.columns([1, 1])
     with col_eingabe:
@@ -422,26 +421,26 @@ elif menu == "📋 Rechnungen":
         col_b1, col_b2 = st.columns(2)
         
         try:
-            pdf_bytes = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
+            pdf_bytes = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st.session_state._global_finanzen["naechste_rechnung_id"], full_ingame_date)
             col_b1.download_button("📥 PDF laden", data=pdf_bytes, file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
         except Exception as e:
             col_b1.error(f"PDF-Vorschau Fehler: {e}")
         
         if col_b2.button("💾 Als Einnahme buchen", type="primary", use_container_width=True):
-            st._global_finanzen["einnahmen"] += total
-            st._global_finanzen["historie"].append({
+            st.session_state._global_finanzen["einnahmen"] += total
+            st.session_state._global_finanzen["historie"].append({
                 "In-Game Datum": full_ingame_date, "Sort_Jahr": int(re_jahr), "Sort_Monat": re_monat,
-                "Typ": "Einnahme", "Nummer": f"#RE-{st._global_finanzen['naechste_rechnung_id']:04d}",
+                "Typ": "Einnahme", "Nummer": f"#RE-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}",
                 "Details": f"Kunde: {k_name}", "Betrag (EUR)": total
             })
-            st._global_finanzen["naechste_rechnung_id"] += 1
+            st.session_state._global_finanzen["naechste_rechnung_id"] += 1
             st.session_state.rechnungs_posten = []
             speichere_gesamte_daten()
             st.rerun()
 
     st.write("---")
     st.subheader("📑 Ausgestellte Rechnungen verwalten")
-    rechnungs_liste = [h for h in st._global_finanzen["historie"] if h["Typ"] == "Einnahme" and h["Nummer"].startswith("#RE-")]
+    rechnungs_liste = [h for h in st.session_state._global_finanzen["historie"] if h["Typ"] == "Einnahme" and h["Nummer"].startswith("#RE-")]
     
     if rechnungs_liste:
         for idx, rechnung in enumerate(rechnungs_liste):
@@ -451,8 +450,8 @@ elif menu == "📋 Rechnungen":
                     st.markdown(f"**Rechnung {rechnung['Nummer']}** ({rechnung['In-Game Datum']}) — {rechnung['Details']} — **{fmt_float(rechnung['Betrag (EUR)'])} €**")
                 with col_del:
                     if st.button("🗑️ Rechnung Löschen", key=f"del_re_{idx}", type="secondary", use_container_width=True):
-                        st._global_finanzen["einnahmen"] -= rechnung["Betrag (EUR)"]
-                        st._global_finanzen["historie"] = [h for h in st._global_finanzen["historie"] if not (h["Nummer"] == rechnung["Nummer"] and h["Typ"] == "Einnahme")]
+                        st.session_state._global_finanzen["einnahmen"] -= rechnung["Betrag (EUR)"]
+                        st.session_state._global_finanzen["historie"] = [h for h in st.session_state._global_finanzen["historie"] if not (h["Nummer"] == rechnung["Nummer"] and h["Typ"] == "Einnahme")]
                         speichere_gesamte_daten()
                         st.success(f"Rechnung {rechnung['Nummer']} wurde erfolgreich gelöscht!")
                         st.rerun()
@@ -460,17 +459,15 @@ elif menu == "📋 Rechnungen":
         st.info("Noch keine Rechnungen im System vorhanden.")
 
 # ---------------------------------------------------------
-# SEITE 4: MATERIAL & AUFTRÄGE (INKLUSIVE GRENZWERTE & AUTOMATISCHER BESTELLUNG)
+# SEITE 4: MATERIAL & AUFTRÄGE
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Material & LU-Bestellungen")
     tab_lager, tab_auftraege = st.tabs(["📦 Silo & Einkauf", "📝 LU-Auftragsbuch"])
     
     with tab_lager:
-        # --- ABSCHNITT 1: LAGER-GRENZWERTE PRÜFEN & ANZEIGEN ---
         st.subheader("⚠️ Automatische Bestandsüberwachung")
         
-        # Datengrundlage für Schleife und automatischen Einkauf vorbereiten
         materialien = {
             "saat": {"name": "🌱 Saatgut", "einheit": "L"},
             "kalk": {"name": "⚪ Kalk", "einheit": "L"},
@@ -481,31 +478,28 @@ elif menu == "🛒 Material & Aufträge":
         
         warnungen_aktiv = False
         
-        # Automatischer Bestellvorschlag via Alert-Boxen
         for key, info in materialien.items():
-            aktueller_bestand = st._global_lager_store[key]
-            grenzwert = st._global_lager_grenzwerte.get(key, 1000)
+            aktueller_bestand = st.session_state._global_lager_store[key]
+            grenzwert = st.session_state._global_lager_grenzwerte.get(key, 1000)
             
             if aktueller_bestand < grenzwert:
                 warnungen_aktiv = True
                 fehlmenge = grenzwert - aktueller_bestand
-                # Vorschlag auf volle 1.000er runden für realistische Bestellmengen
                 empfohlene_bestellmenge = int(((fehlmenge + 999) // 1000) * 1000)
                 
                 col_warn, col_auto_buy = st.columns([3, 1])
                 with col_warn:
                     st.warning(f"**Niedriger Bestand!** {info['name']} liegt mit **{fmt_int(aktueller_bestand)} {info['einheit']}** unter dem Grenzwert von {fmt_int(grenzwert)} {info['einheit']}.")
                 with col_auto_buy:
-                    # Dynamischer Schnellkauf-Button direkt in der Warnung
                     if st.button(f"🛒 {info['name']} auffüllen (+{fmt_int(empfohlene_bestellmenge)}L)", key=f"auto_buy_{key}", use_container_width=True):
-                        st._global_lager_store[key] += empfohlene_bestellmenge
-                        st._global_finanzen["ausgaben"] += 0.0  # Kosten können manuell im Kassenbuch korrigiert werden oder hier auf 0 gelassen
-                        st._global_finanzen["historie"].append({
+                        st.session_state._global_lager_store[key] += empfohlene_bestellmenge
+                        st.session_state._global_finanzen["ausgaben"] += 0.0  
+                        st.session_state._global_finanzen["historie"].append({
                             "In-Game Datum": "Automatisch", "Sort_Jahr": 1, "Sort_Monat": "01 - Jan",
-                            "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
+                            "Typ": "Ausgabe", "Nummer": f"#BS-{st.session_state._global_finanzen['naechste_bestellung_id']:04d}",
                             "Details": f"Automatische Nachbestellung: {info['name']} (+{empfohlene_bestellmenge}L)", "Betrag (EUR)": 0.0
                         })
-                        st._global_finanzen["naechste_bestellung_id"] += 1
+                        st.session_state._global_finanzen["naechste_bestellung_id"] += 1
                         speichere_gesamte_daten()
                         st.rerun()
                         
@@ -514,41 +508,39 @@ elif menu == "🛒 Material & Aufträge":
             
         st.write("---")
         
-        # --- ABSCHNITT 2: MANUELLE LAGER- & GRENZWERT-KORREKTUR ---
         st.subheader("⚙️ Lagerbestände & Mindest-Grenzwerte konfigurieren")
         
         c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
         
         with c_l1:
             st.markdown("**🌱 Saatgut**")
-            v_saat = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["saat"]), key="edit_saat")
-            g_saat = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("saat", 1000)), key="grenz_saat")
+            v_saat = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store["saat"]), key="edit_saat")
+            g_saat = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get("saat", 1000)), key="grenz_saat")
         with c_l2:
             st.markdown("**⚪ Kalk**")
-            v_kalk = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["kalk"]), key="edit_kalk")
-            g_kalk = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("kalk", 3000)), key="grenz_kalk")
+            v_kalk = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store["kalk"]), key="edit_kalk")
+            g_kalk = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get("kalk", 3000)), key="grenz_kalk")
         with c_l3:
             st.markdown("**🧪 Dünger**")
-            v_dueng = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["dueng"]), key="edit_dueng")
-            g_dueng = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("dueng", 1000)), key="grenz_dueng")
+            v_dueng = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store["dueng"]), key="edit_dueng")
+            g_dueng = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get("dueng", 1000)), key="grenz_dueng")
         with c_l4:
             st.markdown("**🌿 Herbizid**")
-            v_herbi = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["herbi"]), key="edit_herbi")
-            g_herbi = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("herbi", 500)), key="grenz_herbi")
+            v_herbi = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store["herbi"]), key="edit_herbi")
+            g_herbi = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get("herbi", 500)), key="grenz_herbi")
         with c_l5:
             st.markdown("**⛽ Diesel**")
-            v_diesel = st.number_input("Bestand (L):", min_value=0, value=int(st._global_lager_store["diesel"]), key="edit_diesel")
-            g_diesel = st.number_input("Grenzwert (L):", min_value=0, value=int(st._global_lager_grenzwerte.get("diesel", 1000)), key="grenz_diesel")
+            v_diesel = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store["diesel"]), key="edit_diesel")
+            g_diesel = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get("diesel", 1000)), key="grenz_diesel")
         
         if st.button("💾 Lagerbestände & Grenzwerte speichern", use_container_width=True, type="primary"):
-            st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
-            st._global_lager_grenzwerte.update({"saat": g_saat, "kalk": g_kalk, "dueng": g_dueng, "herbi": g_herbi, "diesel": g_diesel})
+            st.session_state._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
+            st.session_state._global_lager_grenzwerte.update({"saat": g_saat, "kalk": g_kalk, "dueng": g_dueng, "herbi": g_herbi, "diesel": g_diesel})
             speichere_gesamte_daten()
             st.rerun()
                 
         st.write("---")
         
-        # --- ABSCHNITT 3: TRADITIONELLER MANUELLER EINKAUF ---
         st.subheader("📉 Reiner Material-Einkaufswagen")
         order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, step=1000)
         order_kalk = st.number_input("Kalk kaufen (L):", min_value=0, step=1000)
@@ -560,17 +552,17 @@ elif menu == "🛒 Material & Aufträge":
         bs_jahr = col_bj.number_input("Kauf im Jahr:", min_value=1, value=1, key="eink_j")
         
         if st.button("💳 Einkauf bezahlen & ins Silo füllen", use_container_width=True):
-            st._global_lager_store["saat"] += order_saat
-            st._global_lager_store["kalk"] += order_kalk
-            st._global_lager_store["dueng"] += order_dueng
-            st._global_finanzen["ausgaben"] += tatsaechliche_kosten
+            st.session_state._global_lager_store["saat"] += order_saat
+            st.session_state._global_lager_store["kalk"] += order_kalk
+            st.session_state._global_lager_store["dueng"] += order_dueng
+            st.session_state._global_finanzen["ausgaben"] += tatsaechliche_kosten
             
-            st._global_finanzen["historie"].append({
+            st.session_state._global_finanzen["historie"].append({
                 "In-Game Datum": f"J{bs_jahr}-{bs_monat}", "Sort_Jahr": int(bs_jahr), "Sort_Monat": bs_monat,
-                "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
+                "Typ": "Ausgabe", "Nummer": f"#BS-{st.session_state._global_finanzen['naechste_bestellung_id']:04d}",
                 "Details": f"Silo befüllt (+ {order_saat}L)", "Betrag (EUR)": tatsaechliche_kosten
             })
-            st._global_finanzen["naechste_bestellung_id"] += 1
+            st.session_state._global_finanzen["naechste_bestellung_id"] += 1
             speichere_gesamte_daten()
             st.rerun()
 
@@ -587,27 +579,27 @@ elif menu == "🛒 Material & Aufträge":
         
         if st.button("💾 Auftrag im System speichern", type="primary", use_container_width=True):
             if a_aufgabe.strip() and a_kunde:
-                st._global_bestell_store.append({
+                st.session_state._global_bestell_store.append({
                     "Kunde": a_kunde, "Aufgabe": a_aufgabe, "Eingang": f"J{a_jahr}-{a_monat}", "Status": a_status
                 })
                 speichere_gesamte_daten()
                 st.rerun()
                 
         st.write("---")
-        if st._global_bestell_store:
-            for idx, auf in enumerate(st._global_bestell_store):
+        if st.session_state._global_bestell_store:
+            for idx, auf in enumerate(st.session_state._global_bestell_store):
                 with st.container(border=True):
                     c_det, c_stat, c_btn = st.columns([3, 1, 1])
                     c_det.markdown(f"**{auf['Kunde']}**: {auf['Aufgabe']} ({auf['Eingang']})")
                     c_stat.markdown(f"`{auf['Status']}`")
                     if "Erledigt" not in auf["Status"]:
                         if c_btn.button("✔️ Abschließen", key=f"d_btn_{idx}", use_container_width=True):
-                            st._global_bestell_store[idx]["Status"] = "Erledigt"
+                            st.session_state._global_bestell_store[idx]["Status"] = "Erledigt"
                             speichere_gesamte_daten()
                             st.rerun()
                             
             if st.button("🗑️ Alle erledigten Aufträge löschen", use_container_width=True):
-                st._global_bestell_store = [a for a in st._global_bestell_store if "Erledigt" not in a["Status"]]
+                st.session_state._global_bestell_store = [a for a in st.session_state._global_bestell_store if "Erledigt" not in a["Status"]]
                 speichere_gesamte_daten()
                 st.rerun()
 
@@ -640,8 +632,8 @@ elif menu == "📖 Detailliertes Kassenbuch":
             f_date = f"J{man_jahr}-{man_monat}"
             
             if man_typ == "Manuelle Einnahme ➕":
-                st._global_finanzen["einnahmen"] += man_betrag
-                st._global_finanzen["historie"].append({
+                st.session_state._global_finanzen["einnahmen"] += man_betrag
+                st.session_state._global_finanzen["historie"].append({
                     "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
                     "Typ": "Einnahme", "Nummer": "#MAN-EIN",
                     "Details": f"Manuell: {man_details}", "Betrag (EUR)": man_betrag
@@ -649,8 +641,8 @@ elif menu == "📖 Detailliertes Kassenbuch":
                 st.success(f"{fmt_float(man_betrag)} € erfolgreich als Einnahme gebucht!")
                 
             elif man_typ == "Manuelle Ausgabe ➖":
-                st._global_finanzen["ausgaben"] += man_betrag
-                st._global_finanzen["historie"].append({
+                st.session_state._global_finanzen["ausgaben"] += man_betrag
+                st.session_state._global_finanzen["historie"].append({
                     "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
                     "Typ": "Ausgabe", "Nummer": "#MAN-AUS",
                     "Details": f"Manuell: {man_details}", "Betrag (EUR)": man_betrag
@@ -658,8 +650,8 @@ elif menu == "📖 Detailliertes Kassenbuch":
                 st.success(f"{fmt_float(man_betrag)} € erfolgreich als Ausgabe gebucht!")
                 
             elif man_typ == "Startkontostand überschreiben ⚙️":
-                st._global_finanzen["start_saldo"] = man_betrag
-                st._global_finanzen["historie"].append({
+                st.session_state._global_finanzen["start_saldo"] = man_betrag
+                st.session_state._global_finanzen["historie"].append({
                     "In-Game Datum": f_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
                     "Typ": "Korrektur", "Nummer": "#SALDO-RESET",
                     "Details": f"Basis-Konto angepasst: {man_details}", "Betrag (EUR)": man_betrag
@@ -671,14 +663,14 @@ elif menu == "📖 Detailliertes Kassenbuch":
 
     st.write("---")
     st.subheader("📜 Bisherige Buchungshistorie")
-    if st._global_finanzen["historie"]:
-        st.dataframe(pd.DataFrame(st._global_finanzen["historie"])[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+    if st.session_state._global_finanzen["historie"]:
+        st.dataframe(pd.DataFrame(st.session_state._global_finanzen["historie"])[["In-Game Datum", "Typ", "Nummer", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
         
         if st.button("🚨 Gesamtes Kassenbuch zurücksetzen (Löschen)", type="secondary", use_container_width=True):
-            st._global_finanzen["start_saldo"] = 0.0
-            st._global_finanzen["einnahmen"] = 0.0
-            st._global_finanzen["ausgaben"] = 0.0
-            st._global_finanzen["historie"] = []
+            st.session_state._global_finanzen["start_saldo"] = 0.0
+            st.session_state._global_finanzen["einnahmen"] = 0.0
+            st.session_state._global_finanzen["ausgaben"] = 0.0
+            st.session_state._global_finanzen["historie"] = []
             speichere_gesamte_daten()
             st.rerun()
     else:
