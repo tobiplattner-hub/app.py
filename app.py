@@ -112,7 +112,7 @@ class ManagementPDF(FPDF):
             self.set_x(10)
             
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "AGRARSERVICE PLATTNER & AUER", ln=True)
+        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
         self.line(10, 25, 200, 25)
         self.ln(15)
         
@@ -264,7 +264,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.write(f"🌿 Herbizid: **{fmt_int(ha * st.session_state.global_verbrauch_herbi)} Liter**")
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU
+# SEITE 2: MEINE FELDER & ANBAU (INKLUSIVE INDIVIDUELLER PRE-FIELD RATEN)
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
@@ -276,6 +276,13 @@ elif menu == "🚜 Meine Felder & Anbau":
         f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
         f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st._global_fruchtarten)
         
+        # --- NUR DIESER ABSCHNITT WURDE FÜR DIE GEWÜNSCHTEN VERBRAUCHSRATEN JE FELD ERGÄNZT ---
+        st.markdown("##### ⚙️ Spezifische Verbrauchsraten für dieses Feld (L/ha):")
+        f_rate_kalk = st.number_input("Kalk-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_kalk))
+        f_rate_saat = st.number_input("Saatgut-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_saat))
+        f_rate_dueng = st.number_input("Dünger-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_dueng))
+        # -------------------------------------------------------------------------------------
+
         neue_frucht = st.text_input("➕ Feldfrüchte erweitern:", placeholder="Hier eintippen...")
         if st.button("✨ Fruchtart registrieren"):
             if neue_frucht.strip() and neue_frucht.strip() not in st._global_fruchtarten:
@@ -291,14 +298,16 @@ elif menu == "🚜 Meine Felder & Anbau":
                     if feld["nummer"].lower() == f_nummer.strip().lower():
                         st._global_felder_store[idx] = {
                             "nummer": f_nummer.strip(), "groesse": f_groesse, "frucht": f_frucht,
-                            "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0
+                            "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0,
+                            "rate_kalk": f_rate_kalk, "rate_saat": f_rate_saat, "rate_dueng": f_rate_dueng
                         }
                         existiert = True
                         break
                 if not existiert:
                     st._global_felder_store.append({
                         "nummer": f_nummer.strip(), "groesse": f_groesse, "frucht": f_frucht,
-                        "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0
+                        "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0,
+                        "rate_kalk": f_rate_kalk, "rate_saat": f_rate_saat, "rate_dueng": f_rate_dueng
                     })
                 speichere_gesamte_daten()
                 st.rerun()
@@ -316,14 +325,20 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
         for idx, f in enumerate(st._global_felder_store):
             aktuelle_frucht = f.get("frucht", "Keine Angabe")
+            
+            # Liest die feld-spezifische Rate aus, falls vorhanden, sonst Fallback auf globale Rate
+            r_kalk = f.get("rate_kalk", st.session_state.global_verbrauch_kalk)
+            r_saat = f.get("rate_saat", st.session_state.global_verbrauch_saat)
+            r_dueng = f.get("rate_dueng", st.session_state.global_verbrauch_dueng)
+            
             with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — 🌾 {aktuelle_frucht}"):
                 c_inf, c_act1, c_act2, c_act3, c_act4 = st.columns([2, 1, 1, 1, 1])
-                bedarf_kalk = f["groesse"] * st.session_state.global_verbrauch_kalk
-                bedarf_saat = f["groesse"] * st.session_state.global_verbrauch_saat
-                bedarf_dueng = f["groesse"] * st.session_state.global_verbrauch_dueng
+                bedarf_kalk = f["groesse"] * r_kalk
+                bedarf_saat = f["groesse"] * r_saat
+                bedarf_dueng = f["groesse"] * r_dueng
                 
                 with c_inf:
-                    st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L\n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L")
+                    st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L (Rate: {r_kalk})\n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L (Rate: {r_saat})\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L (Rate: {r_dueng})")
                 
                 if c_act1.button(f"⚪ Kalken ({fmt_int(bedarf_kalk)}L)", key=f"kalk_{idx}"):
                     if st._global_lager_store["kalk"] >= bedarf_kalk:
@@ -349,7 +364,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN (INKLUSIVE MANUELLER LÖSCHFUNKTION)
+# SEITE 3: RECHNUNGEN
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
@@ -418,7 +433,6 @@ elif menu == "📋 Rechnungen":
             speichere_gesamte_daten()
             st.rerun()
 
-    # --- NUR DIESER ABSCHNITT WURDE FÜR DAS GEFRAGTE LÖSCH-MENÜ ERGÄNZT ---
     st.write("---")
     st.subheader("📑 Ausgestellte Rechnungen verwalten")
     rechnungs_liste = [h for h in st._global_finanzen["historie"] if h["Typ"] == "Einnahme" and h["Nummer"].startswith("#RE-")]
@@ -431,9 +445,7 @@ elif menu == "📋 Rechnungen":
                     st.markdown(f"**Rechnung {rechnung['Nummer']}** ({rechnung['In-Game Datum']}) — {rechnung['Details']} — **{fmt_float(rechnung['Betrag (EUR)'])} €**")
                 with col_del:
                     if st.button("🗑️ Rechnung Löschen", key=f"del_re_{idx}", type="secondary", use_container_width=True):
-                        # Betrag von den Einnahmen abziehen
                         st._global_finanzen["einnahmen"] -= rechnung["Betrag (EUR)"]
-                        # Aus der Historie löschen
                         st._global_finanzen["historie"] = [h for h in st._global_finanzen["historie"] if not (h["Nummer"] == rechnung["Nummer"] and h["Typ"] == "Einnahme")]
                         speichere_gesamte_daten()
                         st.success(f"Rechnung {rechnung['Nummer']} wurde erfolgreich gelöscht!")
