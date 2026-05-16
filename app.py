@@ -115,7 +115,6 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return pdf.output()
 
-# PDF Generator für das komplette Auftragsbuch
 def generate_auftragslog_pdf(auftraege_liste):
     pdf = ManagementPDF()
     pdf.add_page()
@@ -140,7 +139,6 @@ def generate_auftragslog_pdf(auftraege_liste):
         
     return pdf.output()
 
-# NEU: PDF Generator für einen EINZELNEN Auftrag (Arbeitsnachweis / Lieferschein)
 def generate_einzel_auftrag_pdf(auftrag):
     pdf = ManagementPDF()
     pdf.add_page()
@@ -513,10 +511,41 @@ elif menu == "🛒 Material & Aufträge":
                 
         st.write("---")
         st.subheader("📋 Aktuelle Aufträge im Logbuch")
+        
         if st._global_bestell_store:
-            df_auftraege = pd.DataFrame(st._global_bestell_store)
-            st.dataframe(df_auftraege, use_container_width=True)
+            # INTERAKTIVE LISTE DER AUFTRÄGE STATT STATISCHER TABELLE
+            for idx, auf in enumerate(st._global_bestell_store):
+                # Farbe/Status-Badge ermitteln
+                status_raw = auf["Status"]
+                if "Erledigt" in status_raw:
+                    status_style = "✅ Erledigt"
+                elif "Arbeit" in status_raw:
+                    status_style = "🚜 In Arbeit"
+                else:
+                    status_style = "⏳ Offen"
+                
+                # Container für jeden einzelnen Auftrag erzeugen
+                with st.container(border=True):
+                    c_det, c_stat, c_btn = st.columns([3, 1, 1])
+                    
+                    with c_det:
+                        st.markdown(f"**Hof:** {auf['Kunde']} | **Datum:** {auf['Eingang']}")
+                        st.markdown(f"📌 *Aufgabe:* {auf['Aufgabe']}")
+                        
+                    with c_stat:
+                        st.markdown(f"**Status:**\n`{status_style}`")
+                        
+                    with c_btn:
+                        # Zeige den Erledigt-Button nur an, wenn der Auftrag noch nicht erledigt ist
+                        if "Erledigt" not in status_raw:
+                            if st.button("Als erledigt markieren ✔️", key=f"done_btn_{idx}", type="primary", use_container_width=True):
+                                st._global_bestell_store[idx]["Status"] = "Erledigt (Wartet auf Abrechnung) 🌾"
+                                st.success(f"Auftrag für {auf['Kunde']} auf erledigt gesetzt!")
+                                st.rerun()
+                        else:
+                            st.write("✨ Bereit zur Abrechnung")
             
+            st.write("---")
             # PDF Export-Button für das gesamte Logbuch
             pdf_log_data = generate_auftragslog_pdf(st._global_bestell_store)
             
@@ -533,7 +562,7 @@ elif menu == "🛒 Material & Aufträge":
                 st._global_bestell_store = [a for a in st._global_bestell_store if "Erledigt" not in a["Status"]]
                 st.rerun()
                 
-            # NEU: Einzellisten-Verteiler für die Spieler / Kunden auf dem Server
+            # Einzellisten-Verteiler für die Spieler / Kunden auf dem Server
             st.write("---")
             st.subheader("📄 Einzelne Arbeitsnachweise (PDF) generieren")
             st.markdown("Wähle hier eine bestimmte Arbeit aus, um ein separates Dokument für diesen spezifischen Kunden herunterzuladen:")
