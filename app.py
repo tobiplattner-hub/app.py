@@ -14,7 +14,6 @@ st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜
 DATA_FILE = "hof_manager_daten.json"
 
 def lade_gesamte_daten():
-    """Lädt alle gespeicherten Zustände von der Festplatte oder gibt Standardwerte zurück"""
     standard_daten = {
         "hof_store": [],
         "lager_store": {"saat": 5000, "kalk": 20000, "dueng": 4000, "herbi": 2000, "diesel": 5000},
@@ -40,7 +39,6 @@ def lade_gesamte_daten():
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 geladene_daten = json.load(f)
-                # Sicherstellen, dass alle Schlüssel aus den Standarddaten existieren
                 for k, v in standard_daten.items():
                     if k not in geladene_daten:
                         geladene_daten[k] = v
@@ -50,7 +48,6 @@ def lade_gesamte_daten():
     return standard_daten
 
 def speichere_gesamte_daten():
-    """Sichert den aktuellen Zustand aller globalen Stores auf der Festplatte"""
     daten_zum_speichern = {
         "hof_store": st._global_hof_store,
         "lager_store": st._global_lager_store,
@@ -63,9 +60,9 @@ def speichere_gesamte_daten():
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(daten_zum_speichern, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        st.error(f"Fehler beim automatischen Sichern der Daten: {e}")
+        st.error(f"Fehler beim Sichern: {e}")
 
-# Initialisiere die globalen Variablen einmalig aus der Datei
+# Initialisierung
 if not hasattr(st, "_global_daten_geladen"):
     gespeicherte_daten = lade_gesamte_daten()
     st._global_hof_store = gespeicherte_daten["hof_store"]
@@ -102,7 +99,6 @@ def fmt_float(wert):
         return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
         return str(wert)
-
 
 # ---------------------------------------------------------
 # PDF GENERATOR
@@ -157,7 +153,7 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
-    return pdf.output(dest='S').encode('latin1')
+    return pdf.output()
 
 def generate_auftragslog_pdf(auftraege_liste):
     pdf = ManagementPDF()
@@ -181,51 +177,7 @@ def generate_auftragslog_pdf(auftraege_liste):
         pdf.cell(40, 8, safe_str(a['Status']), border=1)
         pdf.ln(8)
         
-    return pdf.output(dest='S').encode('latin1')
-
-def generate_einzel_auftrag_pdf(auftrag):
-    pdf = ManagementPDF()
-    pdf.add_page()
-    
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 12, "ARBEITSNACHWEIS / DIENSTLEISTUNG", ln=True)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(10)
-    
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(45, 8, "Kunde / Empfaenger:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 8, safe_str(auftrag['Kunde']), border=0, ln=True)
-    
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(45, 8, "Datum der Erfassung:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 8, safe_str(auftrag['Eingang']), border=0, ln=True)
-    
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(45, 8, "Bearbeitungs-Status:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 8, safe_str(auftrag['Status']), border=0, ln=True)
-    
-    pdf.ln(10)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(10)
-    
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 8, "Durchgefuehrte Arbeiten / Bestellung:", ln=True)
-    pdf.ln(4)
-    
-    pdf.set_font("Helvetica", size=12)
-    pdf.multi_cell(0, 8, f"- {safe_str(auftrag['Aufgabe'])}", border=1)
-    
-    pdf.ln(30)
-    pdf.set_font("Helvetica", "I", 10)
-    pdf.cell(90, 8, "Unterschrift Lohnunternehmer", border="T", align="C")
-    pdf.set_x(120)
-    pdf.cell(80, 8, "Unterschrift Kunde", border="T", align="C")
-    
-    return pdf.output(dest='S').encode('latin1')
-
+    return pdf.output()
 
 # ---------------------------------------------------------
 # DATEN-LOAD AUS GOOGLE SHEETS
@@ -251,18 +203,10 @@ aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.
 if "rechnungs_posten" not in st.session_state: 
     st.session_state.rechnungs_posten = []
 
-# Verbrauchs-Standards im Session State halten
 if "global_verbrauch_kalk" not in st.session_state: st.session_state.global_verbrauch_kalk = 2000
 if "global_verbrauch_dueng" not in st.session_state: st.session_state.global_verbrauch_dueng = 160
 if "global_verbrauch_saat" not in st.session_state: st.session_state.global_verbrauch_saat = 150
 if "global_verbrauch_herbi" not in st.session_state: st.session_state.global_verbrauch_herbi = 100
-
-PROD_DATA = {
-    "Getreidemühle: Weizen zu Mehl": (15, 11, 2400, "Weizen", "Mehl"),
-    "Bäckerei: Brot": (18, 9, 1200, "Mehl", "Brot"),
-    "Ölmühle: Rapsöl": (20, 10, 720, "Raps", "Rapsöl"),
-    "Molkerei: Käse": (15, 11, 1440, "Milch", "Käse")
-}
 
 # ---------------------------------------------------------
 # SIDEBAR LIVE-ANZEIGE
@@ -318,24 +262,20 @@ if menu == "💰 Ernte & Verbrauchsraten":
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
-    st.markdown("Verwalte deine Felder für **The Pichonniere Valley**. Führe Feldarbeiten direkt hier aus, um Material live aus dem Silo zu entnehmen!")
-
-    col_feld_ein, col_feld_stats = st.columns([1, 1])
     
+    col_feld_ein, col_feld_stats = st.columns([1, 1])
     with col_feld_ein:
         st.subheader("📝 Neues Feld registrieren")
         f_nummer = st.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
         f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
-        
         f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st._global_fruchtarten)
         
-        neue_frucht = st.text_input("➕ Feldfrüchte erweitern (z.B. Ackerbohnen):", placeholder="Hier eintippen...")
+        neue_frucht = st.text_input("➕ Feldfrüchte erweitern:", placeholder="Hier eintippen...")
         if st.button("✨ Fruchtart registrieren"):
             if neue_frucht.strip() and neue_frucht.strip() not in st._global_fruchtarten:
                 st._global_fruchtarten.append(neue_frucht.strip())
                 st._global_fruchtarten.sort()
                 speichere_gesamte_daten()
-                st.success(f"'{neue_frucht.strip()}' wurde zur Liste hinzugefügt und gesichert!")
                 st.rerun()
         
         if st.button("💾 Feld in Datenbank eintragen", type="primary", use_container_width=True):
@@ -362,83 +302,53 @@ elif menu == "🚜 Meine Felder & Anbau":
         if st._global_felder_store:
             ges_ha = sum(f["groesse"] for f in st._global_felder_store)
             st.metric("Gesamtfläche unter Bewirtschaftung", f"{fmt_float(ges_ha)} ha")
-            st.info("💡 Nutze die Aktionsknöpfe unten in der Tabelle, wenn du ein Feld real im Spiel bearbeitest.")
         else:
             st.info("Noch keine Felder registriert.")
 
     if st._global_felder_store:
         st.write("---")
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
-        
         for idx, f in enumerate(st._global_felder_store):
-            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — Aktuell: {f['frucht']}", expanded=True):
+            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha)"):
                 c_inf, c_act1, c_act2, c_act3, c_act4 = st.columns([2, 1, 1, 1, 1])
-                
                 bedarf_kalk = f["groesse"] * st.session_state.global_verbrauch_kalk
                 bedarf_saat = f["groesse"] * st.session_state.global_verbrauch_saat
                 bedarf_dueng = f["groesse"] * st.session_state.global_verbrauch_dueng
-                bedarf_herbi = f["groesse"] * st.session_state.global_verbrauch_herbi
                 
                 with c_inf:
-                    st.write(f"**Verbrauchter Durchgang:**")
-                    st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L | 🌱 Saat: {fmt_int(f['saat_verbraucht'])}L\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L | 🌿 Herbi: {fmt_int(f['herbi_verbraucht'])}L")
+                    st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L\n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L")
                 
                 if c_act1.button(f"⚪ Kalken ({fmt_int(bedarf_kalk)}L)", key=f"kalk_{idx}"):
                     if st._global_lager_store["kalk"] >= bedarf_kalk:
                         st._global_lager_store["kalk"] -= bedarf_kalk
                         st._global_felder_store[idx]["kalk_verbraucht"] += bedarf_kalk
                         speichere_gesamte_daten()
-                        st.success(f"{fmt_int(bedarf_kalk)}L Kalk aus Silo entnommen!")
                         st.rerun()
-                    else:
-                        st.error("🚨 Nicht genug Kalk im Hof-Bestand!")
-                        
                 if c_act2.button(f"🌱 Säen ({fmt_int(bedarf_saat)}L)", key=f"saat_{idx}"):
                     if st._global_lager_store["saat"] >= bedarf_saat:
                         st._global_lager_store["saat"] -= bedarf_saat
                         st._global_felder_store[idx]["saat_verbraucht"] += bedarf_saat
                         speichere_gesamte_daten()
-                        st.success(f"{fmt_int(bedarf_saat)}L Saatgut verbraucht!")
                         st.rerun()
-                    else:
-                        st.error("🚨 Nicht genug Saatgut im Hof-Bestand!")
-
                 if c_act3.button(f"🧪 Düngen ({fmt_int(bedarf_dueng)}L)", key=f"dueng_{idx}"):
                     if st._global_lager_store["dueng"] >= bedarf_dueng:
                         st._global_lager_store["dueng"] -= bedarf_dueng
                         st._global_felder_store[idx]["dueng_verbraucht"] += bedarf_dueng
                         speichere_gesamte_daten()
-                        st.success(f"{fmt_int(bedarf_dueng)}L Dünger verbraucht!")
                         st.rerun()
-                    else:
-                        st.error("🚨 Nicht genug Dünger im Hof-Bestand!")
-
                 if c_act4.button(f"🔄 Reset Feld", key=f"res_{idx}"):
-                    st._global_felder_store[idx]["saat_verbraucht"] = 0.0
-                    st._global_felder_store[idx]["dueng_verbraucht"] = 0.0
-                    st._global_felder_store[idx]["kalk_verbraucht"] = 0.0
-                    st._global_felder_store[idx]["herbi_verbraucht"] = 0.0
+                    st._global_felder_store[idx] = {k: 0.0 if "verbraucht" in k else v for k, v in st._global_felder_store[idx].items()}
                     speichere_gesamte_daten()
                     st.rerun()
-                    
-        st.write("---")
-        c_del1, c_del2 = st.columns([1, 2])
-        opt_del = [f["nummer"] for f in st._global_felder_store]
-        f_del = c_del1.selectbox("Feld komplett löschen:", options=opt_del)
-        if c_del2.button("❌ Feld komplett aus Datenbank entfernen", use_container_width=True):
-            st._global_felder_store = [f for f in st._global_felder_store if f["nummer"] != f_del]
-            speichere_gesamte_daten()
-            st.rerun()
 
 # ---------------------------------------------------------
 # SEITE 3: RECHNUNGEN
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
-    st.info(f"Nächste Rechnungsnummer auf dem Server: **#RE-{st._global_finanzen['naechste_rechnung_id']:04d}**")
+    st.info(f"Nächste Rechnungsnummer: #RE-{st._global_finanzen['naechste_rechnung_id']:04d}")
 
     col_eingabe, col_liste = st.columns([1, 1])
-    
     with col_eingabe:
         st.subheader("Posten hinzufügen")
         abrechnungs_art = st.selectbox("Abrechnungs-Methode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Sonderposten"])
@@ -454,8 +364,8 @@ elif menu == "📋 Rechnungen":
             e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
             einheit_str = "ha"
         else: 
-            auswahl = st.selectbox("Maschine / Service aus Google-Sheet:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
-            menge = st.number_input("Gefahrene Stunden (h):", min_value=0.1, value=1.0)
+            auswahl = st.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
+            menge = st.number_input("Stunden (h):", min_value=0.1, value=1.0)
             e_p = st.number_input("Preis pro Stunde (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
             einheit_str = "h"
             
@@ -467,25 +377,27 @@ elif menu == "📋 Rechnungen":
     with col_liste:
         st.subheader("Rechnungsdaten & Vorschau")
         k_name = st.selectbox("Empfänger (Kunde):", aktuelle_kunden) if aktuelle_kunden else st.text_input("Empfänger (Hofname):")
-        rabatt = st.slider("Rabatt auf Gesamtsumme (%)", 0, 50, 0)
-        
+        rabatt = st.slider("Rabatt (%)", 0, 50, 0)
         c_m, c_j = st.columns(2)
-        re_monat = c_m.selectbox("In-Game Monat:", LISTE_MONATE, key="re_m")
-        re_jahr = c_j.number_input("In-Game Jahr:", min_value=1, value=1, key="re_j")
+        re_monat = c_m.selectbox("Monat:", LISTE_MONATE, key="re_m")
+        re_jahr = c_j.number_input("Jahr:", min_value=1, value=1, key="re_j")
 
     if st.session_state.rechnungs_posten:
         st.write("---")
         df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        st.dataframe(df_preview[["name", "menge", "einheit", "preis", "gesamt"]], use_container_width=True, hide_index=True)
+        st.dataframe(df_preview, use_container_width=True, hide_index=True)
         
         summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
         total = summe - (summe * (rabatt / 100))
-        
         full_ingame_date = f"J{re_jahr}-{re_monat}"
-        pdf_data = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
         
         col_b1, col_b2 = st.columns(2)
-        col_b1.download_button("📥 PDF laden", data=pdf_data, file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
+        
+        try:
+            pdf_bytes = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
+            col_b1.download_button("📥 PDF laden", data=pdf_bytes, file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
+        except Exception as e:
+            col_b1.error(f"PDF-Vorschau Fehler: {e}")
         
         if col_b2.button("💾 Als Einnahme buchen", type="primary", use_container_width=True):
             st._global_finanzen["einnahmen"] += total
@@ -504,13 +416,106 @@ elif menu == "📋 Rechnungen":
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Material & LU-Bestellungen")
-    
     tab_lager, tab_auftraege = st.tabs(["📦 Silo & Einkauf", "📝 LU-Auftragsbuch"])
     
     with tab_lager:
-        st.subheader("⚙️ Manuelle Lager-Korrektur / Silo-Befüllung")
+        st.subheader("⚙️ Manuelle Lager-Korrektur")
         c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
+        v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]))
+        v_kalk = c_l2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]))
+        v_dueng = c_l3.number_input("Dünger (L):", min_value=0, value=int(st._global_lager_store["dueng"]))
+        v_herbi = c_l4.number_input("Herbizid (L):", min_value=0, value=int(st._global_lager_store["herbi"]))
+        v_diesel = c_l5.number_input("Diesel (L):", min_value=0, value=int(st._global_lager_store["diesel"]))
         
-        v_saat = c_l1.number_input("Saatgut (L):", min_value=0, value=int(st._global_lager_store["saat"]), step=500)
-        v_kalk = c_l2.number_input("Kalk (L):", min_value=0, value=int(st._global_lager_store["kalk"]), step=1000)
-        v_dueng = c_l3.number_input
+        if st.button("💾 Lagerbestände manuell überschreiben", use_container_width=True):
+            st._global_lager_store.update({"saat": v_saat, "kalk": v_kalk, "dueng": v_dueng, "herbi": v_herbi, "diesel": v_diesel})
+            speichere_gesamte_daten()
+            st.rerun()
+                
+        st.write("---")
+        st.subheader("📉 Einkaufswagen für neues Material")
+        order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, step=1000)
+        order_kalk = st.number_input("Kalk kaufen (L):", min_value=0, step=1000)
+        order_dueng = st.number_input("Dünger kaufen (L):", min_value=0, step=1000)
+        tatsaechliche_kosten = st.number_input("Ausgaben Betrag (€):", min_value=0.0)
+        
+        col_bm, col_bj = st.columns(2)
+        bs_monat = col_bm.selectbox("Kauf im Monat:", LISTE_MONATE, key="eink_m")
+        bs_jahr = col_bj.number_input("Kauf im Jahr:", min_value=1, value=1, key="eink_j")
+        
+        if st.button("💳 Einkauf bezahlen & ins Silo füllen", type="primary", use_container_width=True):
+            st._global_lager_store["saat"] += order_saat
+            st._global_lager_store["kalk"] += order_kalk
+            st._global_lager_store["dueng"] += order_dueng
+            st._global_finanzen["ausgaben"] += tatsaechliche_kosten
+            
+            st._global_finanzen["historie"].append({
+                "In-Game Datum": f"J{bs_jahr}-{bs_monat}", "Sort_Jahr": int(bs_jahr), "Sort_Monat": bs_monat,
+                "Typ": "Ausgabe", "Nummer": f"#BS-{st._global_finanzen['naechste_bestellung_id']:04d}",
+                "Details": f"Silo befüllt (+ {order_saat}L)", "Betrag (EUR)": tatsaechliche_kosten
+            })
+            st._global_finanzen["naechste_bestellung_id"] += 1
+            speichere_gesamte_daten()
+            st.rerun()
+
+    with tab_auftraege:
+        st.subheader("📝 Neuen LU-Auftrag erfassen")
+        col_au1, col_au2 = st.columns(2)
+        with col_au1:
+            a_kunde = st.selectbox("Auftraggeber:", aktuelle_kunden) if aktuelle_kunden else st.text_input("Auftraggeber:")
+            a_aufgabe = st.text_input("Arbeit / Beschreibung:")
+            a_status = st.selectbox("Status:", ["Offen ⏳", "In Arbeit 🚜", "Erledigt 🌾"])
+        with col_au2:
+            a_monat = st.selectbox("Monat:", LISTE_MONATE, key="auf_m")
+            a_jahr = st.number_input("Jahr:", min_value=1, value=1, key="auf_j")
+        
+        if st.button("💾 Auftrag im System speichern", type="primary", use_container_width=True):
+            if a_aufgabe.strip() and a_kunde:
+                st._global_bestell_store.append({
+                    "Kunde": a_kunde, "Aufgabe": a_aufgabe, "Eingang": f"J{a_jahr}-{a_monat}", "Status": a_status
+                })
+                speichere_gesamte_daten()
+                st.rerun()
+                
+        st.write("---")
+        if st._global_bestell_store:
+            for idx, auf in enumerate(st._global_bestell_store):
+                with st.container(border=True):
+                    c_det, c_stat, c_btn = st.columns([3, 1, 1])
+                    c_det.markdown(f"**{auf['Kunde']}**: {auf['Aufgabe']} ({auf['Eingang']})")
+                    c_stat.markdown(f"`{auf['Status']}`")
+                    if "Erledigt" not in auf["Status"]:
+                        if c_btn.button("✔️ Abschließen", key=f"d_btn_{idx}", use_container_width=True):
+                            st._global_bestell_store[idx]["Status"] = "Erledigt"
+                            speichere_gesamte_daten()
+                            st.rerun()
+                            
+            if st.button("🗑️ Alle erledigten Aufträge löschen", use_container_width=True):
+                st._global_bestell_store = [a for a in st._global_bestell_store if "Erledigt" not in a["Status"]]
+                speichere_gesamte_daten()
+                st.rerun()
+
+# ---------------------------------------------------------
+# SEITE 5: PRODUKTIONEN
+# ---------------------------------------------------------
+elif menu == "🏭 Produktionen":
+    st.title("🏭 Produktions-Kapazitäten")
+    st.info("Hier registrierte Fabriken simulieren Jahresumsätze.")
+
+# ---------------------------------------------------------
+# SEITE 6: DETEILLIERTES KASSENBUCH (JETZT MIT MANUELLER KORREKTUR)
+# ---------------------------------------------------------
+elif menu == "📖 Detailliertes Kassenbuch":
+    st.title("📖 Detailliertes Kassenbuch & Manuelle Buchungen")
+    
+    # NEUER ABSCHNITT: MANUELLE KASSEN-STEUERUNG
+    with st.expander("➕ Manuelle Buchung / Kassen-Korrektur vornehmen", expanded=False):
+        st.subheader("Trage hier Beträge direkt in die Kasse ein")
+        
+        col_kb1, col_kb2, col_kb3 = st.columns([1, 1, 1])
+        man_typ = col_kb1.selectbox("Art der Buchung:", ["Manuelle Einnahme ➕", "Manuelle Ausgabe ➖", "Startkontostand überschreiben ⚙️"])
+        man_betrag = col_kb2.number_input("Betrag (€):", min_value=0.0, step=100.0, format="%.2f")
+        man_details = col_kb3.text_input("Zweck / Beschreibung:", placeholder="z.B. LS-Kredit, Admin-Korrektur...")
+        
+        col_kb_m, col_kb_j = st.columns(2)
+        man_monat = col_kb_m.selectbox("In
