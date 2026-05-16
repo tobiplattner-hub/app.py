@@ -1,3 +1,4 @@
+import streamlit as set_page_config
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -33,7 +34,9 @@ def lade_gesamte_daten():
             "naechste_bestellung_id": 1,
             "historie": []
         },
-        "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000}
+        "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000},
+        "produktionen_store": [],
+        "paletten_lager": {}
     }
     
     if os.path.exists(DATA_FILE):
@@ -56,7 +59,9 @@ def speichere_gesamte_daten():
         "felder_store": st.session_state._global_felder_store,
         "fruchtarten": st.session_state._global_fruchtarten,
         "finanzen": st.session_state._global_finanzen,
-        "lager_grenzwerte": st.session_state._global_lager_grenzwerte
+        "lager_grenzwerte": st.session_state._global_lager_grenzwerte,
+        "produktionen_store": st.session_state._global_produktionen_store,
+        "paletten_lager": st.session_state._global_paletten_lager
     }
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -74,6 +79,8 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_fruchtarten = gespeicherte_daten["fruchtarten"]
     st.session_state._global_finanzen = gespeicherte_daten["finanzen"]
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000})
+    st.session_state._global_produktionen_store = gespeicherte_daten.get("produktionen_store", [])
+    st.session_state._global_paletten_lager = gespeicherte_daten.get("paletten_lager", {})
     st.session_state._global_daten_geladen = True
 
 LISTE_MONATE = [
@@ -637,7 +644,6 @@ elif menu == "🛒 Material & Aufträge":
                         speichere_gesamte_daten()
                         st.rerun()
                     
-                    # ÄNDERUNG: Direktes Abbuchen von Preisen/Kosten aus dem Auftragstagebuch
                     auftrags_preis = a.get('Preis', 0.0)
                     if auftrags_preis > 0:
                         if c_pay.button("💳 Als Ausgabe abbuchen", key=f"pay_a_{idx}", use_container_width=True, type="primary"):
@@ -667,7 +673,7 @@ elif menu == "🛒 Material & Aufträge":
                     except Exception as e:
                         c_pdf.error(f"Fehler: {e}")
                         
-                    if c_del.button("🗑_ Löschen", key=f"del_a_{idx}", use_container_width=True):
+                    if c_del.button("🗑️ Löschen", key=f"del_a_{idx}", use_container_width=True):
                         st.session_state._global_bestell_store.pop(idx)
                         speichere_gesamte_daten()
                         st.rerun()
@@ -675,12 +681,97 @@ elif menu == "🛒 Material & Aufträge":
             st.info("Aktuell keine aktiven LU-Aufträge erfasst.")
 
 # ---------------------------------------------------------
-# SEITE 5: PRODUKTIONEN
+# SEITE 5: PRODUKTIONEN (NEU AUSGEBAUT)
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
-    st.title("🏭 Meine Produktionen & Betriebe")
-    st.info("Hier kannst du deine Produktionsketten, Fabriken und aktuellen Füllstände verwalten.")
-    st.warning("Feature in Entwicklung — Daten werden in Kürze integriert.")
+    st.title("🏭 Fabrikverwaltung & Paletten-Logistik")
+    
+    tab_fabriken, tab_paletten = st.tabs(["🏭 Produktionsketten & Zyklen", "📦 Paletten-Lager"])
+    
+    with tab_fabriken:
+        st.subheader("➕ Neue Fabrik / Produktionslinie hinzufügen")
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            prod_name = st.text_input("Name der Fabrik:", placeholder="z.B. Bäckerei, Sägewerk")
+            prod_input = st.text_input("Eingangs-Rohstoff (Input):", placeholder="z.B. Weizen, Holz")
+        with col_p2:
+            prod_output = st.text_input("Ausgangs-Ware (Output):", placeholder="z.B. Brot, Bretter")
+            prod_zyklen = st.number_input("Zyklen pro Monat:", min_value=1, value=24, step=1)
+        with col_p3:
+            prod_status = st.selectbox("Aktueller Betriebsstatus:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"])
+            
+        if st.button("💾 Fabrik registrieren", type="primary", use_container_width=True):
+            if prod_name.strip():
+                st.session_state._global_produktionen_store.append({
+                    "Name": prod_name.strip(),
+                    "Input": prod_input.strip() if prod_input.strip() else "Keiner",
+                    "Output": prod_output.strip() if prod_output.strip() else "Keiner",
+                    "Zyklen": prod_zyklen,
+                    "Status": prod_status
+                })
+                speichere_gesamte_daten()
+                st.rerun()
+                
+        st.write("---")
+        st.subheader("📋 Registrierte Produktionslinien")
+        if st.session_state._global_produktionen_store:
+            for idx, p in enumerate(st.session_state._global_produktionen_store):
+                with st.container(border=True):
+                    col_info, col_status_edit, col_delete = st.columns([3, 2, 1])
+                    with col_info:
+                        st.markdown(f"### {p['Name']}")
+                        st.write(f"🔄 **Zyklen/Monat:** {p['Zyklen']} | 📥 **Input:** {p['Input']} ➡️ 📤 **Output:** {p['Output']}")
+                    with col_status_edit:
+                        neuer_p_status = st.selectbox(f"Status ändern:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"], key=f"p_status_{idx}", index=["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"].index(p['Status']))
+                        if neuer_p_status != p['Status']:
+                            st.session_state._global_produktionen_store[idx]['Status'] = neuer_p_status
+                            speichere_gesamte_daten()
+                            st.rerun()
+                    with col_delete:
+                        st.write("") # Abstandhalter
+                        if st.button("🗑️ Entfernen", key=f"del_p_{idx}", use_container_width=True):
+                            st.session_state._global_produktionen_store.pop(idx)
+                            speichere_gesamte_daten()
+                            st.rerun()
+        else:
+            st.info("Noch keine Fabriken angelegt.")
+            
+    with tab_paletten:
+        st.subheader("📦 Palettenbestand im Hoflager verwalten")
+        
+        col_pal1, col_pal2 = st.columns(2)
+        with col_pal1:
+            st.markdown("### 📥 Palette einlagern / aktualisieren")
+            pal_name = st.text_input("Warenart der Palette:", placeholder="z.B. Brot, Mehl, Honig, Bretter")
+            pal_menge = st.number_input("Anzahl Paletten / Menge:", min_value=0, value=1, step=1)
+            if st.button("💾 Bestand speichern", use_container_width=True):
+                if pal_name.strip():
+                    st.session_state._global_paletten_lager[pal_name.strip()] = pal_menge
+                    speichere_gesamte_daten()
+                    st.rerun()
+                    
+        with col_pal2:
+            st.markdown("### 📋 Aktueller Paletten-Lagerbestand")
+            if st.session_state._global_paletten_lager:
+                for ware, menge in list(st.session_state._global_paletten_lager.items()):
+                    col_w_name, col_w_plus, col_w_minus, col_w_del = st.columns([3, 1, 1, 1])
+                    col_w_name.write(f"📦 **{ware}**: {menge} Paletten")
+                    
+                    if col_w_plus.button("➕", key=f"pal_plus_{ware}"):
+                        st.session_state._global_paletten_lager[ware] += 1
+                        speichere_gesamte_daten()
+                        st.rerun()
+                    if col_w_minus.button("➖", key=f"pal_minus_{ware}"):
+                        if st.session_state._global_paletten_lager[ware] > 0:
+                            st.session_state._global_paletten_lager[ware] -= 1
+                            speichere_gesamte_daten()
+                            st.rerun()
+                    if col_w_del.button("🗑️", key=f"pal_del_{ware}"):
+                        del st.session_state._global_paletten_lager[ware]
+                        speichere_gesamte_daten()
+                        st.rerun()
+            else:
+                st.info("Das Palettenlager ist aktuell leer.")
 
 # ---------------------------------------------------------
 # SEITE 6: DETAILLIERTES KASSENBUCH
@@ -707,7 +798,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
             speichere_gesamte_daten()
             st.rerun()
             
-    # ÄNDERUNG: Neues Eingabeformular für manuelle Ein- und Ausgänge
     st.write("---")
     st.subheader("📝 Manuellen Buchungssatz erstellen")
     col_m1, col_m2, col_m3 = st.columns(3)
