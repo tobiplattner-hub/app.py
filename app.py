@@ -177,7 +177,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
     else:
         st.warning("Keine Preisdaten verfügbar.")
 
-# --- MENÜ: MEINE FELDER & ANBAU ---
+# --- MENÜ: MEINE FELDER & ANBAU (JETZT GEGEN KEYERROR GESICHERT) ---
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung & Anbauplanung")
     col_f1, col_f2 = st.columns([1, 2])
@@ -197,16 +197,25 @@ elif menu == "🚜 Meine Felder & Anbau":
             
     with col_f2:
         st.subheader("📋 Feld-Kataster")
+        
+        # KEYERROR SCHUTZ: Falls der Speicher leer ist, leere Tabelle mit festen Spalten erzeugen
         if st._global_felder_store:
             df_fel = pd.DataFrame(st._global_felder_store)
-            if "Status" not in df_fel.columns: df_fel["Status"] = "Unbekannt"
-            st.dataframe(df_fel[["Feld", "Größe (ha)", "Frucht", "Status"]], use_container_width=True, hide_index=True)
+            if "Status" not in df_fel.columns: 
+                df_fel["Status"] = "Unbekannt"
+        else:
+            df_fel = pd.DataFrame(columns=["Feld", "Größe (ha)", "Frucht", "Status"])
+            
+        st.dataframe(df_fel[["Feld", "Größe (ha)", "Frucht", "Status"]], use_container_width=True, hide_index=True)
+        
+        if st._global_felder_store:
             if st.button("🗑️ Alle Felder löschen"):
                 st._global_felder_store = []
                 st.rerun()
-        else: st.info("Noch keine Felder registriert.")
+        else:
+            st.info("Noch keine Felder registriert.")
 
-# --- MENÜ: RECHNUNGEN (JETZT MIT AUTOMATISCHEM LAGERABZUG) ---
+# --- MENÜ: RECHNUNGEN ---
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen & Materialabbuchung")
     
@@ -224,8 +233,6 @@ elif menu == "📋 Rechnungen":
     preis_stueck = preis_dict.get(arbeit, 50.0)
     st.write(f"Stückpreis laut Liste: **{fmt_float(preis_stueck)} €**")
     
-    # Live-Berechnung des Materialverbrauchs für diesen Posten im Voraus anzeigen
-    bedarf_meldung = ""
     if einheit == "ha" and arbeit in VERBRAUCH_PRO_HA:
         v_info = VERBRAUCH_PRO_HA[arbeit]
         ges_verbrauch = menge * v_info["menge"]
@@ -251,9 +258,7 @@ elif menu == "📋 Rechnungen":
         st.write(f"**Gesamtsumme (inkl. Rabatt): {fmt_float(endbetrag)} €**")
         
         if st.button("💾 Rechnung finalisieren & buchen", type="primary"):
-            # --- DER AUTOMATISCHE LAGER-ABZUG BEIM BUCHEN ---
             fehler_lager = False
-            temporaere_eintraege = []
             
             for p in st.session_state.rechnungs_posten:
                 if p["einheit"] == "ha" and p["name"] in VERBRAUCH_PRO_HA:
