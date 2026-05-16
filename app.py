@@ -153,7 +153,7 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
-    return pdf.output()
+    return bytes(pdf.output())  # Hier explizit zu bytes umgewandelt
 
 def generate_auftragslog_pdf(auftraege_liste):
     pdf = ManagementPDF()
@@ -177,7 +177,7 @@ def generate_auftragslog_pdf(auftraege_liste):
         pdf.cell(40, 8, safe_str(a['Status']), border=1)
         pdf.ln(8)
         
-    return pdf.output()
+    return bytes(pdf.output())  # Hier explizit zu bytes umgewandelt
 
 # ---------------------------------------------------------
 # DATEN-LOAD AUS GOOGLE SHEETS
