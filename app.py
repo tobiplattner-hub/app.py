@@ -682,7 +682,7 @@ elif menu == "🛒 Material & Aufträge":
             st.info("Aktuell keine aktiven LU-Aufträge erfasst.")
 
 # ---------------------------------------------------------
-# SEITE 5: PRODUKTIONEN (NEUE LOGIK: LIVE REZEPT-RECHNER & PALETTEN-EINLAGERUNG)
+# SEITE 5: PRODUKTIONEN (ÄNDERUNG: REZEPT-EINHÄNGUNG FÜR BRUCH-VERHÄLTNISSE WIE 9 ZU 15)
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
     st.title("🏭 Fabrikverwaltung & Paletten-Logistik")
@@ -693,11 +693,14 @@ elif menu == "🏭 Produktionen":
         st.subheader("➕ Neue Fabrik / Produktionslinie hinzufügen")
         col_p1, col_p2, col_p3 = st.columns(3)
         with col_p1:
-            prod_name = st.text_input("Name der Fabrik:", placeholder="z.B. Bäckerei, Sägewerk")
-            prod_input = st.text_input("Eingangs-Rohstoff (Input):", placeholder="z.B. Weizen, Holz")
+            prod_name = st.text_input("Name der Fabrik:", placeholder="z.B. Alte Mühle")
+            prod_input = st.text_input("Eingangs-Rohstoff (Input):", placeholder="z.B. Dinkel")
         with col_p2:
-            prod_output = st.text_input("Ausgangs-Ware (Output):", placeholder="z.B. Brot, Mehl, Bretter")
-            prod_rezept = st.number_input("Verhältnis (Wie viel Input wird für 1L Output gebraucht?):", min_value=0.1, value=1.0, step=0.1, help="Beispiel: Wenn aus 1.5 Liter Weizen genau 1 Liter Mehl wird, trage hier 1.5 ein.")
+            prod_output = st.text_input("Ausgangs-Ware (Output):", placeholder="z.B. Dinkelmehl")
+            st.markdown("**Rezept-Verhältnis einstellen:**")
+            col_r1, col_r2 = st.columns(2)
+            prod_in_verhaeltnis = col_r1.number_input("Menge Input (z.B. 9):", min_value=1, value=9, step=1)
+            prod_out_verhaeltnis = col_r2.number_input("ergibt Menge Output (z.B. 15):", min_value=1, value=15, step=1)
         with col_p3:
             prod_zyklen = st.number_input("Zyklen pro Monat:", min_value=1, value=24, step=1)
             prod_status = st.selectbox("Aktueller Betriebsstatus:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"])
@@ -708,7 +711,8 @@ elif menu == "🏭 Produktionen":
                     "Name": prod_name.strip(),
                     "Input": prod_input.strip() if prod_input.strip() else "Keiner",
                     "Output": prod_output.strip() if prod_output.strip() else "Keiner",
-                    "Rezept": float(prod_rezept),
+                    "In_Ratio": int(prod_in_verhaeltnis),
+                    "Out_Ratio": int(prod_out_verhaeltnis),
                     "Zyklen": prod_zyklen,
                     "Status": prod_status
                 })
@@ -724,7 +728,10 @@ elif menu == "🏭 Produktionen":
                     col_info, col_status_edit, col_delete = st.columns([3, 2, 1])
                     with col_info:
                         st.markdown(f"### {p['Name']}")
-                        st.write(f"📜 **Rezept-Faktor:** {p.get('Rezept', 1.0)} Liters Input ➡️ 1 Liter Output | 🔄 **Zyklen:** {p['Zyklen']}")
+                        # Kompatibilität mit alten Daten sichern
+                        in_r = p.get("In_Ratio", 1)
+                        out_r = p.get("Out_Ratio", 1)
+                        st.write(f"📜 **Rezept-Verhältnis:** {in_r}x {p['Input']} ➡️ ergibt {out_r}x {p['Output']} | 🔄 **Zyklen:** {p['Zyklen']}")
                         st.write(f"📥 **Input-Rohstoff:** {p['Input']} ➡️ 📤 **Erzeugtes Produkt:** {p['Output']}")
                     with col_status_edit:
                         neuer_p_status = st.selectbox(f"Status ändern:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"], key=f"p_status_{idx}", index=["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"].index(p['Status']))
@@ -752,18 +759,20 @@ elif menu == "🏭 Produktionen":
             # Die gewählte Fabrik aus dem Speicher holen
             fabrik = next(p for p in st.session_state._global_produktionen_store if p["Name"] == ausgewaehlte_fabrik_name)
             
-            st.markdown(f"**Aktuelles Rezept für {fabrik['Name']}:** 1 Liter **{fabrik['Output']}** benötigt {fabrik['Rezept']} Liter **{fabrik['Input']}**.")
+            in_ratio = fabrik.get("In_Ratio", 1)
+            out_ratio = fabrik.get("Out_Ratio", 1)
+            
+            st.markdown(f"**Aktuelles Rezept für {fabrik['Name']}:** Verwendet ein Verhältnis von **{in_ratio} Litern {fabrik['Input']}** zu **{out_ratio} Litern {fabrik['Output']}**.")
             
             col_calc1, col_calc2 = st.columns(2)
             with col_calc1:
-                eingangs_menge = st.number_input(f"Eingesetzte Menge an {fabrik['Input']} (in Litern):", min_value=0, value=1500, step=100)
+                eingangs_menge = st.number_input(f"Eingesetzte Menge an {fabrik['Input']} (in Litern):", min_value=0, value=900, step=100)
             
-            # Output-Menge berechnen
-            rezept_faktor = fabrik.get("Rezept", 1.0)
-            if rezept_faktor <= 0:
-                rezept_faktor = 1.0
+            # Exakte Output-Berechnung auf Basis des Verhältnisses (Menge / Input_Verhältnis * Output_Verhältnis)
+            if in_ratio <= 0:
+                in_ratio = 1
                 
-            errechneter_output_liter = eingangs_menge / rezept_faktor
+            errechneter_output_liter = (eingangs_menge / in_ratio) * out_ratio
             
             # Paletten berechnen (1000 Liter pro Palette, kaufmännisch aufgerundet)
             anzahl_paletten = math.ceil(errechneter_output_liter / 1000) if errechneter_output_liter > 0 else 0
