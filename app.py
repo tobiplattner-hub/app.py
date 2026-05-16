@@ -15,6 +15,7 @@ if not hasattr(st, "_global_bestell_store"): st._global_bestell_store = []
 if not hasattr(st, "_global_felder_store"): st._global_felder_store = []
 if not hasattr(st, "_global_fabriken_store"): st._global_fabriken_store = []
 
+# Fruchtarten als editierbare Liste im globalen Speicher
 if not hasattr(st, "_global_fruchtarten"):
     st._global_fruchtarten = ["Weizen", "Gerste", "Hafer", "Raps", "Sonnenblumen", "Sojabohnen", "Mais", "Kartoffeln", "Zuckerrüben", "Gras", "Luzerne", "Spinat", "Zwischenfrucht / Leer"]
 
@@ -177,9 +178,22 @@ if menu == "💰 Ernte & Verbrauchsraten":
     else:
         st.warning("Keine Preisdaten verfügbar.")
 
-# --- MENÜ: MEINE FELDER & ANBAU (JETZT GEGEN KEYERROR GESICHERT) ---
+# --- MENÜ: MEINE FELDER & ANBAU (MIT MANUELLER FRUCHT-ERWEITERUNG & KEYERROR SCHUTZ) ---
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung & Anbauplanung")
+    
+    # NEU: Sektion um eigene Fruchtarten hinzuzufügen
+    with st.expander("🌱 Neue Fruchtart manuell hinzufügen"):
+        c_nf1, c_nf2 = st.columns([2, 1])
+        neue_frucht = c_nf1.text_input("Name der neuen Fruchtart:", placeholder="z.B. Hopfen, Karotten...")
+        if c_nf2.button("➕ Frucht speichern", use_container_width=True):
+            if neue_frucht.strip() and neue_frucht.strip() not in st._global_fruchtarten:
+                st._global_fruchtarten.append(neue_frucht.strip())
+                st.success(f"'{neue_frucht.strip()}' wurde zu den Fruchtarten hinzugefügt!")
+                st.rerun()
+            elif neue_frucht.strip() in st._global_fruchtarten:
+                st.warning("Diese Fruchtart existiert bereits.")
+    
     col_f1, col_f2 = st.columns([1, 2])
     with col_f1:
         st.subheader("📍 Neues Feld erfassen")
@@ -190,7 +204,10 @@ elif menu == "🚜 Meine Felder & Anbau":
         
         if st.button("➕ Feld hinzufügen", use_container_width=True):
             st._global_felder_store.append({
-                "Feld": f_nr, "Größe (ha)": f_groesse, "Frucht": f_akt_frucht, "Status": f_status
+                "Feld": int(f_nr), 
+                "Größe (ha)": float(f_groesse), 
+                "Frucht": str(f_akt_frucht), 
+                "Status": str(f_status)
             })
             st.success(f"Feld {f_nr} mit Status '{f_status}' gespeichert!")
             st.rerun()
@@ -198,18 +215,22 @@ elif menu == "🚜 Meine Felder & Anbau":
     with col_f2:
         st.subheader("📋 Feld-Kataster")
         
-        # KEYERROR SCHUTZ: Falls der Speicher leer ist, leere Tabelle mit festen Spalten erzeugen
+        # BOMBENFESTER KEYERROR SCHUTZ: Wir bauen das DataFrame immer aus einer fixen Struktur auf!
         if st._global_felder_store:
             df_fel = pd.DataFrame(st._global_felder_store)
-            if "Status" not in df_fel.columns: 
-                df_fel["Status"] = "Unbekannt"
+            # Falls durch alte Speicherstände Spalten fehlen, erzwingen wir sie hier
+            for col in ["Feld", "Größe (ha)", "Frucht", "Status"]:
+                if col not in df_fel.columns:
+                    df_fel[col] = "Unbekannt"
         else:
+            # Falls die Liste leer ist, erzeugen wir ein leeres DataFrame mit exakt diesen Spaltenköpfen
             df_fel = pd.DataFrame(columns=["Feld", "Größe (ha)", "Frucht", "Status"])
             
+        # Jetzt kann es hier NIEMALS mehr zu einem KeyError kommen:
         st.dataframe(df_fel[["Feld", "Größe (ha)", "Frucht", "Status"]], use_container_width=True, hide_index=True)
         
         if st._global_felder_store:
-            if st.button("🗑️ Alle Felder löschen"):
+            if st.button("🗑️ Alle Felder löschen", type="secondary"):
                 st._global_felder_store = []
                 st.rerun()
         else:
