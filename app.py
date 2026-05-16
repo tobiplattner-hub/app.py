@@ -22,6 +22,10 @@ if not hasattr(st, "_global_bestell_store"):
 if not hasattr(st, "_global_felder_store"):
     st._global_felder_store = []
 
+# NEU: Globaler Speicher für registrierte Fabriken/Produktionen
+if not hasattr(st, "_global_fabriken_store"):
+    st._global_fabriken_store = []
+
 # Dynamische Fruchtarten-Liste im globalen Speicher initialisieren
 if not hasattr(st, "_global_fruchtarten"):
     st._global_fruchtarten = [
@@ -59,7 +63,7 @@ def fmt_int(wert):
     return f"{wert:,.0f}".replace(",", ".")
 
 def fmt_float(wert):
-    return f"{fmt_float(wert)}" if isinstance(wert, str) else f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 # --- PDF GENERATOR ---
@@ -371,71 +375,102 @@ elif menu == "🚜 Meine Felder & Anbau":
             st._global_felder_store = [f for f in st._global_felder_store if f["nummer"] != f_del]
             st.rerun()
 
-# --- SEITE 3: RECHNUNGEN ---
+# --- SEITE 3: RECHNUNGEN & RECHNUNGSBUCH ---
 elif menu == "📋 Rechnungen":
-    st.title("📋 Dienstleistungs-Rechnungen erstellen")
-    st.info(f"Nächste Rechnungsnummer auf dem Server: **#RE-{st._global_finanzen['naechste_rechnung_id']:04d}**")
-
-    col_eingabe, col_liste = st.columns([1, 1])
+    st.title("📋 Dienstleistungs-Rechnungen erstellen & stornieren")
     
-    with col_eingabe:
-        st.subheader("Posten hinzufügen")
-        abrechnungs_art = st.selectbox("Abrechnungs-Methode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Sonderposten"])
+    # NEU: Tabs für das Schreiben und Löschen von falschen Rechnungen
+    tab_erstellen, tab_stornieren = st.tabs(["📝 Neue Rechnung schreiben", "❌ Rechnungen verwalten / löschen"])
+    
+    with tab_erstellen:
+        st.info(f"Nächste Rechnungsnummer auf dem Server: **#RE-{st._global_finanzen['naechste_rechnung_id']:04d}**")
+
+        col_eingabe, col_liste = st.columns([1, 1])
         
-        if abrechnungs_art == "Sonderposten":
-            auswahl = st.text_input("Freie Beschreibung:")
-            menge = st.number_input("Menge:", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis (€):", value=0.0)
-            einheit_str = "Stk"
-        elif abrechnungs_art == "Nach Feldfläche (ha)":
-            auswahl = st.text_input("Dienstleistung:", value="Mähen")
-            menge = st.number_input("Fläche (ha):", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
-            einheit_str = "ha"
-        else: 
-            auswahl = st.selectbox("Maschine / Service aus Google-Sheet:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
-            menge = st.number_input("Gefahrene Stunden (h):", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis pro Stunde (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
-            einheit_str = "h"
+        with col_eingabe:
+            st.subheader("Posten hinzufügen")
+            abrechnungs_art = st.selectbox("Abrechnungs-Methode:", ["Nach Arbeitsstunden (h)", "Nach Feldfläche (ha)", "Sonderposten"])
             
-        if st.button("➕ Posten zur Rechnung hinzufügen", use_container_width=True):
-            if auswahl.strip():
-                st.session_state.rechnungs_posten.append({"name": auswahl, "menge": menge, "preis": e_p, "einheit": einheit_str, "gesamt": menge * e_p})
+            if abrirchungs_art == "Sonderposten":
+                auswahl = st.text_input("Freie Beschreibung:")
+                menge = st.number_input("Menge:", min_value=0.1, value=1.0)
+                e_p = st.number_input("Preis (€):", value=0.0)
+                einheit_str = "Stk"
+            elif abrirchungs_art == "Nach Feldfläche (ha)":
+                auswahl = st.text_input("Dienstleistung:", value="Mähen")
+                menge = st.number_input("Fläche (ha):", min_value=0.1, value=1.0)
+                e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
+                einheit_str = "ha"
+            else: 
+                auswahl = st.selectbox("Maschine / Service aus Google-Sheet:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
+                menge = st.number_input("Gefahrene Stunden (h):", min_value=0.1, value=1.0)
+                e_p = st.number_input("Preis pro Stunde (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
+                einheit_str = "h"
+                
+            if st.button("➕ Posten zur Rechnung hinzufügen", use_container_width=True):
+                if auswahl.strip():
+                    st.session_state.rechnungs_posten.append({"name": auswahl, "menge": menge, "preis": e_p, "einheit": einheit_str, "gesamt": menge * e_p})
+                    st.rerun()
+
+        with col_liste:
+            st.subheader("Rechnungsdaten & Vorschau")
+            k_name = st.selectbox("Empfänger (Kunde):", aktuelle_kunden) if aktuelle_kunden else st.text_input("Empfänger (Hofname):")
+            rabatt = st.slider("Rabatt auf Gesamtsumme (%)", 0, 50, 0)
+            
+            c_m, c_j = st.columns(2)
+            re_monat = c_m.selectbox("In-Game Monat:", LISTE_MONATE, key="re_m")
+            re_jahr = c_j.number_input("In-Game Jahr:", min_value=1, value=1, key="re_j")
+
+        if st.session_state.rechnungs_posten:
+            st.write("---")
+            df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
+            st.dataframe(df_preview[["name", "menge", "einheit", "preis", "gesamt"]], use_container_width=True, hide_index=True)
+            
+            summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
+            total = summe - (summe * (rabatt / 100))
+            
+            full_ingame_date = f"J{re_jahr}-{re_monat}"
+            pdf_data = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
+            
+            col_b1, col_b2 = st.columns(2)
+            col_b1.download_button("📥 PDF laden", data=bytes(pdf_data), file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
+            
+            if col_b2.button("💾 Als Einnahme buchen", type="primary", use_container_width=True):
+                st._global_finanzen["einnahmen"] += total
+                st._global_finanzen["historie"].append({
+                    "In-Game Datum": full_ingame_date, "Sort_Jahr": re_jahr, "Sort_Monat": re_monat,
+                    "Typ": "Einnahme", "Nummer": f"#RE-{st._global_finanzen['naechste_rechnung_id']:04d}",
+                    "Details": f"Kunde: {k_name}", "Betrag (EUR)": total
+                })
+                st._global_finanzen["naechste_rechnung_id"] += 1
+                st.session_state.rechnungs_posten = []
+                st.success("Rechnung erfolgreich im System gebucht!")
                 st.rerun()
 
-    with col_liste:
-        st.subheader("Rechnungsdaten & Vorschau")
-        k_name = st.selectbox("Empfänger (Kunde):", aktuelle_kunden) if aktuelle_kunden else st.text_input("Empfänger (Hofname):")
-        rabatt = st.slider("Rabatt auf Gesamtsumme (%)", 0, 50, 0)
+    # NEU: Das Storno-System für fehlerhafte Einträge
+    with tab_stornieren:
+        st.subheader("❌ Falsche Rechnungen stornieren / löschen")
+        st.markdown("Falls du dich vertippt hast, kannst du hier eine bereits verbuchte Rechnung auswählen. Der Betrag wird automatisch vom Live-Kontostand abgezogen und aus dem Buch entfernt.")
         
-        c_m, c_j = st.columns(2)
-        re_monat = c_m.selectbox("In-Game Monat:", LISTE_MONATE, key="re_m")
-        re_jahr = c_j.number_input("In-Game Jahr:", min_value=1, value=1, key="re_j")
-
-    if st.session_state.rechnungs_posten:
-        st.write("---")
-        df_preview = pd.DataFrame(st.session_state.rechnungs_posten)
-        st.dataframe(df_preview[["name", "menge", "einheit", "preis", "gesamt"]], use_container_width=True, hide_index=True)
+        rechnungen_historie = [h for h in st._global_finanzen["historie"] if h["Typ"] == "Einnahme"]
         
-        summe = sum(p['gesamt'] for p in st.session_state.rechnungs_posten)
-        total = summe - (summe * (rabatt / 100))
-        
-        full_ingame_date = f"J{re_jahr}-{re_monat}"
-        pdf_data = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st._global_finanzen["naechste_rechnung_id"], full_ingame_date)
-        
-        col_b1, col_b2 = st.columns(2)
-        col_b1.download_button("📥 PDF laden", data=bytes(pdf_data), file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
-        
-        if col_b2.button("💾 Als Einnahme buchen", type="primary", use_container_width=True):
-            st._global_finanzen["einnahmen"] += total
-            st._global_finanzen["historie"].append({
-                "In-Game Datum": full_ingame_date, "Sort_Jahr": re_jahr, "Sort_Monat": re_monat,
-                "Typ": "Einnahme", "Nummer": f"#RE-{st._global_finanzen['naechste_rechnung_id']:04d}",
-                "Details": f"Kunde: {k_name}", "Betrag (EUR)": total
-            })
-            st._global_finanzen["naechste_rechnung_id"] += 1
-            st.session_state.rechnungs_posten = []
-            st.rerun()
+        if rechnungen_historie:
+            options_rechnungen = [f"{r['Nummer']} - {r['Details']} ({fmt_float(r['Betrag (EUR)'])} €)" for r in rechnungen_historie]
+            auswahl_storno_idx = st.selectbox("Welche Rechnung soll gelöscht werden?", range(len(options_rechnungen)), format_func=lambda x: options_rechnungen[x])
+            
+            if st.button("🗑️ Ausgewählte Rechnung unwiderruflich löschen", type="primary", use_container_width=True):
+                ziel_storno = rechnungen_historie[auswahl_storno_idx]
+                
+                # Betrag wieder abziehen
+                st._global_finanzen["einnahmen"] -= ziel_storno["Betrag (EUR)"]
+                
+                # Aus der Historie löschen
+                st._global_finanzen["historie"] = [h for h in st._global_finanzen["historie"] if not (h["Typ"] == "Einnahme" and h["Nummer"] == ziel_storno["Nummer"])]
+                
+                st.success(f"Rechnung {ziel_storno['Nummer']} wurde erfolgreich storniert und gelöscht!")
+                st.rerun()
+        else:
+            st.info("Bisher wurden noch keine Rechnungen gebucht.")
 
 # --- SEITE 4: MATERIAL & AUFTRÄGE ---
 elif menu == "🛒 Material & Aufträge":
@@ -513,9 +548,7 @@ elif menu == "🛒 Material & Aufträge":
         st.subheader("📋 Aktuelle Aufträge im Logbuch")
         
         if st._global_bestell_store:
-            # INTERAKTIVE LISTE DER AUFTRÄGE STATT STATISCHER TABELLE
             for idx, auf in enumerate(st._global_bestell_store):
-                # Farbe/Status-Badge ermitteln
                 status_raw = auf["Status"]
                 if "Erledigt" in status_raw:
                     status_style = "✅ Erledigt"
@@ -524,7 +557,6 @@ elif menu == "🛒 Material & Aufträge":
                 else:
                     status_style = "⏳ Offen"
                 
-                # Container für jeden einzelnen Auftrag erzeugen
                 with st.container(border=True):
                     c_det, c_stat, c_btn = st.columns([3, 1, 1])
                     
@@ -536,7 +568,6 @@ elif menu == "🛒 Material & Aufträge":
                         st.markdown(f"**Status:**\n`{status_style}`")
                         
                     with c_btn:
-                        # Zeige den Erledigt-Button nur an, wenn der Auftrag noch nicht erledigt ist
                         if "Erledigt" not in status_raw:
                             if st.button("Als erledigt markieren ✔️", key=f"done_btn_{idx}", type="primary", use_container_width=True):
                                 st._global_bestell_store[idx]["Status"] = "Erledigt (Wartet auf Abrechnung) 🌾"
@@ -546,7 +577,6 @@ elif menu == "🛒 Material & Aufträge":
                             st.write("✨ Bereit zur Abrechnung")
             
             st.write("---")
-            # PDF Export-Button für das gesamte Logbuch
             pdf_log_data = generate_auftragslog_pdf(st._global_bestell_store)
             
             col_pdf1, col_pdf2 = st.columns(2)
@@ -562,12 +592,10 @@ elif menu == "🛒 Material & Aufträge":
                 st._global_bestell_store = [a for a in st._global_bestell_store if "Erledigt" not in a["Status"]]
                 st.rerun()
                 
-            # Einzellisten-Verteiler für die Spieler / Kunden auf dem Server
             st.write("---")
             st.subheader("📄 Einzelne Arbeitsnachweise (PDF) generieren")
             st.markdown("Wähle hier eine bestimmte Arbeit aus, um ein separates Dokument für diesen spezifischen Kunden herunterzuladen:")
             
-            # Erstelle eine lesbare Optionsliste
             auftrag_optionen = [f"[{a['Eingang']}] {a['Kunde']} - {a['Aufgabe'][:30]}..." for a in st._global_bestell_store]
             ausgewaehlter_index = st.selectbox("Auszuführender Auftrag für Einzelnachweis:", range(len(auftrag_optionen)), format_func=lambda x: auftrag_optionen[x])
             
@@ -575,7 +603,6 @@ elif menu == "🛒 Material & Aufträge":
                 ziel_auftrag = st._global_bestell_store[ausgewaehlter_index]
                 einzel_pdf = generate_einzel_auftrag_pdf(ziel_auftrag)
                 
-                # Generiere Dateiname basierend auf dem Kundennamen
                 clean_kunden_name = ziel_auftrag['Kunde'].replace(" ", "_")
                 st.download_button(
                     f"📥 Arbeitsnachweis für {ziel_auftrag['Kunde']} herunterladen",
@@ -588,10 +615,45 @@ elif menu == "🛒 Material & Aufträge":
         else:
             st.info("Momentan liegen keine offenen Bestellungen oder Aufträge vor.")
 
-# --- SEITE 5: PRODUKTIONEN ---
+# --- SEITE 5: PRODUKTIONEN (NEU AUSGEBAUT) ---
 elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktions-Kapazitäten")
-    st.info("Hier registrierte Fabriken simulieren Jahresumsätze über In-Game Zyklen.")
+    st.title("🏭 Fabrik- & Produktionsverwaltung")
+    st.markdown("Hier kannst du alle Produktionsstätten und Fabriken auf der Karte registrieren und den Höfen zuweisen.")
+
+    col_fab1, col_fab2 = st.columns([1, 1])
+
+    with col_fab1:
+        st.subheader("🏗️ Neue Fabrik registrieren")
+        fab_name = st.selectbox("Fabrik-Typ wählen:", list(PROD_DATA.keys()))
+        fab_besitzer = st.selectbox("Besitzer (Hof):", aktuelle_kunden) if aktuelle_kunden else st.text_input("Besitzer (Hofname):")
+        
+        # Details aus den Stammdaten für den User einblenden
+        zyklen, kosten, lager_max, input_mat, output_mat = PROD_DATA[fab_name]
+        st.info(f"ℹ️ **Fabrik-Eigenschaften:**\n- Produktionszyklen: {zyklen}/Monat\n- Fixe Betriebskosten: {kosten} €/Monat\n- Rohstoffbedarf: {input_mat} ➔ Zielprodukt: {output_mat}")
+
+        if st.button("🏗️ Fabrik jetzt aktivieren", type="primary", use_container_width=True):
+            st._global_fabriken_store.append({
+                "Typ": fab_name,
+                "Besitzer": fab_besitzer,
+                "Input": input_mat,
+                "Output": output_mat,
+                "Kosten": f"{kosten} €",
+                "Status": "Aktiv 🟢"
+            })
+            st.success(f"Fabrik '{fab_name}' wurde erfolgreich für '{fab_besitzer}' registriert!")
+            st.rerun()
+
+    with col_fab2:
+        st.subheader("📊 Auf der Karte registrierte Fabriken")
+        if st._global_fabriken_store:
+            df_fab = pd.DataFrame(st._global_fabriken_store)
+            st.dataframe(df_fab, use_container_width=True, hide_index=True)
+            
+            if st.button("❌ Alle Fabriken zurücksetzen / löschen", use_container_width=False):
+                st._global_fabriken_store = []
+                st.rerun()
+        else:
+            st.info("Bisher sind noch keine Fabriken auf diesem Server angemeldet. Nutze das linke Formular.")
 
 # --- SEITE 6: DETILLIERTES KASSENBUCH ---
 elif menu == "📖 Detailliertes Kassenbuch":
