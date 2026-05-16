@@ -5,6 +5,7 @@ from datetime import date
 import os
 import json
 from fpdf import FPDF
+import math
 
 # 1. Seiteneinstellungen
 st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜")
@@ -681,12 +682,12 @@ elif menu == "🛒 Material & Aufträge":
             st.info("Aktuell keine aktiven LU-Aufträge erfasst.")
 
 # ---------------------------------------------------------
-# SEITE 5: PRODUKTIONEN (ÄNDERUNG: JETZT MIT REZEPT-FUNKTION)
+# SEITE 5: PRODUKTIONEN (NEUE LOGIK: LIVE REZEPT-RECHNER & PALETTEN-EINLAGERUNG)
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
     st.title("🏭 Fabrikverwaltung & Paletten-Logistik")
     
-    tab_fabriken, tab_paletten = st.tabs(["🏭 Produktionsketten & Zyklen", "📦 Paletten-Lager"])
+    tab_fabriken, tab_rechner, tab_paletten = st.tabs(["🏭 Produktionsketten anlegen", "🧮 Rezept-Rechner & Einlagerung", "📦 Paletten-Lager"])
     
     with tab_fabriken:
         st.subheader("➕ Neue Fabrik / Produktionslinie hinzufügen")
@@ -695,8 +696,8 @@ elif menu == "🏭 Produktionen":
             prod_name = st.text_input("Name der Fabrik:", placeholder="z.B. Bäckerei, Sägewerk")
             prod_input = st.text_input("Eingangs-Rohstoff (Input):", placeholder="z.B. Weizen, Holz")
         with col_p2:
-            prod_output = st.text_input("Ausgangs-Ware (Output):", placeholder="z.B. Brot, Bretter")
-            prod_rezept = st.text_input("Rezept / Verhältnis (optional):", placeholder="z.B. 2x Weizen -> 1x Brot")
+            prod_output = st.text_input("Ausgangs-Ware (Output):", placeholder="z.B. Brot, Mehl, Bretter")
+            prod_rezept = st.number_input("Verhältnis (Wie viel Input wird für 1L Output gebraucht?):", min_value=0.1, value=1.0, step=0.1, help="Beispiel: Wenn aus 1.5 Liter Weizen genau 1 Liter Mehl wird, trage hier 1.5 ein.")
         with col_p3:
             prod_zyklen = st.number_input("Zyklen pro Monat:", min_value=1, value=24, step=1)
             prod_status = st.selectbox("Aktueller Betriebsstatus:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"])
@@ -707,11 +708,12 @@ elif menu == "🏭 Produktionen":
                     "Name": prod_name.strip(),
                     "Input": prod_input.strip() if prod_input.strip() else "Keiner",
                     "Output": prod_output.strip() if prod_output.strip() else "Keiner",
-                    "Rezept": prod_rezept.strip() if prod_rezept.strip() else "Standard",
+                    "Rezept": float(prod_rezept),
                     "Zyklen": prod_zyklen,
                     "Status": prod_status
                 })
                 speichere_gesamte_daten()
+                st.success(f"Fabrik '{prod_name}' erfolgreich hinzugefügt!")
                 st.rerun()
                 
         st.write("---")
@@ -722,8 +724,8 @@ elif menu == "🏭 Produktionen":
                     col_info, col_status_edit, col_delete = st.columns([3, 2, 1])
                     with col_info:
                         st.markdown(f"### {p['Name']}")
-                        st.write(f"📜 **Rezept:** {p.get('Rezept', 'Standard')} | 🔄 **Zyklen/Monat:** {p['Zyklen']}")
-                        st.write(f"📥 **Input:** {p['Input']} ➡️ 📤 **Output:** {p['Output']}")
+                        st.write(f"📜 **Rezept-Faktor:** {p.get('Rezept', 1.0)} Liters Input ➡️ 1 Liter Output | 🔄 **Zyklen:** {p['Zyklen']}")
+                        st.write(f"📥 **Input-Rohstoff:** {p['Input']} ➡️ 📤 **Erzeugtes Produkt:** {p['Output']}")
                     with col_status_edit:
                         neuer_p_status = st.selectbox(f"Status ändern:", ["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"], key=f"p_status_{idx}", index=["Aktiv 🟢", "Inaktiv 🔴", "Keine Rohstoffe ⚠️"].index(p['Status']))
                         if neuer_p_status != p['Status']:
@@ -731,7 +733,7 @@ elif menu == "🏭 Produktionen":
                             speichere_gesamte_daten()
                             st.rerun()
                     with col_delete:
-                        st.write("") # Abstandhalter
+                        st.write("") 
                         if st.button("🗑️ Entfernen", key=f"del_p_{idx}", use_container_width=True):
                             st.session_state._global_produktionen_store.pop(idx)
                             speichere_gesamte_daten()
@@ -739,12 +741,58 @@ elif menu == "🏭 Produktionen":
         else:
             st.info("Noch keine Fabriken angelegt.")
             
+    with tab_rechner:
+        st.subheader("🧮 Live Rezept-Rechner & Paletten einbuchen")
+        if not st.session_state._global_produktionen_store:
+            st.info("Bitte lege zuerst im ersten Reiter eine Produktionslinie an, um den Rechner zu nutzen.")
+        else:
+            fabriken_namen = [p["Name"] for p in st.session_state._global_produktionen_store]
+            ausgewaehlte_fabrik_name = st.selectbox("Wähle die aktive Fabrik aus:", fabriken_namen)
+            
+            # Die gewählte Fabrik aus dem Speicher holen
+            fabrik = next(p for p in st.session_state._global_produktionen_store if p["Name"] == ausgewaehlte_fabrik_name)
+            
+            st.markdown(f"**Aktuelles Rezept für {fabrik['Name']}:** 1 Liter **{fabrik['Output']}** benötigt {fabrik['Rezept']} Liter **{fabrik['Input']}**.")
+            
+            col_calc1, col_calc2 = st.columns(2)
+            with col_calc1:
+                eingangs_menge = st.number_input(f"Eingesetzte Menge an {fabrik['Input']} (in Litern):", min_value=0, value=1500, step=100)
+            
+            # Output-Menge berechnen
+            rezept_faktor = fabrik.get("Rezept", 1.0)
+            if rezept_faktor <= 0:
+                rezept_faktor = 1.0
+                
+            errechneter_output_liter = eingangs_menge / rezept_faktor
+            
+            # Paletten berechnen (1000 Liter pro Palette, kaufmännisch aufgerundet)
+            anzahl_paletten = math.ceil(errechneter_output_liter / 1000) if errechneter_output_liter > 0 else 0
+            
+            with col_calc2:
+                st.markdown("### 📊 Berechnetes Ergebnis:")
+                st.write(f"📤 Erwartetes Produkt: **{fmt_int(errechneter_output_liter)} Liter** {fabrik['Output']}")
+                st.info(f"📦 Das entspricht: **{anzahl_paletten} Paletten** (je 1.000 L, aufgerundet)")
+                
+            if st.button("🏭 Produktion ausführen & Paletten ins Lager buchen", type="primary", use_container_width=True):
+                if anzahl_paletten > 0:
+                    produkt_name = fabrik['Output'].strip()
+                    
+                    # Zum bestehenden Palettenlager hinzurechnen
+                    aktueller_bestand = st.session_state._global_paletten_lager.get(produkt_name, 0)
+                    st.session_state._global_paletten_lager[produkt_name] = aktueller_bestand + anzahl_paletten
+                    
+                    speichere_gesamte_daten()
+                    st.success(f"✔️ Erfolgreich verarbeitet! **{anzahl_paletten} Paletten {produkt_name}** wurden in dein Lager eingebucht.")
+                    st.rerun()
+                else:
+                    st.error("Die Menge ist zu gering, um mindestens eine Palette zu erzeugen.")
+
     with tab_paletten:
         st.subheader("📦 Palettenbestand im Hoflager verwalten")
         
         col_pal1, col_pal2 = st.columns(2)
         with col_pal1:
-            st.markdown("### 📥 Palette einlagern / aktualisieren")
+            st.markdown("### 📥 Palette manuell einlagern / korrigieren")
             pal_name = st.text_input("Warenart der Palette:", placeholder="z.B. Brot, Mehl, Honig, Bretter")
             pal_menge = st.number_input("Anzahl Paletten / Menge:", min_value=0, value=1, step=1)
             if st.button("💾 Bestand speichern", use_container_width=True):
