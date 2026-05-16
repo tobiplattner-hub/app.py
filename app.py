@@ -22,6 +22,15 @@ if not hasattr(st, "_global_bestell_store"):
 if not hasattr(st, "_global_felder_store"):
     st._global_felder_store = []
 
+# Dynamische Fruchtarten-Liste im globalen Speicher initialisieren
+if not hasattr(st, "_global_fruchtarten"):
+    st._global_fruchtarten = [
+        "Weizen", "Gerste", "Hafer", "Raps", "Sonnenblumen", 
+        "Sojabohnen", "Mais", "Kartoffeln", "Zuckerrüben", 
+        "Gras", "Luzerne", "Klee", "Feldgras", "Ölrettich", 
+        "Pappel", "Zuckerrohr", "Baumwolle", "Reis", "Langkornreis", "Spinat"
+    ]
+
 if not hasattr(st, "_global_finanzen"):
     st._global_finanzen = {
         "start_saldo": 0.0,
@@ -36,12 +45,6 @@ LISTE_MONATE = [
     "01 - Jan", "02 - Feb", "03 - Mrz", "04 - Apr", 
     "05 - Mai", "06 - Jun", "07 - Jul", "08 - Aug", 
     "09 - Sep", "10 - Okt", "11 - Nov", "12 - Dez"
-]
-
-FRUCHTARTEN = [
-    "Weizen", "Gerste", "Hafer", "Raps", "Sonnenblumen", 
-    "Sojabohnen", "Mais", "Kartoffeln", "Zuckerrüben", 
-    "Gras", "Ölrettich", "Pappel", "Zuckerrohr", "Baumwolle"
 ]
 
 # --- HILFSFUNKTIONEN ---
@@ -187,7 +190,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.write(f"🌱 Saatgut: **{fmt_int(ha * st.session_state.global_verbrauch_saat)} Liter**")
         st.write(f"🌿 Herbizid: **{fmt_int(ha * st.session_state.global_verbrauch_herbi)} Liter**")
 
-# --- SEITE 2: MEINE FELDER & ANBAU (MIT AUTO-ABZUG) ---
+# --- SEITE 2: MEINE FELDER & ANBAU (MIT AUTO-ABZUG & FLEXIBLEN FRÜCHTEN) ---
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
     st.markdown("Verwalte deine Felder für **The Pichonniere Valley**. Führe Feldarbeiten direkt hier aus, um Material live aus dem Silo zu entnehmen!")
@@ -198,11 +201,21 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.subheader("📝 Neues Feld registrieren")
         f_nummer = st.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
         f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
-        f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", FRUCHTARTEN)
+        
+        # NEU: Fruchtart-Auswahl kombiniert mit manueller Option
+        f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st._global_fruchtarten)
+        
+        # NEU: Eigene Frucht hinzufügen falls nicht in Liste vorhanden
+        neue_frucht = st.text_input("➕ Fehlende Fruchtart hinzufügen (z.B. Ackerbohnen):", placeholder="Hier eintippen...")
+        if st.button("✨ Fruchtart registrieren"):
+            if neue_frucht.strip() and neue_frucht.strip() not in st._global_fruchtarten:
+                st._global_fruchtarten.append(neue_frucht.strip())
+                st._global_fruchtarten.sort() # Alphabetisch sortieren
+                st.success(f"'{neue_frucht.strip()}' wurde zur Liste hinzugefügt!")
+                st.rerun()
         
         if st.button("💾 Feld in Datenbank eintragen", type="primary", use_container_width=True):
             if f_nummer.strip():
-                # Prüfen ob Feld existiert, falls ja überschreiben
                 existiert = False
                 for idx, feld in enumerate(st._global_felder_store):
                     if feld["nummer"].lower() == f_nummer.strip().lower():
@@ -232,12 +245,10 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.write("---")
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
         
-        # Interaktive Steuerung für jedes Feld generieren
         for idx, f in enumerate(st._global_felder_store):
             with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — Aktuell: {f['frucht']}", expanded=True):
                 c_inf, c_act1, c_act2, c_act3, c_act4 = st.columns([2, 1, 1, 1, 1])
                 
-                # Berechnete Mengen für dieses Feld
                 bedarf_kalk = f["groesse"] * st.session_state.global_verbrauch_kalk
                 bedarf_saat = f["groesse"] * st.session_state.global_verbrauch_saat
                 bedarf_dueng = f["groesse"] * st.session_state.global_verbrauch_dueng
@@ -247,7 +258,6 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.write(f"**Verbrauchter Durchgang:**")
                     st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L | 🌱 Saat: {fmt_int(f['saat_verbraucht'])}L\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L | 🌿 Herbi: {fmt_int(f['herbi_verbraucht'])}L")
                 
-                # Feldarbeiten auslösen und vom globalen Serverlager abziehen
                 if c_act1.button(f"⚪ Kalken ({fmt_int(bedarf_kalk)}L)", key=f"kalk_{idx}"):
                     if st._global_lager_store["kalk"] >= bedarf_kalk:
                         st._global_lager_store["kalk"] -= bedarf_kalk
@@ -275,7 +285,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     else:
                         st.error("🚨 Nicht genug Dünger im Hof-Bestand!")
 
-                if c_act4.button(f"🔄 Reset Feld", key=f"res_{idx}", help="Setzt den Zähler für dieses Feld auf Null zurück (z.B. für neue Saison)"):
+                if c_act4.button(f"🔄 Reset Feld", key=f"res_{idx}"):
                     st._global_felder_store[idx]["saat_verbraucht"] = 0.0
                     st._global_felder_store[idx]["dueng_verbraucht"] = 0.0
                     st._global_felder_store[idx]["kalk_verbraucht"] = 0.0
@@ -376,7 +386,6 @@ elif menu == "🛒 Material & Aufträge":
     st.write("---")
     st.subheader("📉 Einkaufswagen für neues Material")
     
-    col_re = st.index = st.columns(1)[0]
     order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, value=0, step=1000)
     order_kalk = st.number_input("Kalk kaufen (L):", min_value=0, value=0, step=1000)
     order_dueng = st.number_input("Dünger kaufen (L):", min_value=0, value=0, step=1000)
@@ -410,4 +419,3 @@ elif menu == "🏭 Produktionen":
 # --- SEITE 7: DETILLIERTES KASSENBUCH ---
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch")
-    # ... (Kassenbuch-Struktur bleibt wie vorher erhalten)
