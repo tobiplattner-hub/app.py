@@ -105,17 +105,15 @@ def fmt_float(wert):
 # ---------------------------------------------------------
 class ManagementPDF(FPDF):
     def header(self):
-        # Logo Einbindung mit automatischem Fehler-Schutz
         try:
-            # Falls deine Logo-Datei anders heißt, passe "logo.png" hier an:
             self.image("logo.png", 10, 8, 33) 
-            self.set_x(48) # Schiebt den Text nach rechts, damit das Logo Platz hat
+            self.set_x(48)
         except:
-            self.set_x(10) # Fallback, falls das Logo fehlt
+            self.set_x(10)
             
         self.set_font("Helvetica", "B", 16)
         self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
-        self.line(10, 25, 200, 25) # Linie wegen Logo leicht nach unten verschoben
+        self.line(10, 25, 200, 25)
         self.ln(15)
         
     def footer(self):
@@ -317,7 +315,11 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.write("---")
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
         for idx, f in enumerate(st._global_felder_store):
-            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha)"):
+            # Fruchtart aus den Daten auslesen (falls bei alten Daten nicht vorhanden, Standardwert)
+            aktuelle_frucht = f.get("frucht", "Keine Angabe")
+            
+            # Anzeige der Fruchtart direkt im Titel des Expanders hinzugefügt:
+            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — 🌾 {aktuelle_frucht}"):
                 c_inf, c_act1, c_act2, c_act3, c_act4 = st.columns([2, 1, 1, 1, 1])
                 bedarf_kalk = f["groesse"] * st.session_state.global_verbrauch_kalk
                 bedarf_saat = f["groesse"] * st.session_state.global_verbrauch_saat
