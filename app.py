@@ -264,7 +264,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.write(f"🌿 Herbizid: **{fmt_int(ha * st.session_state.global_verbrauch_herbi)} Liter**")
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU (INKLUSIVE INDIVIDUELLER PRE-FIELD RATEN)
+# SEITE 2: MEINE FELDER & ANBAU (INKLUSIVE LÖSCH-FUNKTION)
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
@@ -276,12 +276,10 @@ elif menu == "🚜 Meine Felder & Anbau":
         f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
         f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st._global_fruchtarten)
         
-        # --- NUR DIESER ABSCHNITT WURDE FÜR DIE GEWÜNSCHTEN VERBRAUCHSRATEN JE FELD ERGÄNZT ---
         st.markdown("##### ⚙️ Spezifische Verbrauchsraten für dieses Feld (L/ha):")
         f_rate_kalk = st.number_input("Kalk-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_kalk))
         f_rate_saat = st.number_input("Saatgut-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_saat))
         f_rate_dueng = st.number_input("Dünger-Rate (L/ha) für dieses Feld:", value=int(st.session_state.global_verbrauch_dueng))
-        # -------------------------------------------------------------------------------------
 
         neue_frucht = st.text_input("➕ Feldfrüchte erweitern:", placeholder="Hier eintippen...")
         if st.button("✨ Fruchtart registrieren"):
@@ -326,13 +324,12 @@ elif menu == "🚜 Meine Felder & Anbau":
         for idx, f in enumerate(st._global_felder_store):
             aktuelle_frucht = f.get("frucht", "Keine Angabe")
             
-            # Liest die feld-spezifische Rate aus, falls vorhanden, sonst Fallback auf globale Rate
             r_kalk = f.get("rate_kalk", st.session_state.global_verbrauch_kalk)
             r_saat = f.get("rate_saat", st.session_state.global_verbrauch_saat)
             r_dueng = f.get("rate_dueng", st.session_state.global_verbrauch_dueng)
             
             with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — 🌾 {aktuelle_frucht}"):
-                c_inf, c_act1, c_act2, c_act3, c_act4 = st.columns([2, 1, 1, 1, 1])
+                c_inf, c_act1, c_act2, c_act3, c_act4, c_del = st.columns([2, 1, 1, 1, 1, 1])
                 bedarf_kalk = f["groesse"] * r_kalk
                 bedarf_saat = f["groesse"] * r_saat
                 bedarf_dueng = f["groesse"] * r_dueng
@@ -362,6 +359,13 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st._global_felder_store[idx] = {k: 0.0 if "verbraucht" in k else v for k, v in st._global_felder_store[idx].items()}
                     speichere_gesamte_daten()
                     st.rerun()
+                
+                # --- HIER IST DER NEUE LÖSCH-BUTTON FÜR DAS JOWEILIGE FELD ---
+                if c_del.button(f"🗑️ Feld Löschen", key=f"del_f_{idx}", type="secondary"):
+                    st._global_felder_store.pop(idx)
+                    speichere_gesamte_daten()
+                    st.rerun()
+                # -------------------------------------------------------------
 
 # ---------------------------------------------------------
 # SEITE 3: RECHNUNGEN
