@@ -299,7 +299,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
                 st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU
+# SEITE 2: MEINE FELDER & ANBAU (REPARIERT & ERWEITERT)
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung mit automatischer Lagerbuchung")
@@ -346,8 +346,9 @@ elif menu == "🚜 Meine Felder & Anbau":
         st.write("---")
         st.subheader("📋 Gekaufte Felder & Feldarbeits-Konsole")
         for idx, f in enumerate(st.session_state._global_felder_store):
-            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — 🌾 {f.get('frucht', 'Unbekannt')}"):
-                c_inf, c_act1, c_act2, c_act3, c_del = st.columns([2, 1, 1, 1, 1])
+            aktuelle_frucht = f.get('frucht', 'Unbekannt')
+            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — 🌾 {aktuelle_frucht}"):
+                c_inf, c_change, c_act1, c_act2, c_act3, c_del = st.columns([1.5, 1.5, 1, 1, 1, 0.8])
                 bedarf_kalk = f["groesse"] * f.get("rate_kalk", 2000)
                 bedarf_saat = f["groesse"] * f.get("rate_saat", 150)
                 bedarf_dueng = f["groesse"] * f.get("rate_dueng", 160)
@@ -355,6 +356,25 @@ elif menu == "🚜 Meine Felder & Anbau":
                 with c_inf:
                     st.text(f"⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L\n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L\n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L")
                 
+                # REPARATUR / ERWEITERUNG: Fruchtart direkt im Feld ändern
+                with c_change:
+                    try:
+                        f_index = st.session_state._global_fruchtarten.index(aktuelle_frucht)
+                    except ValueError:
+                        f_index = 0
+                    
+                    neue_gewaehlte_frucht = st.selectbox(
+                        "Frucht wechseln:", 
+                        st.session_state._global_fruchtarten, 
+                        index=f_index, 
+                        key=f"change_frucht_{idx}"
+                    )
+                    
+                    if neue_gewaehlte_frucht != aktuelle_frucht:
+                        st.session_state._global_felder_store[idx]["frucht"] = neue_gewaehlte_frucht
+                        speichere_gesamte_daten()
+                        st.rerun()
+
                 if c_act1.button(f"⚪ Kalken ({fmt_int(bedarf_kalk)}L)", key=f"kalk_{idx}"):
                     if st.session_state._global_lager_store.get("kalk", 0) >= bedarf_kalk:
                         st.session_state._global_lager_store["kalk"] -= bedarf_kalk
@@ -649,7 +669,7 @@ elif menu == "📝 LU-Auftragsbuch":
             st.info("Keine aktiven Aufträge im Buch vorhanden.")
 
 # ---------------------------------------------------------
-# SEITE 6: REPARIERTER FUHRPARK-MANAGER (NUR MIT GOOGLE SHEETS DATA)
+# SEITE 6: FUHRPARK-MANAGER
 # ---------------------------------------------------------
 elif menu == "🚛 Fuhrpark-Manager":
     st.title("🚛 Fuhrpark- & Wartungsmanager (Google Sheet Live-Synchronisation)")
@@ -663,7 +683,6 @@ elif menu == "🚛 Fuhrpark-Manager":
             m_h = st.number_input("Aktueller Zählerstand / Betriebsstunden (h):", min_value=0.0, step=0.1, value=0.0)
             
             if st.button("💾 In aktiven Fuhrpark aufnehmen", type="primary", use_container_width=True):
-                # Fügt die Maschine dem Store hinzu (Standardwert wird gesetzt)
                 st.session_state._global_fuhrpark_store[m_waehlen] = m_h
                 speichere_gesamte_daten()
                 st.rerun()
@@ -673,16 +692,13 @@ elif menu == "🚛 Fuhrpark-Manager":
     with col_f2:
         st.subheader("📋 Aktiv bewirtschafteter Fuhrpark")
         if st.session_state._global_fuhrpark_store:
-            # Iteriere über das saubere Name -> Stunden Dictionary
             for f_name, f_stunden in list(st.session_state._global_fuhrpark_store.items()):
                 with st.container(border=True):
                     c_fn, c_fh, c_fdel = st.columns([2.5, 1.5, 0.5])
                     
-                    # Holt den aktuellen Miet/Arbeitspreis direkt live aus dem Sheet
                     live_preis = preis_dict.get(f_name, 0.0)
                     c_fn.markdown(f"**{f_name}**  \n`Verrechnungssatz: {fmt_float(live_preis)} €/h`")
                     
-                    # Stunden updaten
                     neue_stunden = c_fh.number_input(f"Betriebsstunden (h)", min_value=0.0, value=float(f_stunden), step=0.1, key=f"f_h_{f_name}")
                     if neue_stunden != f_stunden:
                         st.session_state._global_fuhrpark_store[f_name] = neue_stunden
@@ -702,7 +718,6 @@ elif menu == "🚛 Fuhrpark-Manager":
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch & Finanzanalyse")
     
-    # Kacheln
     einn = st.session_state._global_finanzen.get("einnahmen", 0.0)
     ausg = st.session_state._global_finanzen.get("ausgaben", 0.0)
     start_s = st.session_state._global_finanzen.get("start_saldo", 0.0)
@@ -715,7 +730,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
     
     st.markdown("---")
     
-    # EXPANDER FÜR MANUELLE BUCHUNGEN
     with st.expander("➕ Spontane Buchung manuell eintragen (Händler, Werkstatt, etc.)"):
         c_man1, c_man2, c_man3 = st.columns(3)
         man_monat = c_man1.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
