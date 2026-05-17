@@ -1,3 +1,4 @@
+import streamlit as set_page_config
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -43,7 +44,6 @@ def extrahiere_monat_int(monat_str):
     except: return 1
 
 def hole_kalender_fuer_frucht(frucht):
-    # Schaut zuerst in den benutzerdefinierten Früchten, dann im Standard-Kalender
     if frucht in st.session_state._global_custom_kalender:
         return st.session_state._global_custom_kalender[frucht]
     return LS25_KALENDER_STANDARD.get(frucht, {"sa": [], "er": []})
@@ -64,7 +64,6 @@ def berechne_erntestatus(frucht, saat_monat_str, aktueller_monat_str, manueller_
         return "🟢 REIF ZUR ERNTE!", "green"
         
     if len(kalender["er"]) > 0 and akt_m > max(kalender["er"]):
-        # Spezialfall für Früchte, die über das Jahr hinaus gehen (z.B. Pappel)
         if akt_m in kalender["sa"] or (len(kalender["sa"]) > 0 and akt_m < min(kalender["sa"])):
             return "🌱 Im Wachstum", "blue"
         return "🚨 ERNTEZEIT VERPASST!", "red"
@@ -83,7 +82,7 @@ def lade_gesamte_daten():
         "bestell_store": [],
         "felder_store": [],
         "fruchtarten": list(LS25_KALENDER_STANDARD.keys()),
-        "custom_kalender": {},  # Hier werden deine eigenen Früchte mit Monaten gespeichert!
+        "custom_kalender": {},
         "finanzen": {
             "start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0,
             "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []
@@ -116,12 +115,20 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_finanzen = gespeicherte_daten.get("finanzen", {})
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {})
     st.session_state._global_auftrags_store = gespeicherte_daten.get("auftrags_store", [])
-    st.session_state._global_fuhrpark_store = gespeicherte_daten.get("fuhrpark_store", {})
+    
+    # Hier direkt sicherstellen, dass es beim Laden ein Dictionary wird
+    fp_store = gespeicherte_daten.get("fuhrpark_store", {})
+    st.session_state._global_fuhrpark_store = fp_store if isinstance(fp_store, dict) else {}
+    
     st.session_state._global_ingame_monat = gespeicherte_daten.get("aktueller_ingame_monat", "03 - Mrz")
     st.session_state._global_ingame_jahr = gespeicherte_daten.get("aktuelles_ingame_jahr", 1)
     st.session_state._global_daten_geladen = True
 
 def speichere_gesamte_daten():
+    # Letzter Sicherheits-Check vor dem Schreiben auf die Festplatte
+    fp_store = st.session_state.get("_global_fuhrpark_store", {})
+    if not isinstance(fp_store, dict): fp_store = {}
+        
     daten_zum_speichern = {
         "hof_store": st.session_state._global_hof_store,
         "lager_store": st.session_state._global_lager_store,
@@ -132,7 +139,7 @@ def speichere_gesamte_daten():
         "finanzen": st.session_state._global_finanzen,
         "lager_grenzwerte": st.session_state._global_lager_grenzwerte,
         "auftrags_store": st.session_state._global_auftrags_store,
-        "fuhrpark_store": st.session_state._global_fuhrpark_store,
+        "fuhrpark_store": fp_store,
         "aktueller_ingame_monat": st.session_state._global_ingame_monat,
         "aktuelles_ingame_jahr": st.session_state._global_ingame_jahr
     }
@@ -146,7 +153,6 @@ def fmt_float(wert):
     try: return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except: return str(wert)
 
-# (Hilfsfunktionen für Logo & PDFs bleiben erhalten)
 def finde_logo_datei():
     for dateiname in ["logo.png", "logo.png.jpeg", "logo.png.jpg", "logo.jpeg", "logo.jpg", "logo.PNG", "logo.JPEG"]:
         if os.path.exists(dateiname): return dateiname
@@ -270,12 +276,11 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.info(f"🌱 **Erlaubte Aussaat:** {', '.join(saat_monate) if saat_monate else 'Keine (Spezial)'}  \n🌾 **Erntezeit:** {', '.join(ernte_monate) if ernte_monate else 'Keine (Spezial)'}")
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU (MIT SPEICHERBAREN CUSTOM-FRÜCHTEN)
+# SEITE 2: MEINE FELDER & ANBAU
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
     st.title("🚜 Feld-Verwaltung & Frucht-Kalender Editor")
     
-    # NEUER TAB / EXPANDER: EIGENE FRUCHTART DAUERHAFT DEFINIEREN
     with st.expander("✨ Neue Mod-Fruchtart definieren (Kalender festlegen)"):
         st.markdown("Hier kannst du Früchte der französischen Karte eintragen, damit sie ab sofort automatisch berechnet werden.")
         c_nf1, c_nf2, c_nf3 = st.columns([1.5, 2, 2])
@@ -290,7 +295,6 @@ elif menu == "🚜 Meine Felder & Anbau":
                 saat_ints = [extrahiere_monat_int(m) for m in saat_monate_auswahl]
                 ernte_ints = [extrahiere_monat_int(m) for m in ernte_monate_auswahl]
                 
-                # In den globalen Strukturen speichern
                 if f_name not in st.session_state._global_fruchtarten:
                     st.session_state._global_fruchtarten.append(f_name)
                     st.session_state._global_fruchtarten.sort()
@@ -308,8 +312,6 @@ elif menu == "🚜 Meine Felder & Anbau":
         cx1, cx2 = st.columns(2)
         f_nummer = cx1.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 12")
         f_groesse = cx2.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
-        
-        # dropdown enthält nun auch alle zuvor erstellten Custom-Früchte
         f_frucht = st.selectbox("Aktuelle Frucht auf dem Feld:", st.session_state._global_fruchtarten, key="reg_opt_frucht")
             
         if st.button("💾 Feld in Datenbank eintragen", type="primary", use_container_width=True):
@@ -406,7 +408,9 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.session_state._global_felder_store.pop(idx)
                     speichere_gesamte_daten(); st.rerun()
 
-# Die restlichen App-Menüs (Rechnungen, Kassenbuch, etc.) bleiben unverändert lauffähig darunter...
+# ---------------------------------------------------------
+# SEITE 3: RECHNUNGEN
+# ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
     col_eingabe, col_liste = st.columns([1, 1.2])
@@ -462,6 +466,9 @@ elif menu == "📋 Rechnungen":
             st.session_state.rechnungs_posten = []
             speichere_gesamte_daten(); st.rerun()
 
+# ---------------------------------------------------------
+# SEITE 4: MATERIAL & AUFTRÄGE
+# ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Material-Lagerbestand")
     c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
@@ -478,6 +485,9 @@ elif menu == "🛒 Material & Aufträge":
             st.session_state._global_lager_grenzwerte[mat] = werte[f"g_{mat}"]
         speichere_gesamte_daten(); st.rerun()
 
+# ---------------------------------------------------------
+# SEITE 5: LU-AUFTRAGSBUCH
+# ---------------------------------------------------------
 elif menu == "📝 LU-Auftragsbuch":
     st.title("📝 LU-Auftragsbuch")
     col_a, col_b = st.columns([1.1, 1.4])
@@ -529,8 +539,16 @@ elif menu == "📝 LU-Auftragsbuch":
                     st.session_state._global_finanzen["historie"].append({"In-Game Datum": f"{aut['monat']}", "Sort_Jahr": aut['jahr'], "Sort_Monat": aut['monat'], "Typ": "Einnahme", "Nummer": f"#LU-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}", "Details": f"LU Job: {aut['kunde']}", "Betrag (EUR)": total_wert})
                     st.session_state._global_auftrags_store.pop(idx); speichere_gesamte_daten(); st.rerun()
 
+# ---------------------------------------------------------
+# SEITE 6: FUHRPARK-MANAGER (HIER WAR DER TYP-FEHLER)
+# ---------------------------------------------------------
 elif menu == "🚛 Fuhrpark-Manager":
     st.title("🚛 Fuhrpark-Manager")
+    
+    # Absolute Absicherung der Datenstruktur direkt im Menü
+    if not isinstance(st.session_state.get("_global_fuhrpark_store"), dict):
+        st.session_state._global_fuhrpark_store = {}
+        
     col_f1, col_f2 = st.columns([1, 1.5])
     with col_f1:
         if preis_dict:
@@ -539,6 +557,9 @@ elif menu == "🚛 Fuhrpark-Manager":
             if st.button("💾 Hinzufügen", use_container_width=True, type="primary"):
                 st.session_state._global_fuhrpark_store[m_waehlen] = m_h
                 speichere_gesamte_daten(); st.rerun()
+        else:
+            st.info("Keine Maschinen im Google-Sheet gefunden.")
+            
     with col_f2:
         for f_name, f_stunden in list(st.session_state._global_fuhrpark_store.items()):
             with st.container(border=True):
@@ -552,6 +573,9 @@ elif menu == "🚛 Fuhrpark-Manager":
                     del st.session_state._global_fuhrpark_store[f_name]
                     speichere_gesamte_daten(); st.rerun()
 
+# ---------------------------------------------------------
+# SEITE 7: KASSENBUCH
+# ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Kassenbuch")
     historie_liste = st.session_state._global_finanzen.get("historie", [])
