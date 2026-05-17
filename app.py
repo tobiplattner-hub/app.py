@@ -9,9 +9,9 @@ from fpdf import FPDF
 st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜")
 
 # ---------------------------------------------------------
-# LS25 ANBAUKALENDER-DATEN (Offizielle In-Game Monate)
+# LS25 ANBAUKALENDER-DATEN (Standard In-Game Monate)
 # ---------------------------------------------------------
-LS25_KALENDER = {
+LS25_KALENDER_STANDARD = {
     "Weizen": {"sa": [3, 4, 8, 9, 10], "er": [6, 7, 8]},
     "Gerste": {"sa": [8, 9, 10], "er": [5, 6, 7]},
     "Hafer": {"sa": [2, 3, 4], "er": [7, 8]},
@@ -42,8 +42,14 @@ def extrahiere_monat_int(monat_str):
     try: return int(monat_str.split(" - ")[0])
     except: return 1
 
+def hole_kalender_fuer_frucht(frucht):
+    # Schaut zuerst in den benutzerdefinierten Früchten, dann im Standard-Kalender
+    if frucht in st.session_state._global_custom_kalender:
+        return st.session_state._global_custom_kalender[frucht]
+    return LS25_KALENDER_STANDARD.get(frucht, {"sa": [], "er": []})
+
 def berechne_erntestatus(frucht, saat_monat_str, aktueller_monat_str, manueller_status=None):
-    if manueller_status and manueller_status != "Automatisch (LS25 Kalender)":
+    if manueller_status and manueller_status != "Automatisch (Kalender)":
         if "REIF" in manueller_status: return manueller_status, "green"
         if "Brach" in manueller_status: return manueller_status, "gray"
         return manueller_status, "blue"
@@ -51,16 +57,16 @@ def berechne_erntestatus(frucht, saat_monat_str, aktueller_monat_str, manueller_
     if not saat_monat_str or saat_monat_str == "Nicht gesät":
         return "⏳ Brachland / Bereit", "gray"
         
-    if frucht not in LS25_KALENDER:
-        return "🌱 Im Wachstum (Manueller Modus)", "blue"
-        
+    kalender = hole_kalender_fuer_frucht(frucht)
     akt_m = extrahiere_monat_int(aktueller_monat_str)
-    kalender = LS25_KALENDER[frucht]
     
     if akt_m in kalender["er"]:
         return "🟢 REIF ZUR ERNTE!", "green"
         
     if len(kalender["er"]) > 0 and akt_m > max(kalender["er"]):
+        # Spezialfall für Früchte, die über das Jahr hinaus gehen (z.B. Pappel)
+        if akt_m in kalender["sa"] or (len(kalender["sa"]) > 0 and akt_m < min(kalender["sa"])):
+            return "🌱 Im Wachstum", "blue"
         return "🚨 ERNTEZEIT VERPASST!", "red"
         
     return "🌱 Im Wachstum", "blue"
@@ -76,11 +82,8 @@ def lade_gesamte_daten():
         "lager_store": {"saat": 5000, "kalk": 20000, "dueng": 4000, "herbi": 2000, "diesel": 5000},
         "bestell_store": [],
         "felder_store": [],
-        "fruchtarten": [
-            "Weizen", "Gerste", "Hafer", "Raps", "Sonnenblumen", 
-            "Sojabohnen", "Mais", "Kartoffeln", "Zuckerrüben", 
-            "Gras", "Ölrettich", "Pappel", "Zuckerrohr", "Baumwolle", "Reis", "Langkornreis", "Spinat", "Dinkel"
-        ],
+        "fruchtarten": list(LS25_KALENDER_STANDARD.keys()),
+        "custom_kalender": {},  # Hier werden deine eigenen Früchte mit Monaten gespeichert!
         "finanzen": {
             "start_saldo": 0.0, "einnahmen": 0.0, "ausgaben": 0.0,
             "naechste_rechnung_id": 1, "naechste_bestellung_id": 1, "historie": []
@@ -109,6 +112,7 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_bestell_store = gespeicherte_daten.get("bestell_store", [])
     st.session_state._global_felder_store = gespeicherte_daten.get("felder_store", [])
     st.session_state._global_fruchtarten = gespeicherte_daten.get("fruchtarten", [])
+    st.session_state._global_custom_kalender = gespeicherte_daten.get("custom_kalender", {})
     st.session_state._global_finanzen = gespeicherte_daten.get("finanzen", {})
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {})
     st.session_state._global_auftrags_store = gespeicherte_daten.get("auftrags_store", [])
@@ -124,6 +128,7 @@ def speichere_gesamte_daten():
         "bestell_store": st.session_state._global_bestell_store,
         "felder_store": st.session_state._global_felder_store,
         "fruchtarten": st.session_state._global_fruchtarten,
+        "custom_kalender": st.session_state._global_custom_kalender,
         "finanzen": st.session_state._global_finanzen,
         "lager_grenzwerte": st.session_state._global_lager_grenzwerte,
         "auftrags_store": st.session_state._global_auftrags_store,
@@ -141,7 +146,7 @@ def fmt_float(wert):
     try: return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except: return str(wert)
 
-# (Logo und PDF Klassen bleiben identisch wie vorher)
+# (Hilfsfunktionen für Logo & PDFs bleiben erhalten)
 def finde_logo_datei():
     for dateiname in ["logo.png", "logo.png.jpeg", "logo.png.jpg", "logo.jpeg", "logo.jpg", "logo.PNG", "logo.JPEG"]:
         if os.path.exists(dateiname): return dateiname
@@ -255,48 +260,60 @@ if menu == "💰 Ernte & Verbrauchsraten":
         st.session_state.global_verbrauch_saat = st.number_input("Saatgut Bedarf (L/ha):", value=st.session_state.global_verbrauch_saat)
         st.session_state.global_verbrauch_herbi = st.number_input("Herbizid Bedarf (L/ha):", value=st.session_state.global_verbrauch_herbi)
     with col2:
-        st.subheader("Anbau- & Ernte-Info (LS25 Referenz)")
+        st.subheader("Anbau- & Ernte-Info (Alle Früchte)")
         ref_frucht = st.selectbox("Frucht-Steckbrief abrufen:", st.session_state._global_fruchtarten, key="ref_f")
-        if ref_frucht in LS25_KALENDER:
-            k = LS25_KALENDER[ref_frucht]
-            saat_monate = [LISTE_MONATE[m-1] for m in k["sa"]]
-            ernte_monate = [LISTE_MONATE[m-1] for m in k["er"]]
-            st.info(f"🌱 **Erlaubte Aussaat:** {', '.join(saat_monate) if saat_monate else 'Keine (Spezial)'}  \n🌾 **Erntezeit:** {', '.join(ernte_monate) if ernte_monate else 'Keine (Spezial)'}")
-        else:
-            st.warning("Für diese Fruchtart liegen keine vordefinierten Kalenderdaten vor (Manueller Modus aktiv).")
+        
+        k = hole_kalender_fuer_frucht(ref_frucht)
+        saat_monate = [LISTE_MONATE[m-1] for m in k["sa"]]
+        ernte_monate = [LISTE_MONATE[m-1] for m in k["er"]]
+        
+        st.info(f"🌱 **Erlaubte Aussaat:** {', '.join(saat_monate) if saat_monate else 'Keine (Spezial)'}  \n🌾 **Erntezeit:** {', '.join(ernte_monate) if ernte_monate else 'Keine (Spezial)'}")
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU (INKL. MANUELLER ERWEITERUNG)
+# SEITE 2: MEINE FELDER & ANBAU (MIT SPEICHERBAREN CUSTOM-FRÜCHTEN)
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
-    st.title("🚜 Feld-Verwaltung mit Reife-Tracker & Frucht-Editor")
+    st.title("🚜 Feld-Verwaltung & Frucht-Kalender Editor")
     
+    # NEUER TAB / EXPANDER: EIGENE FRUCHTART DAUERHAFT DEFINIEREN
+    with st.expander("✨ Neue Mod-Fruchtart definieren (Kalender festlegen)"):
+        st.markdown("Hier kannst du Früchte der französischen Karte eintragen, damit sie ab sofort automatisch berechnet werden.")
+        c_nf1, c_nf2, c_nf3 = st.columns([1.5, 2, 2])
+        neue_frucht_name = c_nf1.text_input("Name der Mod-Frucht:", placeholder="z.B. Senf, Flachs, Luzerne")
+        
+        saat_monate_auswahl = c_nf2.multiselect("In welchen Monaten wird gesät?", LISTE_MONATE, key="cust_saat")
+        ernte_monate_auswahl = c_nf3.multiselect("In welchen Monaten wird geerntet?", LISTE_MONATE, key="cust_ernte")
+        
+        if st.button("💾 Fruchtart im System registrieren", use_container_width=True):
+            if neue_frucht_name.strip():
+                f_name = neue_frucht_name.strip()
+                saat_ints = [extrahiere_monat_int(m) for m in saat_monate_auswahl]
+                ernte_ints = [extrahiere_monat_int(m) for m in ernte_monate_auswahl]
+                
+                # In den globalen Strukturen speichern
+                if f_name not in st.session_state._global_fruchtarten:
+                    st.session_state._global_fruchtarten.append(f_name)
+                    st.session_state._global_fruchtarten.sort()
+                
+                st.session_state._global_custom_kalender[f_name] = {"sa": saat_ints, "er": ernte_ints}
+                speichere_gesamte_daten()
+                st.success(f"Frucht '{f_name}' wurde erfolgreich gespeichert und berechnet sich ab jetzt automatisch!")
+                st.rerun()
+
+    st.write("---")
+
     col_feld_ein, col_feld_stats = st.columns([1.2, 0.8])
     with col_feld_ein:
         st.subheader("📝 Neues Feld registrieren")
         cx1, cx2 = st.columns(2)
-        f_nummer = cx1.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
+        f_nummer = cx1.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 12")
         f_groesse = cx2.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
         
-        # Fruchtart-Auswahl inkl. Option für neue Frucht
-        optionen_mit_neu = st.session_state._global_fruchtarten + ["➕ Neue Fruchtart hinzufügen..."]
-        gewaehlte_opt = st.selectbox("Aktuelle Frucht:", optionen_mit_neu, key="reg_opt_frucht")
-        
-        f_frucht = ""
-        if gewaehlte_opt == "➕ Neue Fruchtart hinzufügen...":
-            neue_eingabe = st.text_input("Name der neuen Fruchtart eingeben:", placeholder="z.B. Weißkohl")
-            if neue_eingabe.strip():
-                f_frucht = neue_eingabe.strip()
-        else:
-            f_frucht = gewaehlte_opt
+        # dropdown enthält nun auch alle zuvor erstellten Custom-Früchte
+        f_frucht = st.selectbox("Aktuelle Frucht auf dem Feld:", st.session_state._global_fruchtarten, key="reg_opt_frucht")
             
         if st.button("💾 Feld in Datenbank eintragen", type="primary", use_container_width=True):
             if f_nummer.strip() and f_frucht:
-                # Falls die Fruchtart komplett neu ist, permanent sichern
-                if f_frucht not in st.session_state._global_fruchtarten:
-                    st.session_state._global_fruchtarten.append(f_frucht)
-                    st.session_state._global_fruchtarten.sort()
-                
                 st.session_state._global_felder_store.append({
                     "nummer": f_nummer.strip(), "groesse": f_groesse, "frucht": f_frucht,
                     "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0,
@@ -304,7 +321,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     "rate_saat": st.session_state.global_verbrauch_saat, 
                     "rate_dueng": st.session_state.global_verbrauch_dueng,
                     "saat_monat": "Nicht gesät",
-                    "manueller_status": "Automatisch (LS25 Kalender)"
+                    "manueller_status": "Automatisch (Kalender)"
                 })
                 speichere_gesamte_daten()
                 st.rerun()
@@ -323,7 +340,7 @@ elif menu == "🚜 Meine Felder & Anbau":
         for idx, f in enumerate(st.session_state._global_felder_store):
             aktuelle_frucht = f.get('frucht', 'Weizen')
             s_monat = f.get('saat_monat', 'Nicht gesät')
-            m_status = f.get('manueller_status', 'Automatisch (LS25 Kalender)')
+            m_status = f.get('manueller_status', 'Automatisch (Kalender)')
             
             status_text, farbe = berechne_erntestatus(aktuelle_frucht, s_monat, st.session_state._global_ingame_monat, m_status)
             
@@ -332,7 +349,6 @@ elif menu == "🚜 Meine Felder & Anbau":
                 
                 bedarf_kalk = f["groesse"] * f.get("rate_kalk", 2000)
                 bedarf_saat = f["groesse"] * f.get("rate_saat", 150)
-                bedarf_dueng = f["groesse"] * f.get("rate_dueng", 160)
                 
                 with c_inf:
                     st.markdown(f"**Verbrauchsdaten:**  \n⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L  \n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L  \n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L")
@@ -340,22 +356,11 @@ elif menu == "🚜 Meine Felder & Anbau":
                     elif farbe == "red": st.error(status_text)
                     else: st.info(status_text)
                 
-                # Frucht wechseln oder direkt hier eine neue hinzufügen
                 with c_change:
-                    opt_ch_mit_neu = st.session_state._global_fruchtarten + ["➕ Neue Frucht..."]
-                    try: f_index = opt_ch_mit_neu.index(aktuelle_frucht)
+                    try: f_index = st.session_state._global_fruchtarten.index(aktuelle_frucht)
                     except: f_index = 0
-                    
-                    ch_opt = st.selectbox("Frucht wechseln:", opt_ch_mit_neu, index=f_index, key=f"ch_opt_{idx}")
-                    if ch_opt == "➕ Neue Frucht...":
-                        blitz_eingabe = st.text_input("Neue Fruchtart:", key=f"blitz_{idx}", placeholder="z.B. Hopfen")
-                        if blitz_eingabe.strip() and blitz_eingabe.strip() != aktuelle_frucht:
-                            if blitz_eingabe.strip() not in st.session_state._global_fruchtarten:
-                                st.session_state._global_fruchtarten.append(blitz_eingabe.strip())
-                                st.session_state._global_fruchtarten.sort()
-                            st.session_state._global_felder_store[idx]["frucht"] = blitz_eingabe.strip()
-                            speichere_gesamte_daten(); st.rerun()
-                    elif ch_opt != aktuelle_frucht:
+                    ch_opt = st.selectbox("Frucht wechseln:", st.session_state._global_fruchtarten, index=f_index, key=f"ch_opt_{idx}")
+                    if ch_opt != aktuelle_frucht:
                         st.session_state._global_felder_store[idx]["frucht"] = ch_opt
                         speichere_gesamte_daten(); st.rerun()
                         
@@ -368,13 +373,12 @@ elif menu == "🚜 Meine Felder & Anbau":
                         st.session_state._global_felder_store[idx]["saat_monat"] = neuer_saat_monat
                         speichere_gesamte_daten(); st.rerun()
 
-                # Status händisch überschreiben (besonders wichtig für Custom-Früchte!)
                 with c_manual_state:
-                    status_optionen = ["Automatisch (LS25 Kalender)", "🌱 Im Wachstum", "🟢 REIF ZUR ERNTE!", "⏳ Brachland / Bereit", "🚨 ERNTEZEIT VERPASST!"]
+                    status_optionen = ["Automatisch (Kalender)", "🌱 Im Wachstum", "🟢 REIF ZUR ERNTE!", "⏳ Brachland / Bereit", "🚨 ERNTEZEIT VERPASST!"]
                     try: m_index = status_optionen.index(m_status)
                     except: m_index = 0
                     
-                    neuer_m_status = st.selectbox("Status-Modus:", status_optionen, index=m_index, key=f"ch_m_stat_{idx}")
+                    neuer_m_status = st.selectbox("Status-Override:", status_optionen, index=m_index, key=f"ch_m_stat_{idx}")
                     if neuer_m_status != m_status:
                         st.session_state._global_felder_store[idx]["manueller_status"] = neuer_m_status
                         speichere_gesamte_daten(); st.rerun()
@@ -382,8 +386,9 @@ elif menu == "🚜 Meine Felder & Anbau":
                 if c_act1.button(f"🌱 Säen ({fmt_int(bedarf_saat)}L)", key=f"saat_{idx}", use_container_width=True):
                     if st.session_state._global_lager_store.get("saat", 0) >= bedarf_saat:
                         akt_m_int = extrahiere_monat_int(st.session_state._global_ingame_monat)
-                        if aktuelle_frucht in LS25_KALENDER and akt_m_int not in LS25_KALENDER[aktuelle_frucht]["sa"]:
-                            st.warning("Laut Kalender ist jetzt keine Aussaatzeit!")
+                        k_check = hole_kalender_fuer_frucht(aktuelle_frucht)
+                        if k_check["sa"] and akt_m_int not in k_check["sa"]:
+                            st.warning("Laut Kalender ist jetzt keine optimale Aussaatzeit!")
                         st.session_state._global_lager_store["saat"] -= bedarf_saat
                         st.session_state._global_felder_store[idx]["saat_verbraucht"] += bedarf_saat
                         st.session_state._global_felder_store[idx]["saat_monat"] = st.session_state._global_ingame_monat
@@ -392,16 +397,16 @@ elif menu == "🚜 Meine Felder & Anbau":
                     
                 if c_act2.button(f"🚜 Ernte", key=f"ernte_{idx}", use_container_width=True):
                     st.session_state._global_felder_store[idx]["saat_monat"] = "Nicht gesät"
-                    st.session_state._global_felder_store[idx]["manueller_status"] = "Automatisch (LS25 Kalender)"
+                    st.session_state._global_felder_store[idx]["manueller_status"] = "Automatisch (Kalender)"
                     speichere_gesamte_daten()
-                    st.success("Feld zurückgesetzt!")
+                    st.success("Feld abgeerntet & zurückgesetzt!")
                     st.rerun()
                     
                 if c_del.button(f"🗑️", key=f"del_f_{idx}", use_container_width=True):
                     st.session_state._global_felder_store.pop(idx)
                     speichere_gesamte_daten(); st.rerun()
 
-# Die restlichen Menüpunkte bleiben identisch...
+# Die restlichen App-Menüs (Rechnungen, Kassenbuch, etc.) bleiben unverändert lauffähig darunter...
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
     col_eingabe, col_liste = st.columns([1, 1.2])
