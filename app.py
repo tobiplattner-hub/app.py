@@ -35,7 +35,7 @@ def lade_gesamte_daten():
         },
         "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000},
         "auftrags_store": [],
-        "fuhrpark_store": []
+        "fuhrpark_store": {}  # Umgestellt auf ein Dictionary für Maschinenname -> Stunden
     }
     
     if os.path.exists(DATA_FILE):
@@ -60,7 +60,9 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_finanzen = gespeicherte_daten.get("finanzen", {})
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {})
     st.session_state._global_auftrags_store = gespeicherte_daten.get("auftrags_store", [])
-    st.session_state._global_fuhrpark_store = gespeicherte_daten.get("fuhrpark_store", [])
+    st.session_state._global_fuhrpark_store = gespeicherte_daten.get("fuhrpark_store", {})
+    if isinstance(st.session_state._global_fuhrpark_store, list):  # Migration alter Listendaten falls nötig
+        st.session_state._global_fuhrpark_store = {}
     st.session_state._global_daten_geladen = True
 
 def speichere_gesamte_daten():
@@ -475,7 +477,7 @@ elif menu == "🛒 Material & Aufträge":
             else:
                 st.success("✅ Bestand OK")
             
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
         for mat in materialien:
             st.session_state._global_lager_store[mat] = werte[f"v_{mat}"]
             st.session_state._global_lager_grenzwerte[mat] = werte[f"g_{mat}"]
@@ -647,50 +649,55 @@ elif menu == "📝 LU-Auftragsbuch":
             st.info("Keine aktiven Aufträge im Buch vorhanden.")
 
 # ---------------------------------------------------------
-# SEITE 6: FUHRPARK-MANAGER
+# SEITE 6: REPARIERTER FUHRPARK-MANAGER (NUR MIT GOOGLE SHEETS DATA)
 # ---------------------------------------------------------
 elif menu == "🚛 Fuhrpark-Manager":
-    st.title("🚛 Fuhrpark- & Wartungsmanager")
+    st.title("🚛 Fuhrpark- & Wartungsmanager (Google Sheet Live-Synchronisation)")
     
     col_f1, col_f2 = st.columns([1, 1.5])
+    
     with col_f1:
-        st.subheader("📝 Maschine registrieren")
-        m_name = st.text_input("Name / Bezeichnung:", placeholder="z.B. John Deere 8R")
-        m_typ = m_typ = st.selectbox("Fahrzeugtyp:", ["Traktor", "Mähdrescher", "Häcksler", "LKW", "Teleskoplader", "Anbaugerät"])
-        m_h = st.number_input("Aktuelle Betriebsstunden (h):", min_value=0.0, step=0.1, value=0.0)
-        
-        if st.button("💾 Maschine im Fuhrpark保存", type="primary", use_container_width=True):
-            if m_name.strip():
-                st.session_state._global_fuhrpark_store.append({
-                    "name": m_name.strip(), "typ": m_typ, "stunden": m_h, "letzte_wartung": m_h
-                })
+        st.subheader("📝 Maschine auf dem Hof aktivieren")
+        if preis_dict:
+            m_waehlen = st.selectbox("Maschine aus deiner Preisliste:", options=list(preis_dict.keys()))
+            m_h = st.number_input("Aktueller Zählerstand / Betriebsstunden (h):", min_value=0.0, step=0.1, value=0.0)
+            
+            if st.button("💾 In aktiven Fuhrpark aufnehmen", type="primary", use_container_width=True):
+                # Fügt die Maschine dem Store hinzu (Standardwert wird gesetzt)
+                st.session_state._global_fuhrpark_store[m_waehlen] = m_h
                 speichere_gesamte_daten()
                 st.rerun()
+        else:
+            st.warning("Keine Maschinen in der Google-Sheet-Preisliste gefunden. Bitte überprüfe die Tabelle.")
                 
     with col_f2:
-        st.subheader("📋 Maschinenübersicht & Betriebsstunden")
+        st.subheader("📋 Aktiv bewirtschafteter Fuhrpark")
         if st.session_state._global_fuhrpark_store:
-            for f_idx, maschine in enumerate(st.session_state._global_fuhrpark_store):
+            # Iteriere über das saubere Name -> Stunden Dictionary
+            for f_name, f_stunden in list(st.session_state._global_fuhrpark_store.items()):
                 with st.container(border=True):
-                    c_fn, c_fh, c_fdel = st.columns([2, 2, 1])
-                    c_fn.markdown(f"**{maschine['name']}**  \nKategorie: `{maschine['typ']}`")
+                    c_fn, c_fh, c_fdel = st.columns([2.5, 1.5, 0.5])
+                    
+                    # Holt den aktuellen Miet/Arbeitspreis direkt live aus dem Sheet
+                    live_preis = preis_dict.get(f_name, 0.0)
+                    c_fn.markdown(f"**{f_name}**  \n`Verrechnungssatz: {fmt_float(live_preis)} €/h`")
                     
                     # Stunden updaten
-                    neue_stunden = c_fh.number_input(f"Stunden (h)", min_value=float(maschine['stunden']), value=float(maschine['stunden']), step=0.1, key=f"f_h_{f_idx}")
-                    if neue_stunden != maschine['stunden']:
-                        st.session_state._global_fuhrpark_store[f_idx]['stunden'] = neue_stunden
+                    neue_stunden = c_fh.number_input(f"Betriebsstunden (h)", min_value=0.0, value=float(f_stunden), step=0.1, key=f"f_h_{f_name}")
+                    if neue_stunden != f_stunden:
+                        st.session_state._global_fuhrpark_store[f_name] = neue_stunden
                         speichere_gesamte_daten()
                         st.rerun()
                         
-                    if c_fdel.button("🗑️", key=f"del_f_mach_{f_idx}"):
-                        st.session_state._global_fuhrpark_store.pop(f_idx)
+                    if c_fdel.button("🗑️", key=f"del_f_mach_{f_name}"):
+                        del st.session_state._global_fuhrpark_store[f_name]
                         speichere_gesamte_daten()
                         st.rerun()
         else:
-            st.info("Noch keine Maschinen im Fuhrpark vorhanden.")
+            st.info("Aktuell befinden sich keine aktiven Maschinen auf dem Hof. Aktiviere links dein erstes Gerät!")
 
 # ---------------------------------------------------------
-# SEITE 7: DETAILLIERTES KASSENBUCH (INKL. MANUELLER EINGABE)
+# SEITE 7: DETAILLIERTES KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch & Finanzanalyse")
@@ -708,7 +715,7 @@ elif menu == "📖 Detailliertes Kassenbuch":
     
     st.markdown("---")
     
-    # NEU: EXPANDER FÜR MANUELLE BUCHUNGEN
+    # EXPANDER FÜR MANUELLE BUCHUNGEN
     with st.expander("➕ Spontane Buchung manuell eintragen (Händler, Werkstatt, etc.)"):
         c_man1, c_man2, c_man3 = st.columns(3)
         man_monat = c_man1.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
@@ -718,7 +725,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
         c_man4, c_man5 = st.columns(2)
         man_betrag = c_man4.number_input("Betrag (€):", min_value=0.01, value=100.0, step=10.0)
         
-        # Zwei separate Buttons für klare Trennung
         st.write("")
         c_btn_ein, c_btn_aus = st.columns(2)
         
