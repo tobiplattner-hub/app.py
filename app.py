@@ -1,4 +1,3 @@
-import streamlit as set_page_config
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -116,7 +115,6 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {})
     st.session_state._global_auftrags_store = gespeicherte_daten.get("auftrags_store", [])
     
-    # Hier direkt sicherstellen, dass es beim Laden ein Dictionary wird
     fp_store = gespeicherte_daten.get("fuhrpark_store", {})
     st.session_state._global_fuhrpark_store = fp_store if isinstance(fp_store, dict) else {}
     
@@ -125,7 +123,6 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_daten_geladen = True
 
 def speichere_gesamte_daten():
-    # Letzter Sicherheits-Check vor dem Schreiben auf die Festplatte
     fp_store = st.session_state.get("_global_fuhrpark_store", {})
     if not isinstance(fp_store, dict): fp_store = {}
         
@@ -540,12 +537,11 @@ elif menu == "📝 LU-Auftragsbuch":
                     st.session_state._global_auftrags_store.pop(idx); speichere_gesamte_daten(); st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 6: FUHRPARK-MANAGER (HIER WAR DER TYP-FEHLER)
+# SEITE 6: FUHRPARK-MANAGER
 # ---------------------------------------------------------
 elif menu == "🚛 Fuhrpark-Manager":
     st.title("🚛 Fuhrpark-Manager")
     
-    # Absolute Absicherung der Datenstruktur direkt im Menü
     if not isinstance(st.session_state.get("_global_fuhrpark_store"), dict):
         st.session_state._global_fuhrpark_store = {}
         
@@ -574,14 +570,55 @@ elif menu == "🚛 Fuhrpark-Manager":
                     speichere_gesamte_daten(); st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 7: KASSENBUCH
+# SEITE 7: KASSENBUCH (JETZT MIT MANUELLER BUCHUNGSMÖGLICHKEIT)
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
-    st.title("📖 Kassenbuch")
+    st.title("📖 Kassenbuch & Finanzzentrale")
+    
+    # NEU: Das Buchungsformular für manuelle Ein- und Ausgaben
+    with st.expander("➕ Manuelle Buchung durchführen (Einnahme / Ausgabe)"):
+        c_kb1, c_kb2, c_kb3 = st.columns([1, 2, 1.2])
+        b_typ = c_kb1.selectbox("Buchungs-Typ:", ["Ausgabe", "Einnahme"])
+        b_text = c_kb2.text_input("Verwendungszweck / Details:", placeholder="z.B. Saatgut-Palette gekauft, Kreditzinsen, etc.")
+        b_betrag = c_kb3.number_input("Betrag in €:", min_value=0.01, value=100.0, step=50.0, format="%.2f")
+        
+        if st.button("💾 Transaktion verbindlich buchen", type="primary", use_container_width=True):
+            if b_text.strip():
+                full_ingame_date = f"J{st.session_state._global_ingame_jahr}-{st.session_state._global_ingame_monat}"
+                
+                if b_typ == "Einnahme":
+                    st.session_state._global_finanzen["einnahmen"] += b_betrag
+                    prefix = "#MAN-EIN"
+                else:
+                    st.session_state._global_finanzen["ausgaben"] += b_betrag
+                    prefix = "#MAN-AUS"
+                
+                # In den historischen Datenstrom einfügen
+                st.session_state._global_finanzen["historie"].append({
+                    "In-Game Datum": full_ingame_date, 
+                    "Sort_Jahr": int(st.session_state._global_ingame_jahr), 
+                    "Sort_Monat": st.session_state._global_ingame_monat,
+                    "Typ": b_typ, 
+                    "Nummer": f"{prefix}-{os.urandom(2).hex().upper()}", 
+                    "Details": b_text.strip(), 
+                    "Betrag (EUR)": b_betrag
+                })
+                
+                speichere_gesamte_daten()
+                st.success(f"{b_typ} über {fmt_float(b_betrag)} € erfolgreich ins Kassenbuch eingetragen!")
+                st.rerun()
+            else:
+                st.error("Bitte gib einen Verwendungszweck an!")
+
+    st.write("---")
+    
+    # Tabellenanzeige der Buchungshistorie
+    st.subheader("📊 Transaktionsverlauf")
     historie_liste = st.session_state._global_finanzen.get("historie", [])
     if historie_liste:
         df_anzeige = pd.DataFrame(historie_liste).iloc[::-1]
         st.dataframe(df_anzeige[["In-Game Datum", "Nummer", "Typ", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
-    else: st.info("Keine Buchungen vorhanden.")
+    else: 
+        st.info("Noch keine Einträge im Kassenbuch vorhanden.")
 
 speichere_gesamte_daten()
