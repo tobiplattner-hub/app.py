@@ -11,7 +11,6 @@ st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜
 # ---------------------------------------------------------
 # LS25 ANBAUKALENDER-DATEN (Offizielle In-Game Monate)
 # ---------------------------------------------------------
-# Definition von Erlaubten Aussaatmonaten (Sa) und Erntemonaten (Er) laut LS25 Standard
 LS25_KALENDER = {
     "Weizen": {"sa": [3, 4, 8, 9, 10], "er": [6, 7, 8]},
     "Gerste": {"sa": [8, 9, 10], "er": [5, 6, 7]},
@@ -23,7 +22,7 @@ LS25_KALENDER = {
     "Kartoffeln": {"sa": [3, 4], "er": [7, 8, 9, 10]},
     "Zuckerrüben": {"sa": [2, 3, 4], "er": [9, 10, 11]},
     "Gras": {"sa": [2, 3, 4, 8, 9, 10], "er": [3, 4, 5, 6, 7, 8, 9, 10]},
-    "Ölrettich": {"sa": [2, 3, 4, 5, 6, 7, 8, 9], "er": []}, # Gründüngung
+    "Ölrettich": {"sa": [2, 3, 4, 5, 6, 7, 8, 9], "er": []}, 
     "Pappel": {"sa": [2, 3, 4, 5, 6, 7, 8], "er": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1]},
     "Zuckerrohr": {"sa": [2, 3, 4], "er": [9, 10, 11]},
     "Baumwolle": {"sa": [2, 3], "er": [9, 10]},
@@ -40,17 +39,20 @@ LISTE_MONATE = [
 ]
 
 def extrahiere_monat_int(monat_str):
-    try:
-        return int(monat_str.split(" - ")[0])
-    except:
-        return 1
+    try: return int(monat_str.split(" - ")[0])
+    except: return 1
 
-def berechne_erntestatus(frucht,saat_monat_str, aktueller_monat_str):
+def berechne_erntestatus(frucht, saat_monat_str, aktueller_monat_str, manueller_status=None):
+    if manueller_status and manueller_status != "Automatisch (LS25 Kalender)":
+        if "REIF" in manueller_status: return manueller_status, "green"
+        if "Brach" in manueller_status: return manueller_status, "gray"
+        return manueller_status, "blue"
+
     if not saat_monat_str or saat_monat_str == "Nicht gesät":
         return "⏳ Brachland / Bereit", "gray"
         
     if frucht not in LS25_KALENDER:
-        return "🌾 Unbekannte Frucht (Wachstum manuell prüfen)", "blue"
+        return "🌱 Im Wachstum (Manueller Modus)", "blue"
         
     akt_m = extrahiere_monat_int(aktueller_monat_str)
     kalender = LS25_KALENDER[frucht]
@@ -58,9 +60,8 @@ def berechne_erntestatus(frucht,saat_monat_str, aktueller_monat_str):
     if akt_m in kalender["er"]:
         return "🟢 REIF ZUR ERNTE!", "green"
         
-    # Prüfen, ob die Erntezeit für diese Frucht in diesem Jahr schon vorbei ist
     if len(kalender["er"]) > 0 and akt_m > max(kalender["er"]):
-        return "🚨 ERNTEZEIT VERPASST! (Gefahr von Verdorren)", "red"
+        return "🚨 ERNTEZEIT VERPASST!", "red"
         
     return "🌱 Im Wachstum", "blue"
 
@@ -96,11 +97,9 @@ def lade_gesamte_daten():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 geladene_daten = json.load(f)
                 for k, v in standard_daten.items():
-                    if k not in geladene_daten:
-                        geladene_daten[k] = v
+                    if k not in geladene_daten: geladene_daten[k] = v
                 return geladene_daten
-        except:
-            return standard_daten
+        except: return standard_daten
     return standard_daten
 
 if "_global_daten_geladen" not in st.session_state:
@@ -135,20 +134,14 @@ def speichere_gesamte_daten():
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(daten_zum_speichern, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        st.error(f"Fehler beim Sichern: {e}")
-
-def safe_str(text):
-    replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
-    txt = str(text)
-    for r, v in replacements.items(): txt = txt.replace(r, v)
-    return txt
+    except Exception as e: st.error(f"Fehler beim Sichern: {e}")
 
 def fmt_int(wert): return f"{wert:,.0f}".replace(",", ".")
 def fmt_float(wert):
     try: return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except: return str(wert)
 
+# (Logo und PDF Klassen bleiben identisch wie vorher)
 def finde_logo_datei():
     for dateiname in ["logo.png", "logo.png.jpeg", "logo.png.jpg", "logo.jpeg", "logo.jpg", "logo.PNG", "logo.JPEG"]:
         if os.path.exists(dateiname): return dateiname
@@ -157,59 +150,36 @@ def finde_logo_datei():
 class ManagementPDF(FPDF):
     def header(self):
         logo_pfad = finde_logo_datei()
-        if logo_pfad:
-            self.image(logo_pfad, x=10, y=10, w=25)
-            start_x = 38
-        else:
-            self.set_fill_color(34, 139, 34) 
-            self.rect(10, 10, 12, 12, "F")
-            start_x = 25
-        self.set_font("Helvetica", "B", 16)
-        self.set_text_color(30, 30, 30)
-        self.set_x(start_x)
-        self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
-        self.line(10, 38, 200, 38) 
-        self.ln(18)
-        
+        if logo_pfad: self.image(logo_pfad, x=10, y=10, w=25); start_x = 38
+        else: self.set_fill_color(34, 139, 34); self.rect(10, 10, 12, 12, "F"); start_x = 25
+        self.set_font("Helvetica", "B", 16); self.set_x(start_x); self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
+        self.line(10, 38, 200, 38); self.ln(18)
     def footer(self):
-        self.set_y(-15)
-        self.set_font("Helvetica", "I", 8)
-        self.set_text_color(150, 150, 150)
+        self.set_y(-15); self.set_font("Helvetica", "I", 8); self.set_text_color(150, 150, 150)
         self.cell(0, 10, f"Seite {self.page_no()} | Generiert mit Hof-Manager OS", align="C")
 
 def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum, titel="RECHNUNG"):
     pdf = ManagementPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 6, f"In-Game Datum: {ingame_datum} | Nr: #RE-{rechnungs_id:04d}", ln=True, align="R")
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 8, titel, ln=True)
-    pdf.ln(10)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.add_page(); pdf.set_font("Helvetica", size=11)
+    pdf.cell(0, 6, f"In-Game Datum: {ingame_datum} | Nr: #RE-{rechnungs_id:04d}", ln=True, align="R"); pdf.ln(5)
+    pdf.set_font("Helvetica", "B", 14); pdf.cell(0, 8, titel, ln=True); pdf.ln(10)
+    pdf.set_fill_color(240, 240, 240); pdf.set_font("Helvetica", "B", 11)
     pdf.cell(80, 8, " Posten / Beschreibung", border=1, fill=True)
     pdf.cell(30, 8, "Menge", border=1, align="C", fill=True)
     pdf.cell(40, 8, "Einzelpreis", border=1, align="R", fill=True)
-    pdf.cell(40, 8, "Gesamt", border=1, align="R", fill=True)
-    pdf.ln(8)
-    summe = 0
-    pdf.set_font("Helvetica", size=11)
+    pdf.cell(40, 8, "Gesamt", border=1, align="R", fill=True); pdf.ln(8)
+    summe = 0; pdf.set_font("Helvetica", size=11)
     for p in posten:
-        pdf.cell(80, 8, f" {safe_str(p['name'])}", border=1)
+        pdf.cell(80, 8, f" {p['name']}", border=1)
         pdf.cell(30, 8, f"{p['menge']} {p['einheit']}", border=1, align="C")
         pdf.cell(40, 8, f"{fmt_float(p['preis'])} EUR", border=1, align="R")
-        pdf.cell(40, 8, f"{fmt_float(p['gesamt'])} EUR", border=1, align="R")
-        pdf.ln(8)
+        pdf.cell(40, 8, f"{fmt_float(p['gesamt'])} EUR", border=1, align="R"); pdf.ln(8)
         summe += p['gesamt']
     total = summe - (summe * (rabatt_prozent / 100))
-    pdf.ln(2)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
+    pdf.ln(2); pdf.set_font("Helvetica", "B", 12); pdf.cell(150, 10, "GESAMTBETRAG:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return bytes(pdf.output())
 
-# Google Sheets Anbindung
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
 PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
 KUNDEN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=568043650"
@@ -235,22 +205,19 @@ if "global_verbrauch_herbi" not in st.session_state: st.session_state.global_ver
 if "temp_lu_maschinen" not in st.session_state: st.session_state.temp_lu_maschinen = []
 
 # ---------------------------------------------------------
-# SIDEBAR LIVE-ANZEIGE & GLOBALE IN-GAME ZEIT
+# SIDEBAR LIVE-ANZEIGE
 # ---------------------------------------------------------
 st.sidebar.title("📅 Globale Hof-Zeit")
 c_sb_m, c_sb_j = st.sidebar.columns(2)
-
 try: idx_m = LISTE_MONATE.index(st.session_state._global_ingame_monat)
 except: idx_m = 2
-
 neuer_globaler_monat = c_sb_m.selectbox("Aktueller Monat:", LISTE_MONATE, index=idx_m)
 neues_globales_jahr = c_sb_j.number_input("Jahr:", min_value=1, value=int(st.session_state._global_ingame_jahr))
 
 if neuer_globaler_monat != st.session_state._global_ingame_monat or neues_globales_jahr != st.session_state._global_ingame_jahr:
     st.session_state._global_ingame_monat = neuer_globaler_monat
     st.session_state._global_ingame_jahr = neues_globales_jahr
-    speichere_gesamte_daten()
-    st.rerun()
+    speichere_gesamte_daten(); st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.title("💰 Hof-Kasse (Live)")
@@ -296,30 +263,48 @@ if menu == "💰 Ernte & Verbrauchsraten":
             ernte_monate = [LISTE_MONATE[m-1] for m in k["er"]]
             st.info(f"🌱 **Erlaubte Aussaat:** {', '.join(saat_monate) if saat_monate else 'Keine (Spezial)'}  \n🌾 **Erntezeit:** {', '.join(ernte_monate) if ernte_monate else 'Keine (Spezial)'}")
         else:
-            st.warning("Für diese Fruchtart wurden manuell erweiterte Daten eingetragen.")
+            st.warning("Für diese Fruchtart liegen keine vordefinierten Kalenderdaten vor (Manueller Modus aktiv).")
 
 # ---------------------------------------------------------
-# SEITE 2: MEINE FELDER & ANBAU (ERWEITERT UM LS25 TIMING)
+# SEITE 2: MEINE FELDER & ANBAU (INKL. MANUELLER ERWEITERUNG)
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
-    st.title("🚜 Feld-Verwaltung mit automatisiertem LS25 Reife-Tracker")
+    st.title("🚜 Feld-Verwaltung mit Reife-Tracker & Frucht-Editor")
     
-    col_feld_ein, col_feld_stats = st.columns([1, 1])
+    col_feld_ein, col_feld_stats = st.columns([1.2, 0.8])
     with col_feld_ein:
         st.subheader("📝 Neues Feld registrieren")
-        f_nummer = st.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
-        f_groesse = st.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
-        f_frucht = st.selectbox("Geplante / Aktuelle Frucht:", st.session_state._global_fruchtarten)
+        cx1, cx2 = st.columns(2)
+        f_nummer = cx1.text_input("Feld-ID / Nummer:", placeholder="z.B. Feld 4")
+        f_groesse = cx2.number_input("Feldgröße in Hektar (ha):", min_value=0.01, value=2.0, step=0.1, format="%.2f")
         
+        # Fruchtart-Auswahl inkl. Option für neue Frucht
+        optionen_mit_neu = st.session_state._global_fruchtarten + ["➕ Neue Fruchtart hinzufügen..."]
+        gewaehlte_opt = st.selectbox("Aktuelle Frucht:", optionen_mit_neu, key="reg_opt_frucht")
+        
+        f_frucht = ""
+        if gewaehlte_opt == "➕ Neue Fruchtart hinzufügen...":
+            neue_eingabe = st.text_input("Name der neuen Fruchtart eingeben:", placeholder="z.B. Weißkohl")
+            if neue_eingabe.strip():
+                f_frucht = neue_eingabe.strip()
+        else:
+            f_frucht = gewaehlte_opt
+            
         if st.button("💾 Feld in Datenbank eintragen", type="primary", use_container_width=True):
-            if f_nummer.strip():
+            if f_nummer.strip() and f_frucht:
+                # Falls die Fruchtart komplett neu ist, permanent sichern
+                if f_frucht not in st.session_state._global_fruchtarten:
+                    st.session_state._global_fruchtarten.append(f_frucht)
+                    st.session_state._global_fruchtarten.sort()
+                
                 st.session_state._global_felder_store.append({
                     "nummer": f_nummer.strip(), "groesse": f_groesse, "frucht": f_frucht,
                     "saat_verbraucht": 0.0, "dueng_verbraucht": 0.0, "kalk_verbraucht": 0.0, "herbi_verbraucht": 0.0,
                     "rate_kalk": st.session_state.global_verbrauch_kalk, 
                     "rate_saat": st.session_state.global_verbrauch_saat, 
                     "rate_dueng": st.session_state.global_verbrauch_dueng,
-                    "saat_monat": "Nicht gesät"
+                    "saat_monat": "Nicht gesät",
+                    "manueller_status": "Automatisch (LS25 Kalender)"
                 })
                 speichere_gesamte_daten()
                 st.rerun()
@@ -329,8 +314,7 @@ elif menu == "🚜 Meine Felder & Anbau":
         if st.session_state._global_felder_store:
             ges_ha = sum(f["groesse"] for f in st.session_state._global_felder_store)
             st.metric("Gesamtfläche unter Bewirtschaftung", f"{fmt_float(ges_ha)} ha")
-        else:
-            st.info("Noch keine Felder registriert.")
+        else: st.info("Noch keine Felder registriert.")
 
     if st.session_state._global_felder_store:
         st.write("---")
@@ -339,31 +323,41 @@ elif menu == "🚜 Meine Felder & Anbau":
         for idx, f in enumerate(st.session_state._global_felder_store):
             aktuelle_frucht = f.get('frucht', 'Weizen')
             s_monat = f.get('saat_monat', 'Nicht gesät')
+            m_status = f.get('manueller_status', 'Automatisch (LS25 Kalender)')
             
-            # Statusberechnung auf Basis des In-Game Datums aus der Sidebar
-            status_text, farbe = berechne_erntestatus(aktuelle_frucht, s_monat, st.session_state._global_ingame_monat)
+            status_text, farbe = berechne_erntestatus(aktuelle_frucht, s_monat, st.session_state._global_ingame_monat, m_status)
             
             with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — Frucht: {aktuelle_frucht} — [{status_text}]"):
-                c_inf, c_change, c_time, c_act1, c_act2, c_del = st.columns([1.5, 1.2, 1.2, 1, 1, 0.8])
+                c_inf, c_change, c_time, c_manual_state, c_act1, c_act2, c_del = st.columns([1.5, 1.3, 1.2, 1.3, 0.9, 0.9, 0.6])
                 
                 bedarf_kalk = f["groesse"] * f.get("rate_kalk", 2000)
                 bedarf_saat = f["groesse"] * f.get("rate_saat", 150)
                 bedarf_dueng = f["groesse"] * f.get("rate_dueng", 160)
                 
                 with c_inf:
-                    st.markdown(f"**Verbraucht auf Fläche:**  \n⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L  \n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L  \n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L")
+                    st.markdown(f"**Verbrauchsdaten:**  \n⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L  \n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L  \n🧪 Dünger: {fmt_int(f['dueng_verbraucht'])}L")
                     if farbe == "green": st.success(status_text)
                     elif farbe == "red": st.error(status_text)
-                    elif farbe == "blue": st.info(status_text)
+                    else: st.info(status_text)
                 
+                # Frucht wechseln oder direkt hier eine neue hinzufügen
                 with c_change:
-                    try: f_index = st.session_state._global_fruchtarten.index(aktuelle_frucht)
+                    opt_ch_mit_neu = st.session_state._global_fruchtarten + ["➕ Neue Frucht..."]
+                    try: f_index = opt_ch_mit_neu.index(aktuelle_frucht)
                     except: f_index = 0
-                    neue_gewaehlte_frucht = st.selectbox("Frucht wechseln:", st.session_state._global_fruchtarten, index=f_index, key=f"ch_f_{idx}")
-                    if neue_gewaehlte_frucht != aktuelle_frucht:
-                        st.session_state._global_felder_store[idx]["frucht"] = neue_gewaehlte_frucht
-                        speichere_gesamte_daten()
-                        st.rerun()
+                    
+                    ch_opt = st.selectbox("Frucht wechseln:", opt_ch_mit_neu, index=f_index, key=f"ch_opt_{idx}")
+                    if ch_opt == "➕ Neue Frucht...":
+                        blitz_eingabe = st.text_input("Neue Fruchtart:", key=f"blitz_{idx}", placeholder="z.B. Hopfen")
+                        if blitz_eingabe.strip() and blitz_eingabe.strip() != aktuelle_frucht:
+                            if blitz_eingabe.strip() not in st.session_state._global_fruchtarten:
+                                st.session_state._global_fruchtarten.append(blitz_eingabe.strip())
+                                st.session_state._global_fruchtarten.sort()
+                            st.session_state._global_felder_store[idx]["frucht"] = blitz_eingabe.strip()
+                            speichere_gesamte_daten(); st.rerun()
+                    elif ch_opt != aktuelle_frucht:
+                        st.session_state._global_felder_store[idx]["frucht"] = ch_opt
+                        speichere_gesamte_daten(); st.rerun()
                         
                 with c_time:
                     liste_saat_optionen = ["Nicht gesät"] + LISTE_MONATE
@@ -372,35 +366,42 @@ elif menu == "🚜 Meine Felder & Anbau":
                     neuer_saat_monat = st.selectbox("Gesät im Monat:", liste_saat_optionen, index=s_index, key=f"ch_s_{idx}")
                     if neuer_saat_monat != s_monat:
                         st.session_state._global_felder_store[idx]["saat_monat"] = neuer_saat_monat
-                        speichere_gesamte_daten()
-                        st.rerun()
+                        speichere_gesamte_daten(); st.rerun()
+
+                # Status händisch überschreiben (besonders wichtig für Custom-Früchte!)
+                with c_manual_state:
+                    status_optionen = ["Automatisch (LS25 Kalender)", "🌱 Im Wachstum", "🟢 REIF ZUR ERNTE!", "⏳ Brachland / Bereit", "🚨 ERNTEZEIT VERPASST!"]
+                    try: m_index = status_optionen.index(m_status)
+                    except: m_index = 0
+                    
+                    neuer_m_status = st.selectbox("Status-Modus:", status_optionen, index=m_index, key=f"ch_m_stat_{idx}")
+                    if neuer_m_status != m_status:
+                        st.session_state._global_felder_store[idx]["manueller_status"] = neuer_m_status
+                        speichere_gesamte_daten(); st.rerun()
 
                 if c_act1.button(f"🌱 Säen ({fmt_int(bedarf_saat)}L)", key=f"saat_{idx}", use_container_width=True):
                     if st.session_state._global_lager_store.get("saat", 0) >= bedarf_saat:
-                        # Überprüfung ob In-Game Monat zur Aussaat passt
                         akt_m_int = extrahiere_monat_int(st.session_state._global_ingame_monat)
                         if aktuelle_frucht in LS25_KALENDER and akt_m_int not in LS25_KALENDER[aktuelle_frucht]["sa"]:
-                            st.warning("Laut LS25 Kalender ist jetzt eigentlich keine Aussaatzeit für diese Frucht!")
-                        
+                            st.warning("Laut Kalender ist jetzt keine Aussaatzeit!")
                         st.session_state._global_lager_store["saat"] -= bedarf_saat
                         st.session_state._global_felder_store[idx]["saat_verbraucht"] += bedarf_saat
                         st.session_state._global_felder_store[idx]["saat_monat"] = st.session_state._global_ingame_monat
-                        speichere_gesamte_daten()
-                        st.rerun()
+                        speichere_gesamte_daten(); st.rerun()
                     else: st.error("Zu wenig Saatgut!")
                     
-                if c_act2.button(f"🚜 Ernten / Reset", key=f"ernte_{idx}", use_container_width=True):
+                if c_act2.button(f"🚜 Ernte", key=f"ernte_{idx}", use_container_width=True):
                     st.session_state._global_felder_store[idx]["saat_monat"] = "Nicht gesät"
+                    st.session_state._global_felder_store[idx]["manueller_status"] = "Automatisch (LS25 Kalender)"
                     speichere_gesamte_daten()
-                    st.success("Feld erfolgreich geerntet und zurückgesetzt!")
+                    st.success("Feld zurückgesetzt!")
                     st.rerun()
                     
-                if c_del.button(f"🗑️ Löschen", key=f"del_f_{idx}", use_container_width=True):
+                if c_del.button(f"🗑️", key=f"del_f_{idx}", use_container_width=True):
                     st.session_state._global_felder_store.pop(idx)
-                    speichere_gesamte_daten()
-                    st.rerun()
+                    speichere_gesamte_daten(); st.rerun()
 
-# Die restlichen Menüpunkte (Rechnungen, Material, LU-Auftragsbuch, Fuhrpark, Kassenbuch) bleiben absolut identisch zum vorherigen fehlerfreien Stand...
+# Die restlichen Menüpunkte bleiben identisch...
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
     col_eingabe, col_liste = st.columns([1, 1.2])
@@ -552,7 +553,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
     if historie_liste:
         df_anzeige = pd.DataFrame(historie_liste).iloc[::-1]
         st.dataframe(df_anzeige[["In-Game Datum", "Nummer", "Typ", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
-    else:
-        st.info("Keine Buchungen vorhanden.")
+    else: st.info("Keine Buchungen vorhanden.")
 
 speichere_gesamte_daten()
