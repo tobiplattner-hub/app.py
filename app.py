@@ -99,25 +99,50 @@ def fmt_float(wert):
     except: return str(wert)
 
 # ---------------------------------------------------------
-# PDF GENERATOR MIT SCHICKEM LOGO-HEADER
+# FLEXIBLE SUCHE NACH DER LOGODATEI
+# ---------------------------------------------------------
+def finde_logo_datei():
+    # Mögliche Dateinamen durchsuchen, falls Windows/User die Endung doppelt gesetzt hat
+    moegliche_namen = [
+        "logo.png", "logo.png.jpeg", "logo.png.jpg", 
+        "logo.jpeg", "logo.jpg", "logo.PNG", "logo.JPEG"
+    ]
+    for dateiname in moegliche_namen:
+        if os.path.exists(dateiname):
+            return dateiname
+    return None
+
+# ---------------------------------------------------------
+# PDF GENERATOR MIT FLEXIBLER LOGO-ERKENNUNG
 # ---------------------------------------------------------
 class ManagementPDF(FPDF):
     def header(self):
-        # Farbakzent (Dunkelgrün für Agrarservice)
-        self.set_fill_color(34, 139, 34) 
-        self.rect(10, 10, 10, 10, "F") # Ein kleines farbiges Logo-Quadrat
+        logo_pfad = finde_logo_datei()
         
+        if logo_pfad:
+            # Platziert das gefundene Logo oben links (Breite 25mm)
+            self.image(logo_pfad, x=10, y=10, w=25)
+            start_x = 38
+        else:
+            # Fallback: Wenn absolut kein passendes Bild gefunden wird
+            self.set_fill_color(34, 139, 34) 
+            self.rect(10, 10, 12, 12, "F")
+            start_x = 25
+        
+        # Firmenname & Slogan daneben platzieren
         self.set_font("Helvetica", "B", 16)
         self.set_text_color(30, 30, 30)
-        self.set_x(23)
+        self.set_x(start_x)
         self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
+        
         self.set_font("Helvetica", "I", 9)
         self.set_text_color(100, 100, 100)
-        self.set_x(23)
+        self.set_x(start_x)
         self.cell(0, 4, "Ihr Partner fuer professionelle Lohnarbeit & Maschinenverleih", ln=True)
         
-        self.line(10, 28, 200, 28) 
-        self.ln(10)
+        # Trennlinie unter dem Header
+        self.line(10, 38, 200, 38) 
+        self.ln(18)
         
     def footer(self):
         self.set_y(-15)
@@ -358,7 +383,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN (JETZT MIT POSTEN-LÖSCH-FUNKTION)
+# SEITE 3: RECHNUNGEN
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
@@ -397,12 +422,10 @@ elif menu == "📋 Rechnungen":
         re_monat = c_m.selectbox("Monat:", LISTE_MONATE, key="re_m")
         re_jahr = c_j.number_input("Jahr:", min_value=1, value=1, key="re_j")
 
-        # Live-Anzeige der aktuellen Posten mit Löschoption
         if st.session_state.rechnungs_posten:
             st.markdown("---")
             st.markdown("**Aktuelle Rechnungsposten:**")
             
-            # Für jeden Posten eine Zeile mit Lösch-Button bauen
             for idx, p in enumerate(st.session_state.rechnungs_posten):
                 c_p_info, c_p_del = st.columns([5, 1])
                 c_p_info.write(f"🔹 **{p['name']}**: {p['menge']} {p['einheit']} x {fmt_float(p['preis'])} € = **{fmt_float(p['gesamt'])} €**")
@@ -419,7 +442,6 @@ elif menu == "📋 Rechnungen":
         st.markdown(f"### 💵 Endbetrag (inkl. {rabatt}% Rabatt): {fmt_float(total)} €")
         
         c_b1, c_b2 = st.columns(2)
-        # Erstellt PDF mit dem neuen Plattner & Auer Logo-Header
         pdf_bytes = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st.session_state._global_finanzen.get("naechste_rechnung_id", 1), full_ingame_date)
         c_b1.download_button("📥 PDF mit Logo generieren", data=pdf_bytes, file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
         
@@ -431,7 +453,7 @@ elif menu == "📋 Rechnungen":
                 "Details": f"Kunde: {k_name}", "Betrag (EUR)": total
             })
             st.session_state._global_finanzen["naechste_rechnung_id"] = st.session_state._global_finanzen.get("naechste_rechnung_id", 1) + 1
-            st.session_state.rechnungs_posten = [] # Liste leeren
+            st.session_state.rechnungs_posten = [] 
             speichere_gesamte_daten()
             st.rerun()
 
@@ -456,7 +478,7 @@ elif menu == "🛒 Material & Aufträge":
             else:
                 st.success("✅ Bestand OK")
             
-    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
         for mat in materialien:
             st.session_state._global_lager_store[mat] = werte[f"v_{mat}"]
             st.session_state._global_lager_grenzwerte[mat] = werte[f"g_{mat}"]
@@ -490,10 +512,7 @@ elif menu == "📝 LU-Auftragsbuch":
             if st.button("➕ Maschine zum Auftrag packen", use_container_width=True):
                 if masch_auswahl and masch_auswahl not in [m["name"] for m in st.session_state.temp_lu_maschinen]:
                     st.session_state.temp_lu_maschinen.append({
-                        "name": masch_auswahl,
-                        "preis_h": geholter_preis,
-                        "anfangs_h": 0.0,
-                        "end_h": 0.0
+                        "name": masch_auswahl, "preis_h": geholter_preis, "anfangs_h": 0.0, "end_h": 0.0
                     })
                     st.rerun()
             
@@ -516,7 +535,7 @@ elif menu == "📝 LU-Auftragsbuch":
         lu_monat = c_m.selectbox("Plan-Monat:", LISTE_MONATE, key="lu_m")
         lu_jahr = c_j.number_input("Plan-Jahr:", min_value=1, value=1, key="lu_j")
         
-        if st.button("💾 Gesamten Auftrag im Buch speichern", type="primary", use_container_width=True):
+        if st.button("💾 Gesamten Auftrag im Buch保存", type="primary", use_container_width=True):
             if a_feld.strip():
                 if v_einheit == "h":
                     if st.session_state.temp_lu_maschinen:
@@ -607,8 +626,8 @@ elif menu == "📝 LU-Auftragsbuch":
                         full_date = f"J{aut.get('jahr', 1)}-{aut.get('monat', '01 - Jan')}"
                         next_id = st.session_state._global_finanzen.get("naechste_rechnung_id", 1)
                         
+                        # Generiert das PDF für LU-Aufträge jetzt mit exakt derselben Logo-Header-Logik
                         pdf_data = generate_invoice_pdf(aut['kunde'], posten_fuer_pdf, 0, next_id, full_date, titel="LU-RECHNUNG / MASCHINENVERLEIH")
-                        
                         c2.download_button("📥 PDF laden", data=pdf_data, file_name=f"LU_Verleih_{aut['kunde']}.pdf", mime="application/pdf", key=f"dl_{idx}", use_container_width=True)
                         
                         if c2.button("💰 In Kasse verbuchen", key=f"cash_{idx}", type="primary", use_container_width=True):
