@@ -55,6 +55,26 @@ def lade_gesamte_daten():
             return standard_daten
     return standard_daten
 
+# Initialisierung über session_state (Zuerst ausführen!)
+if "_global_daten_geladen" not in st.session_state:
+    gespeicherte_daten = lade_gesamte_daten()
+    st.session_state._global_hof_store = gespeicherte_daten.get("hof_store", [])
+    st.session_state._global_lager_store = gespeicherte_daten.get("lager_store", {"saat": 5000, "kalk": 20000, "dueng": 4000, "herbi": 2000, "diesel": 5000})
+    st.session_state._global_bestell_store = gespeicherte_daten.get("bestell_store", [])
+    st.session_state._global_felder_store = gespeicherte_daten.get("felder_store", [])
+    st.session_state._global_fruchtarten = gespeicherte_daten.get("fruchtarten", [])
+    st.session_state._global_finanzen = gespeicherte_daten.get("finanzen", {})
+    st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000})
+    st.session_state._global_produktionen_store = gespeicherte_daten.get("produktionen_store", [])
+    st.session_state._global_paletten_lager = gespeicherte_daten.get("paletten_lager", [])
+    st.session_state._global_ballen_lager = gespeicherte_daten.get("ballen_lager", [])
+    st.session_state._global_silos = gespeicherte_daten.get("silos", {})  
+    st.session_state._global_daten_geladen = True
+
+# Fallback-Schutz: Falls Streamlit die Variablen während eines State-Resets verliert
+if "_global_silos" not in st.session_state:
+    st.session_state._global_silos = {}
+
 def speichere_gesamte_daten():
     daten_zum_speichern = {
         "hof_store": st.session_state._global_hof_store,
@@ -74,22 +94,6 @@ def speichere_gesamte_daten():
             json.dump(daten_zum_speichern, f, ensure_ascii=False, indent=4)
     except Exception as e:
         st.error(f"Fehler beim Sichern: {e}")
-
-# Initialisierung über session_state
-if "_global_daten_geladen" not in st.session_state:
-    gespeicherte_daten = lade_gesamte_daten()
-    st.session_state._global_hof_store = gespeicherte_daten["hof_store"]
-    st.session_state._global_lager_store = gespeicherte_daten["lager_store"]
-    st.session_state._global_bestell_store = gespeicherte_daten["bestell_store"]
-    st.session_state._global_felder_store = gespeicherte_daten["felder_store"]
-    st.session_state._global_fruchtarten = gespeicherte_daten["fruchtarten"]
-    st.session_state._global_finanzen = gespeicherte_daten["finanzen"]
-    st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000})
-    st.session_state._global_produktionen_store = gespeicherte_daten.get("produktionen_store", [])
-    st.session_state._global_paletten_lager = gespeicherte_daten.get("paletten_lager", [])
-    st.session_state._global_ballen_lager = gespeicherte_daten.get("ballen_lager", [])
-    st.session_state._global_silos = gespeicherte_daten.get("silos", {})  
-    st.session_state._global_daten_geladen = True
 
 LISTE_MONATE = [
     "01 - Jan", "02 - Feb", "03 - Mrz", "04 - Apr", 
@@ -182,62 +186,6 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return bytes(pdf.output())
 
-def generate_single_order_pdf(auftrag):
-    pdf = ManagementPDF()
-    pdf.add_page()
-    
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 10, "LU-AUFTRAGSBELEG / BESTELLUNG", ln=True)
-    pdf.ln(5)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(10)
-    
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(50, 8, "Kunde / Hofname:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 8, safe_str(auftrag["Kunde"]), border=0, ln=True)
-    
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(50, 8, "In-Game Datum:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 8, safe_str(auftrag["Eingang"]), border=0, ln=True)
-    
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(50, 8, "Vereinbarter Preis:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    auftrags_preis = auftrag.get("Preis", 0.0)
-    pdf.cell(0, 8, f"{fmt_float(auftrags_preis)} EUR", border=0, ln=True)
-    
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(50, 8, "Aktueller Status:", border=0)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 8, safe_str(auftrag["Status"]), border=0, ln=True)
-    
-    pdf.ln(10)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(10)
-    
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 8, "Arbeitsbeschreibung / Details:", ln=True)
-    pdf.ln(2)
-    pdf.set_x(65)
-    pdf.set_font("Helvetica", size=12)
-    pdf.multi_cell(0, 8, safe_str(auftrag["Aufgabe"]))
-    
-    pdf.ln(20)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "I", 10)
-    pdf.cell(0, 8, "Generiert via LS25 Hof-Manager. Zur Abrechnung bitte das Rechnungs-Tool nutzen.", ln=True, align="C")
-    
-    return bytes(pdf.output())
-
 # ---------------------------------------------------------
 # DATEN-LOAD AUS GOOGLE SHEETS
 # ---------------------------------------------------------
@@ -271,9 +219,10 @@ if "global_verbrauch_herbi" not in st.session_state: st.session_state.global_ver
 # SIDEBAR LIVE-ANZEIGE
 # ---------------------------------------------------------
 st.sidebar.title("💰 Hof-Kasse (Live)")
-einn = st.session_state._global_finanzen["einnahmen"]
-ausg = st.session_state._global_finanzen["ausgaben"]
-aktuelle_hof_kasse = st.session_state._global_finanzen["start_saldo"] + einn - ausg
+einn = st.session_state._global_finanzen.get("einnahmen", 0.0)
+ausg = st.session_state._global_finanzen.get("ausgaben", 0.0)
+start_s = st.session_state._global_finanzen.get("start_saldo", 0.0)
+aktuelle_hof_kasse = start_s + einn - ausg
 st.sidebar.metric("Aktueller Kontostand", f"{fmt_float(aktuelle_hof_kasse)} €")
 
 st.sidebar.markdown("---")
@@ -354,11 +303,11 @@ if menu == "💰 Ernte & Verbrauchsraten":
                     "Sort_Jahr": int(erloes_jahr), 
                     "Sort_Monat": erloes_monat,
                     "Typ": "Einnahme", 
-                    "Nummer": f"#EV-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}",
+                    "Nummer": f"#EV-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}",
                     "Details": f"Ernteverkauf: {fmt_int(calc_menge)}L {calc_frucht}", 
                     "Betrag (EUR)": errechneter_erloes
                 })
-                st.session_state._global_finanzen["naechste_rechnung_id"] += 1
+                st.session_state._global_finanzen["naechste_rechnung_id"] = st.session_state._global_finanzen.get("naechste_rechnung_id", 1) + 1
                 speichere_gesamte_daten()
                 st.success(f"✔️ {fmt_float(errechneter_erloes)} € wurden als Einnahme registriert!")
                 st.rerun()
@@ -472,7 +421,7 @@ elif menu == "🚜 Meine Felder & Anbau":
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
-    st.info(f"Nächste Rechnungsnummer: #RE-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}")
+    st.info(f"Nächste Rechnungsnummer: #RE-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}")
 
     col_eingabe, col_liste = st.columns([1, 1])
     with col_eingabe:
@@ -520,7 +469,7 @@ elif menu == "📋 Rechnungen":
         col_b1, col_b2 = st.columns(2)
         
         try:
-            pdf_bytes = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st.session_state._global_finanzen["naechste_rechnung_id"], full_ingame_date)
+            pdf_bytes = generate_invoice_pdf(k_name, st.session_state.rechnungs_posten, rabatt, st.session_state._global_finanzen.get("naechste_rechnung_id", 1), full_ingame_date)
             col_b1.download_button("📥 PDF laden", data=pdf_bytes, file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
         except Exception as e:
             col_b1.error(f"PDF-Vorschau Fehler: {e}")
@@ -529,17 +478,17 @@ elif menu == "📋 Rechnungen":
             st.session_state._global_finanzen["einnahmen"] += total
             st.session_state._global_finanzen["historie"].append({
                 "In-Game Datum": full_ingame_date, "Sort_Jahr": int(re_jahr), "Sort_Monat": re_monat,
-                "Typ": "Einnahme", "Nummer": f"#RE-{st.session_state._global_finanzen['naechste_rechnung_id']:04d}",
+                "Typ": "Einnahme", "Nummer": f"#RE-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}",
                 "Details": f"Kunde: {k_name}", "Betrag (EUR)": total
             })
-            st.session_state._global_finanzen["naechste_rechnung_id"] += 1
+            st.session_state._global_finanzen["naechste_rechnung_id"] = st.session_state._global_finanzen.get("naechste_rechnung_id", 1) + 1
             st.session_state.rechnungs_posten = []
             speichere_gesamte_daten()
             st.rerun()
 
     st.write("---")
     st.subheader("📑 Ausgestellte Rechnungen verwalten")
-    rechnungs_liste = [h for h in st.session_state._global_finanzen["historie"] if h["Typ"] == "Einnahme" and h["Nummer"].startswith("#RE-")]
+    rechnungs_liste = [h for h in st.session_state._global_finanzen.get("historie", []) if h["Typ"] == "Einnahme" and h["Nummer"].startswith("#RE-")]
     
     if rechnungs_liste:
         for idx, rechnung in enumerate(rechnungs_liste):
@@ -593,10 +542,10 @@ elif menu == "🛒 Material & Aufträge":
                         st.session_state._global_lager_store[key] += empfohlene_bestellmenge
                         st.session_state._global_finanzen["historie"].append({
                             "In-Game Datum": "Automatisch", "Sort_Jahr": 1, "Sort_Monat": "01 - Jan",
-                            "Typ": "Ausgabe", "Nummer": f"#BS-{st.session_state._global_finanzen['naechste_bestellung_id']:04d}",
+                            "Typ": "Ausgabe", "Nummer": f"#BS-{st.session_state._global_finanzen.get('naechste_bestellung_id', 1):04d}",
                             "Details": f"Automatische Nachbestellung: {info['name']} (+{empfohlene_bestellmenge}L)", "Betrag (EUR)": 0.0
                         })
-                        st.session_state._global_finanzen["naechste_bestellung_id"] += 1
+                        st.session_state._global_finanzen["naechste_bestellung_id"] = st.session_state._global_finanzen.get("naechste_bestellung_id", 1) + 1
                         speichere_gesamte_daten()
                         st.rerun()
                         
