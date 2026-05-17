@@ -34,11 +34,8 @@ def lade_gesamte_daten():
             "historie": []
         },
         "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000},
-        "produktionen_store": [
-            {"name": "Saatgut-Aufbereitung", "input_ware": "weizen", "input_menge": 1000.0, "output_ware": "saat", "output_menge": 900.0},
-            {"name": "Biodiesel-Raffinerie", "input_ware": "raps", "input_menge": 2000.0, "output_ware": "diesel", "output_menge": 800.0}
-        ],
-        "auftrags_store": []
+        "auftrags_store": [],
+        "fuhrpark_store": []  # NEU: Fuhrpark-Speicher
     }
     
     if os.path.exists(DATA_FILE):
@@ -62,8 +59,8 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_fruchtarten = gespeicherte_daten.get("fruchtarten", [])
     st.session_state._global_finanzen = gespeicherte_daten.get("finanzen", {})
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {})
-    st.session_state._global_produktionen_store = gespeicherte_daten.get("produktionen_store", [])
     st.session_state._global_auftrags_store = gespeicherte_daten.get("auftrags_store", [])
+    st.session_state._global_fuhrpark_store = gespeicherte_daten.get("fuhrpark_store", []) # NEU
     st.session_state._global_daten_geladen = True
 
 def speichere_gesamte_daten():
@@ -75,8 +72,8 @@ def speichere_gesamte_daten():
         "fruchtarten": st.session_state._global_fruchtarten,
         "finanzen": st.session_state._global_finanzen,
         "lager_grenzwerte": st.session_state._global_lager_grenzwerte,
-        "produktionen_store": st.session_state._global_produktionen_store,
-        "auftrags_store": st.session_state._global_auftrags_store
+        "auftrags_store": st.session_state._global_auftrags_store,
+        "fuhrpark_store": st.session_state._global_fuhrpark_store # NEU
     }
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -112,12 +109,15 @@ class ManagementPDF(FPDF):
         self.set_font("Helvetica", "I", 8)
         self.cell(0, 10, f"Seite {self.page_no()}", align="C")
 
-def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum):
+def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, ingame_datum, titel="RECHNUNG"):
     pdf = ManagementPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 6, f"In-Game Datum: {ingame_datum} | Rechnung-Nr: #RE-{rechnungs_id:04d}", ln=True, align="R")
+    pdf.cell(0, 6, f"In-Game Datum: {ingame_datum} | Nr: #RE-{rechnungs_id:04d}", ln=True, align="R")
     pdf.ln(5)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, titel, ln=True)
+    pdf.ln(2)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 6, f"Empfaenger: {safe_str(kunden_name)}", ln=True)
     pdf.ln(10)
@@ -141,7 +141,7 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     return bytes(pdf.output())
 
 # ---------------------------------------------------------
-# GOOGLE SHEETS ANBINDUNG (Wieder voll aktiv)
+# GOOGLE SHEETS ANBINDUNG
 # ---------------------------------------------------------
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
 PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
@@ -188,7 +188,7 @@ menu = st.sidebar.radio("Hauptmenü Navigation", [
     "📋 Rechnungen", 
     "🛒 Material & Aufträge", 
     "📝 LU-Auftragsbuch",
-    "🏭 Produktionen",
+    "🚛 Fuhrpark-Manager",  # NEU statt Produktionen
     "📖 Detailliertes Kassenbuch"
 ])
 
@@ -324,7 +324,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN (Mit Google Sheets Preisliste)
+# SEITE 3: RECHNUNGEN
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
@@ -344,10 +344,8 @@ elif menu == "📋 Rechnungen":
             e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
             einheit_str = "ha"
         else: 
-            # Greift auf geladene Google-Tabelle zu
             auswahl = st.selectbox("Maschine/Gerät (aus Google Sheet):", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
             menge = st.number_input("Stunden (h):", min_value=0.1, value=1.0)
-            # Automatische Preisermittlung aus der Tabelle
             standard_preis = float(preis_dict.get(auswahl, 75.0)) if preis_dict else 75.0
             e_p = st.number_input("Preis pro Stunde (€/h):", value=standard_preis)
             einheit_str = "h"
@@ -409,7 +407,7 @@ elif menu == "🛒 Material & Aufträge":
             else:
                 st.success("✅ Bestand OK")
             
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存 (Speichern)", use_container_width=True, type="primary"):
         for mat in materialien:
             st.session_state._global_lager_store[mat] = werte[f"v_{mat}"]
             st.session_state._global_lager_grenzwerte[mat] = werte[f"g_{mat}"]
@@ -417,36 +415,88 @@ elif menu == "🛒 Material & Aufträge":
         st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 5: LU-AUFTRAGSBUCH
+# SEITE 5: LU-AUFTRAGSBUCH (JETZT MIT INTEGRIERTER ABRECHNUNG)
 # ---------------------------------------------------------
 elif menu == "📝 LU-Auftragsbuch":
-    st.title("📝 LU-Auftragsbuch & Lohnarbeiten")
-    col_a, col_b = st.columns(2)
+    st.title("📝 LU-Auftragsbuch & Schnelle Abrechnung")
+    col_a, col_b = st.columns([1, 1.5])
     
     with col_a:
         st.subheader("➕ Neuen Auftrag erfassen")
-        a_kunde = st.selectbox("Kunde:", aktuelle_kunden)
-        a_feld = st.text_input("Feld / Ort:", placeholder="z.B. Feld 12")
-        a_arbeit = st.text_input("Arbeitsschritt:", placeholder="z.B. Dreschen, Pressen")
-        a_status = st.selectbox("Status:", ["⏳ Ausstehend", "🚜 In Arbeit", "✔️ Erledigt"])
-        a_preis = st.number_input("Vereinbarter Lohn (€):", min_value=0.0, value=500.0)
+        a_kunde = st.selectbox("Kunde:", aktuelle_kunden, key="lu_kunde")
+        a_feld = st.text_input("Feld / Ort:", placeholder="z.B. Feld 12", key="lu_ort")
+        a_arbeit = st.text_input("Arbeitsschritt:", placeholder="z.B. Dreschen, Pressen", key="lu_arbeit")
+        a_menge = st.number_input("Menge (Fläche/Zeit):", min_value=1.0, value=1.0, key="lu_menge")
+        a_einheit = st.selectbox("Einheit:", ["ha", "h", "Stk"], key="lu_einheit")
+        a_preis = st.number_input("Preis pro Einheit (€):", min_value=0.0, value=100.0, key="lu_preis_einheit")
+        a_status = st.selectbox("Status:", ["⏳ Ausstehend", "🚜 In Arbeit", "✔️ Erledigt"], key="lu_status")
+        
+        # Datums-Auswahl für den Auftrag (Wichtig für Buchung & PDF!)
+        c_m, c_j = st.columns(2)
+        lu_monat = c_m.selectbox("Plan-Monat:", LISTE_MONATE, key="lu_m")
+        lu_jahr = c_j.number_input("Plan-Jahr:", min_value=1, value=1, key="lu_j")
         
         if st.button("💾 Auftrag eintragen", type="primary", use_container_width=True):
             if a_feld.strip() and a_arbeit.strip():
                 st.session_state._global_auftrags_store.append({
-                    "kunde": a_kunde, "ort": a_feld.strip(), "arbeit": a_arbeit.strip(), "status": a_status, "lohn": a_preis
+                    "kunde": a_kunde, "ort": a_feld.strip(), "arbeit": a_arbeit.strip(), 
+                    "status": a_status, "menge": a_menge, "einheit": a_einheit, 
+                    "preis_einheit": a_preis, "lohn": a_menge * a_preis,
+                    "monat": lu_monat, "jahr": int(lu_jahr)
                 })
                 speichere_gesamte_daten()
                 st.rerun()
 
     with col_b:
-        st.subheader("📋 Aktuelle Auftragsliste")
+        st.subheader("📋 Aktuelle Auftragsliste & Direktabrechnung")
         if st.session_state._global_auftrags_store:
             for idx, aut in enumerate(st.session_state._global_auftrags_store):
                 with st.container(border=True):
-                    c1, c2 = st.columns([4, 1])
-                    c1.markdown(f"**{aut['kunde']}** — {aut['arbeit']} ({aut['ort']}) \n Lohn: **{fmt_float(aut['lohn'])} €** | Status: **{aut['status']}**")
-                    if c2.button("🗑️", key=f"del_a_{idx}"):
+                    c1, c2 = st.columns([3.5, 1.5])
+                    
+                    # Statusabhängige Farbe/Layout
+                    status_emoji = aut['status']
+                    total_lohn = aut.get('lohn', aut['preis_einheit'] * aut['menge'])
+                    
+                    c1.markdown(f"🗓️ **J{aut.get('jahr', 1)}-{aut.get('monat', '01 - Jan')}** | **Kunde:** {aut['kunde']}")
+                    c1.markdown(f"🛠️ **{aut['arbeit']}** auf *{aut['ort']}*")
+                    c1.markdown(f"📊 {aut['menge']} {aut['einheit']} x {fmt_float(aut['preis_einheit'])} € = **{fmt_float(total_lohn)} €**")
+                    
+                    # Status direkt im Loop ändern ermöglichen
+                    neuer_status = c1.selectbox(f"Status ändern:", ["⏳ Ausstehend", "🚜 In Arbeit", "✔️ Erledigt"], index=["⏳ Ausstehend", "🚜 In Arbeit", "✔️ Erledigt"].index(aut['status']), key=f"status_select_{idx}")
+                    if neuer_status != aut['status']:
+                        st.session_state._global_auftrags_store[idx]['status'] = neuer_status
+                        speichere_gesamte_daten()
+                        st.rerun()
+                    
+                    # Rechnungs-Aktion bei erledigten Aufträgen
+                    if aut['status'] == "✔️ Erledigt":
+                        posten_liste = [{"name": f"{aut['arbeit']} ({aut['ort']})", "menge": aut['menge'], "einheit": aut['einheit'], "preis": aut['preis_einheit'], "gesamt": total_lohn}]
+                        full_date = f"J{aut.get('jahr', 1)}-{aut.get('monat', '01 - Jan')}"
+                        next_id = st.session_state._global_finanzen.get("naechste_rechnung_id", 1)
+                        
+                        pdf_data = generate_invoice_pdf(aut['kunde'], posten_liste, 0, next_id, full_date, titel="LU-AUFTRAGSRECHNUNG")
+                        
+                        # PDF Download & Abbuchen vereint
+                        c2.download_button("📥 PDF herunterladen", data=pdf_data, file_name=f"LU_Rechnung_{aut['kunde']}_{aut['ort']}.pdf", mime="application/pdf", key=f"dl_{idx}", use_container_width=True)
+                        
+                        if c2.button("💰 Cash verbuchen & schließen", key=f"cash_{idx}", type="primary", use_container_width=True):
+                            # Finanzen updaten
+                            st.session_state._global_finanzen["einnahmen"] += total_lohn
+                            st.session_state._global_finanzen["historie"].append({
+                                "In-Game Datum": full_date, "Sort_Jahr": int(aut.get('jahr', 1)), "Sort_Monat": aut.get('monat', '01 - Jan'),
+                                "Typ": "Einnahme", "Nummer": f"#LU-{next_id:04d}",
+                                "Details": f"LU-Auftrag abgeschlossen: {aut['arbeit']} ({aut['ort']})", "Betrag (EUR)": total_lohn
+                            })
+                            st.session_state._global_finanzen["naechste_rechnung_id"] = next_id + 1
+                            
+                            # Auftrag aus der Liste löschen (da abgeschlossen und verbucht)
+                            st.session_state._global_auftrags_store.pop(idx)
+                            speichere_gesamte_daten()
+                            st.success("Erfolgreich abgerechnet und archiviert!")
+                            st.rerun()
+                    
+                    if c2.button("🗑️ Auftrag verwerfen", key=f"del_a_{idx}", use_container_width=True):
                         st.session_state._global_auftrags_store.pop(idx)
                         speichere_gesamte_daten()
                         st.rerun()
@@ -454,63 +504,84 @@ elif menu == "📝 LU-Auftragsbuch":
             st.info("Das Auftragsbuch ist leer.")
 
 # ---------------------------------------------------------
-# SEITE 6: PRODUKTIONEN
+# SEITE 6: FUHRPARK-MANAGER (KOMPLETT NEU & DYNAMISCH)
 # ---------------------------------------------------------
-elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktionsbetriebe & Weiterverarbeitung")
-    col_p1, col_p2 = st.columns(2)
+elif menu == "🚛 Fuhrpark-Manager":
+    st.title("🚛 Fuhrpark-Management & Service-Überwachung")
     
-    with col_p1:
-        st.subheader("🛠️ Neue Produktionslinie erstellen")
-        p_name = st.text_input("Name der Produktion:")
-        p_in_ware = st.selectbox("Eingangs-Lagerware:", ["saat", "kalk", "dueng", "herbi", "diesel"])
-        p_in_menge = st.number_input("Verbrauch pro Zyklus (L):", min_value=1.0, value=500.0)
-        p_out_ware = st.selectbox("Ausgangs-Zielware:", ["saat", "kalk", "dueng", "herbi", "diesel"], index=2)
-        p_out_menge = st.number_input("Ertrag pro Zyklus (L):", min_value=1.0, value=600.0)
+    tab1, tab2 = st.tabs(["📋 Maschinen-Liste", "➕ Neue Maschine registrieren"])
+    
+    with tab2:
+        st.subheader("Fahrzeug / Gerät hinzufügen")
+        v_name = st.text_input("Name / Modell:", placeholder="z.B. Fendt 728 Vario, John Deere T670")
+        v_kat = st.selectbox("Kategorie:", ["Traktor", "Mähdrescher", "Feldhäcksler", "Ladewagen", "Sämaschine/Grubber", "Transport", "Sonstiges"])
+        v_h = st.number_input("Aktuelle Betriebsstunden (h):", min_value=0.0, value=0.0, step=0.1, format="%.1f")
+        v_service_intervall = st.number_input("Service-Intervall (alle X Stunden):", min_value=10, value=50, step=10)
+        v_letzter_service = st.number_input("Letzter Service bei (h):", min_value=0.0, value=0.0, step=0.1)
         
-        if st.button("🏗️ Produktionslinie registrieren", type="primary", use_container_width=True):
-            if p_name.strip():
-                st.session_state._global_produktionen_store.append({
-                    "name": p_name.strip(), "input_ware": p_in_ware, "input_menge": p_in_menge,
-                    "output_ware": p_out_ware, "output_menge": p_out_menge
+        if st.button("💾 Maschine im Fuhrpark speichern", type="primary"):
+            if v_name.strip():
+                st.session_state._global_fuhrpark_store.append({
+                    "name": v_name.strip(), "kategorie": v_kat, "stunden": v_h,
+                    "intervall": v_service_intervall, "letzter_service": v_letzter_service
                 })
                 speichere_gesamte_daten()
+                st.success(f"{v_name} erfolgreich registriert!")
                 st.rerun()
-
-    with col_p2:
-        st.subheader("⚙️ Verarbeitung starten")
-        if st.session_state._global_produktionen_store:
-            fab_namen = [f["name"] for f in st.session_state._global_produktionen_store]
-            auswahl_fab = st.selectbox("Aktive Fabrik wählen:", fab_namen)
-            fab = next(f for f in st.session_state._global_produktionen_store if f["name"] == auswahl_fab)
-            
-            zyklen = st.number_input("Anzahl Zyklen ausführen:", min_value=1, value=1)
-            gesamt_in = fab['input_menge'] * zyklen
-            gesamt_out = fab['output_menge'] * zyklen
-            
-            st.info(f"Bedarf: {fmt_int(gesamt_in)}L {fab['input_ware'].upper()} ➡️ Erwartet: {fmt_int(gesamt_out)}L {fab['output_ware'].upper()}")
-            
-            if st.button("🚀 Charge produzieren", use_container_width=True):
-                r_key, z_key = fab['input_ware'], fab['output_ware']
                 
-                if st.session_state._global_lager_store.get(r_key, 0) >= gesamt_in:
-                    st.session_state._global_lager_store[r_key] -= gesamt_in
-                    st.session_state._global_lager_store[z_key] = st.session_state._global_lager_store.get(z_key, 0) + gesamt_out
-                    speichere_gesamte_daten()
-                    st.success(f"Erfolgreich produziert! {fmt_int(gesamt_out)}L {z_key.upper()} ins Hauptlager überführt.")
-                    st.rerun()
-                else:
-                    st.error(f"Fehler: Zu wenig {r_key.upper()} im Hauptlager!")
+    with tab1:
+        st.subheader("🚜 Mein Hof-Fuhrpark")
+        if st.session_state._global_fuhrpark_store:
+            for idx, veh in enumerate(st.session_state._global_fuhrpark_store):
+                
+                # Stunden bis zum nächsten Service berechnen
+                naechster_service = veh["letzter_service"] + veh["intervall"]
+                stunden_bis_service = naechster_service - veh["stunden"]
+                
+                # Optischer Zustand / Alert
+                with st.container(border=True):
+                    col_info, col_hours, col_action = st.columns([3, 2, 2])
+                    
+                    with col_info:
+                        st.markdown(f"### {veh['name']}")
+                        st.markdown(f"📁 Kategorie: **{veh['kategorie']}**")
+                        if stunden_bis_service <= 0:
+                            st.error(f"🚨 SERVICE ÜBERFÄLLIG! (Seit {fmt_float(abs(stunden_bis_service))} h)")
+                        elif stunden_bis_service <= 5:
+                            st.warning(f"⚠️ Service fällig in: **{fmt_float(stunden_bis_service)} h**")
+                        else:
+                            st.success(f"✅ Service ok (In {fmt_float(stunden_bis_service)} h bei {fmt_float(naechster_service)} h)")
+                            
+                    with col_hours:
+                        st.markdown("##### ⏱️ Zählerstand")
+                        # Stunden direkt in der Übersicht hochdrehen!
+                        neue_stunden = st.number_input(f"Stunden anpassen (h):", min_value=veh['stunden'], value=veh['stunden'], step=0.5, format="%.1f", key=f"hours_{idx}")
+                        if neue_stunden != veh['stunden']:
+                            st.session_state._global_fuhrpark_store[idx]['stunden'] = neue_stunden
+                            speichere_gesamte_daten()
+                            st.rerun()
+                            
+                    with col_action:
+                        st.markdown("##### 🔧 Wartung")
+                        if st.button("🛠️ Service durchgeführt!", key=f"serv_{idx}", use_container_width=True):
+                            st.session_state._global_fuhrpark_store[idx]['letzter_service'] = veh['stunden']
+                            speichere_gesamte_daten()
+                            st.toast(f"Service für {veh['name']} registriert!")
+                            st.rerun()
+                            
+                        if st.button("🗑️ Ausmustern (Löschen)", key=f"del_v_{idx}", use_container_width=True):
+                            st.session_state._global_fuhrpark_store.pop(idx)
+                            speichere_gesamte_daten()
+                            st.rerun()
         else:
-            st.info("Noch keine benutzerdefinierten Produktionen angelegt.")
+            st.info("Noch keine Maschinen im Fuhrpark eingetragen. Wechsel auf den Reiter 'Neue Maschine registrieren'!")
 
 # ---------------------------------------------------------
-# SEITE 7: DETILLIERTES KASSENBUCH (Mit manuellen Buchungen)
+# SEITE 7: DETILLIERTES KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch")
     
-    # Formular für manuelle Buchungen
     with st.expander("➕ Manuelle Einnahme / Ausgabe buchen", expanded=False):
         c_btyp, c_bbetrag = st.columns(2)
         m_typ = c_btyp.selectbox("Buchungstyp:", ["Einnahme", "Ausgabe"])
