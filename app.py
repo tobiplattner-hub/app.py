@@ -656,10 +656,10 @@ elif menu == "🚛 Fuhrpark-Manager":
     with col_f1:
         st.subheader("📝 Maschine registrieren")
         m_name = st.text_input("Name / Bezeichnung:", placeholder="z.B. John Deere 8R")
-        m_typ = st.selectbox("Fahrzeugtyp:", ["Traktor", "Mähdrescher", "Häcksler", "LKW", "Teleskoplader", "Anbaugerät"])
+        m_typ = m_typ = st.selectbox("Fahrzeugtyp:", ["Traktor", "Mähdrescher", "Häcksler", "LKW", "Teleskoplader", "Anbaugerät"])
         m_h = st.number_input("Aktuelle Betriebsstunden (h):", min_value=0.0, step=0.1, value=0.0)
         
-        if st.button("💾 Maschine im Fuhrpark speichern", type="primary", use_container_width=True):
+        if st.button("💾 Maschine im Fuhrpark保存", type="primary", use_container_width=True):
             if m_name.strip():
                 st.session_state._global_fuhrpark_store.append({
                     "name": m_name.strip(), "typ": m_typ, "stunden": m_h, "letzte_wartung": m_h
@@ -673,7 +673,7 @@ elif menu == "🚛 Fuhrpark-Manager":
             for f_idx, maschine in enumerate(st.session_state._global_fuhrpark_store):
                 with st.container(border=True):
                     c_fn, c_fh, c_fdel = st.columns([2, 2, 1])
-                    c_fn.markdown(f"**{maschine['name']}**  \nCategory: `{maschine['typ']}`")
+                    c_fn.markdown(f"**{maschine['name']}**  \nKategorie: `{maschine['typ']}`")
                     
                     # Stunden updaten
                     neue_stunden = c_fh.number_input(f"Stunden (h)", min_value=float(maschine['stunden']), value=float(maschine['stunden']), step=0.1, key=f"f_h_{f_idx}")
@@ -690,7 +690,7 @@ elif menu == "🚛 Fuhrpark-Manager":
             st.info("Noch keine Maschinen im Fuhrpark vorhanden.")
 
 # ---------------------------------------------------------
-# SEITE 7: DETAILLIERTES KASSENBUCH
+# SEITE 7: DETAILLIERTES KASSENBUCH (INKL. MANUELLER EINGABE)
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch & Finanzanalyse")
@@ -707,6 +707,54 @@ elif menu == "📖 Detailliertes Kassenbuch":
     c_k3.metric("Aktueller Kontostand", f"{fmt_float(aktuell)} €")
     
     st.markdown("---")
+    
+    # NEU: EXPANDER FÜR MANUELLE BUCHUNGEN
+    with st.expander("➕ Spontane Buchung manuell eintragen (Händler, Werkstatt, etc.)"):
+        c_man1, c_man2, c_man3 = st.columns(3)
+        man_monat = c_man1.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
+        man_jahr = c_man2.number_input("In-Game Jahr:", min_value=1, value=1, key="man_j")
+        man_details = c_man3.text_input("Verwendungszweck / Details:", placeholder="z.B. Diesel gekauft, Werkstattkosten")
+        
+        c_man4, c_man5 = st.columns(2)
+        man_betrag = c_man4.number_input("Betrag (€):", min_value=0.01, value=100.0, step=10.0)
+        
+        # Zwei separate Buttons für klare Trennung
+        st.write("")
+        c_btn_ein, c_btn_aus = st.columns(2)
+        
+        if c_btn_ein.button("🟩 Als Einnahme buchen", use_container_width=True):
+            if man_details.strip():
+                full_ingame_date = f"J{man_jahr}-{man_monat}"
+                st.session_state._global_finanzen["einnahmen"] += man_betrag
+                st.session_state._global_finanzen["historie"].append({
+                    "In-Game Datum": full_ingame_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
+                    "Typ": "Einnahme", "Nummer": f"#MAN-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}",
+                    "Details": f"Manuell: {man_details.strip()}", "Betrag (EUR)": man_betrag
+                })
+                st.session_state._global_finanzen["naechste_rechnung_id"] = st.session_state._global_finanzen.get("naechste_rechnung_id", 1) + 1
+                speichere_gesamte_daten()
+                st.success("Einnahme erfolgreich gebucht!")
+                st.rerun()
+            else:
+                st.error("Bitte gib einen Verwendungszweck an!")
+
+        if c_btn_aus.button("🟥 Als Ausgabe buchen", use_container_width=True):
+            if man_details.strip():
+                full_ingame_date = f"J{man_jahr}-{man_monat}"
+                st.session_state._global_finanzen["ausgaben"] += man_betrag
+                st.session_state._global_finanzen["historie"].append({
+                    "In-Game Datum": full_ingame_date, "Sort_Jahr": int(man_jahr), "Sort_Monat": man_monat,
+                    "Typ": "Ausgabe", "Nummer": f"#MAN-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}",
+                    "Details": f"Manuell: {man_details.strip()}", "Betrag (EUR)": man_betrag
+                })
+                st.session_state._global_finanzen["naechste_rechnung_id"] = st.session_state._global_finanzen.get("naechste_rechnung_id", 1) + 1
+                speichere_gesamte_daten()
+                st.success("Ausgabe erfolgreich gebucht!")
+                st.rerun()
+            else:
+                st.error("Bitte gib einen Verwendungszweck an!")
+
+    st.markdown("---")
     historie_liste = st.session_state._global_finanzen.get("historie", [])
     
     if historie_liste:
@@ -715,7 +763,7 @@ elif menu == "📖 Detailliertes Kassenbuch":
         with st.expander("🔍 Buchungen filtern & durchsuchen"):
             f_col1, f_col2 = st.columns(2)
             filter_typ = f_col1.selectbox("Nach Buchungstyp filtern:", ["Alle Einträge", "Nur Einnahmen", "Nur Ausgaben"])
-            suchbegriff = f_col2.text_input("Details durchsuchen (z.B. Kundenname, Frucht):")
+            suchbegriff = f_col2.text_input("Details durchsuchen (z.B. Kundenname, Frucht, Manuell):")
         
         df_gefiltert = df_hist.copy()
         if filter_typ == "Nur Einnahmen":
