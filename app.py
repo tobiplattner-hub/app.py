@@ -321,7 +321,8 @@ elif menu == "🚜 Meine Felder & Anbau":
         saat_monate_auswahl = c_nf2.multiselect("In welchen Monaten wird gesät?", LISTE_MONATE, key="cust_saat")
         ernte_monate_auswahl = c_nf3.multiselect("In welchen Monaten wird geerntet?", LISTE_MONATE, key="cust_ernte")
         
-        if st.button("💾 Fruchtart im System registrieren", use_width=True):
+        # HIER WAR DER FEHLER: `use_width=True` geändert zu `use_container_width=True`
+        if st.button("💾 Fruchtart im System registrieren", use_container_width=True):
             if neue_frucht_name.strip():
                 f_name = neue_frucht_name.strip()
                 saat_ints = [extrahiere_monat_int(m) for m in saat_monate_auswahl]
@@ -490,10 +491,7 @@ elif menu == "📋 Rechnungen":
         c_b1.download_button("📥 PDF generieren", data=pdf_bytes, file_name=f"Rechnung_{k_name}.pdf", mime="application/pdf", use_container_width=True)
         if c_b2.button("💾 Als Einnahme buchen", type="primary", use_container_width=True):
             st.session_state._global_finanzen["einnahmen"] += total
-            st.session_state._global_finanzen["historie"].append({
-                "In-Game Datum": full_ingame_date, "Sort_Jahr": int(st.session_state._global_ingame_jahr), "Sort_Monat": st.session_state._global_ingame_monat,
-                "Typ": "Einnahme", "Nummer": f"#RE-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}", "Details": f"Kunde: {k_name}", "Betrag (EUR)": total
-            })
+            st.session_state._global_finanzen["historie"].append({"In-Game Datum": full_ingame_date, "Sort_Jahr": int(st.session_state._global_ingame_jahr), "Sort_Monat": st.session_state._global_ingame_monat, "Typ": "Einnahme", "Nummer": f"#RE-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}", "Details": f"Kunde: {k_name}", "Betrag (EUR)": total})
             st.session_state._global_finanzen["naechste_rechnung_id"] += 1
             st.session_state.rechnungs_posten = []
             speichere_gesamte_daten(); st.rerun()
@@ -511,7 +509,7 @@ elif menu == "🛒 Material & Aufträge":
             st.markdown(f"### {mat.upper()}")
             werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store.get(mat, 0)), key=f"i_v_{mat}")
             werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get(mat, 1000)), key=f"i_g_{mat}")
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
         for mat in materialien:
             st.session_state._global_lager_store[mat] = werte[f"v_{mat}"]
             st.session_state._global_lager_grenzwerte[mat] = werte[f"g_{mat}"]
