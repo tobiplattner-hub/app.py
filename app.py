@@ -4,7 +4,6 @@ from datetime import date
 import os
 import json
 from fpdf import FPDF
-import math
 
 # 1. Seiteneinstellungen
 st.set_page_config(layout="wide", page_title="LS25 Hof-Manager", page_icon="🚜")
@@ -36,12 +35,9 @@ def lade_gesamte_daten():
         },
         "lager_grenzwerte": {"saat": 1000, "kalk": 3000, "dueng": 1000, "herbi": 500, "diesel": 1000},
         "produktionen_store": [
-            {"name": "Getreidemühle (Dinkel)", "input_ware": "Dinkel", "input_menge": 900.0, "output_ware": "Mehl", "output_menge": 1500.0},
-            {"name": "Bäckerei (Brot)", "input_ware": "Mehl", "input_menge": 200.0, "output_ware": "Brot", "output_menge": 250.0}
+            {"name": "Saatgut-Aufbereitung", "input_ware": "weizen", "input_menge": 1000.0, "output_ware": "saat", "output_menge": 900.0},
+            {"name": "Biodiesel-Raffinerie", "input_ware": "raps", "input_menge": 2000.0, "output_ware": "diesel", "output_menge": 800.0}
         ],
-        "paletten_lager": [],
-        "ballen_lager": [],
-        "silos": {},
         "auftrags_store": []
     }
     
@@ -67,14 +63,8 @@ if "_global_daten_geladen" not in st.session_state:
     st.session_state._global_finanzen = gespeicherte_daten.get("finanzen", {})
     st.session_state._global_lager_grenzwerte = gespeicherte_daten.get("lager_grenzwerte", {})
     st.session_state._global_produktionen_store = gespeicherte_daten.get("produktionen_store", [])
-    st.session_state._global_paletten_lager = gespeicherte_daten.get("paletten_lager", [])
-    st.session_state._global_ballen_lager = gespeicherte_daten.get("ballen_lager", [])
-    st.session_state._global_silos = gespeicherte_daten.get("silos", {})  
     st.session_state._global_auftrags_store = gespeicherte_daten.get("auftrags_store", [])
     st.session_state._global_daten_geladen = True
-
-if "_global_silos" not in st.session_state: st.session_state._global_silos = {}
-if "_global_auftrags_store" not in st.session_state: st.session_state._global_auftrags_store = []
 
 def speichere_gesamte_daten():
     daten_zum_speichern = {
@@ -86,9 +76,6 @@ def speichere_gesamte_daten():
         "finanzen": st.session_state._global_finanzen,
         "lager_grenzwerte": st.session_state._global_lager_grenzwerte,
         "produktionen_store": st.session_state._global_produktionen_store,
-        "paletten_lager": st.session_state._global_paletten_lager,
-        "ballen_lager": st.session_state._global_ballen_lager,
-        "silos": st.session_state._global_silos,
         "auftrags_store": st.session_state._global_auftrags_store
     }
     try:
@@ -103,9 +90,6 @@ LISTE_MONATE = [
     "09 - Sep", "10 - Okt", "11 - Nov", "12 - Dez"
 ]
 
-# ---------------------------------------------------------
-# HILFSFUNKTIONEN & FORMATIERUNG
-# ---------------------------------------------------------
 def safe_str(text):
     replacements = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', '€': 'EUR'}
     txt = str(text)
@@ -117,9 +101,6 @@ def fmt_float(wert):
     try: return f"{wert:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except: return str(wert)
 
-# ---------------------------------------------------------
-# PDF GENERATOR
-# ---------------------------------------------------------
 class ManagementPDF(FPDF):
     def header(self):
         self.set_font("Helvetica", "B", 16)
@@ -159,25 +140,9 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return bytes(pdf.output())
 
-# ---------------------------------------------------------
-# GOOGLE SHEETS ANBINDUNG
-# ---------------------------------------------------------
-SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
-PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
-KUNDEN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=568043650"
-
-@st.cache_data(ttl=5)
-def load_data(url):
-    try:
-        df = pd.read_csv(url)
-        df.columns = [c.strip() for c in df.columns]
-        return df
-    except: return pd.DataFrame()
-
-df_preise = load_data(PREIS_URL)
-preis_dict = dict(zip(df_preise['Geraet'], df_preise['Preis'])) if not df_preise.empty else {}
-df_kunden = load_data(KUNDEN_URL)
-aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.empty else []
+# Google Sheets Dummy / Fallback
+preis_dict = {}
+aktuelle_kunden = ["Müller Agrar", "Hof Lehmann", "Bio-Hof Weber", "Agrar-GmbH Ost"]
 
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
 if "global_verbrauch_kalk" not in st.session_state: st.session_state.global_verbrauch_kalk = 2000
@@ -200,13 +165,6 @@ st.sidebar.title("📦 Live-Lagerbestand")
 for k, v in st.session_state._global_lager_store.items():
     st.sidebar.write(f"🔹 {k.capitalize()}: **{fmt_int(v)} L**")
 
-if st.session_state._global_silos:
-    st.sidebar.markdown("---")
-    st.sidebar.title("🏗️ Silo-Bestände")
-    for s_id, s_data in st.session_state._global_silos.items():
-        p_name = s_data.get("produkt") if s_data.get("produkt") else "LEER"
-        st.sidebar.write(f"🏛️ {s_id}: **{fmt_int(s_data.get('menge_liter', 0.0))} L** ({p_name})")
-
 st.sidebar.markdown("---")
 menu = st.sidebar.radio("Hauptmenü Navigation", [
     "💰 Ernte & Verbrauchsraten", 
@@ -215,8 +173,6 @@ menu = st.sidebar.radio("Hauptmenü Navigation", [
     "🛒 Material & Aufträge", 
     "📝 LU-Auftragsbuch",
     "🏭 Produktionen",
-    "📦 Manuelle Lagerverwaltung",
-    "🏗️ Schüttgut-Silos",  
     "📖 Detailliertes Kassenbuch"
 ])
 
@@ -372,9 +328,9 @@ elif menu == "📋 Rechnungen":
             e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
             einheit_str = "ha"
         else: 
-            auswahl = st.selectbox("Maschine:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
+            auswahl = st.text_input("Maschine/Gerät:", value="Standard-Traktor")
             menge = st.number_input("Stunden (h):", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis pro Stunde (€/h):", value=float(preis_dict.get(auswahl, 0.0)))
+            e_p = st.number_input("Preis pro Stunde (€/h):", value=75.0)
             einheit_str = "h"
             
         if st.button("➕ Posten hinzufügen", use_container_width=True):
@@ -384,7 +340,7 @@ elif menu == "📋 Rechnungen":
 
     with col_liste:
         st.subheader("Rechnungsdaten & Vorschau")
-        k_name = st.selectbox("Empfänger:", aktuelle_kunden) if aktuelle_kunden else st.text_input("Empfänger Name:")
+        k_name = st.selectbox("Empfänger:", aktuelle_kunden)
         rabatt = st.slider("Rabatt (%)", 0, 50, 0)
         c_m, c_j = st.columns(2)
         re_monat = c_m.selectbox("Monat:", LISTE_MONATE, key="re_m")
@@ -417,8 +373,7 @@ elif menu == "📋 Rechnungen":
 # SEITE 4: MATERIAL & AUFTRÄGE
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
-    st.title("🛒 Material & LU-Bestellungen")
-    st.subheader("⚠️ Bestandsüberwachung & Grenzwert-Konfiguration")
+    st.title("🛒 Material-Lagerbestand & Grenzwert-Überwachung")
     
     c_l1, c_l2, c_l3, c_l4, c_l5 = st.columns(5)
     materialien = ["saat", "kalk", "dueng", "herbi", "diesel"]
@@ -426,9 +381,15 @@ elif menu == "🛒 Material & Aufträge":
     
     for c, mat in zip([c_l1, c_l2, c_l3, c_l4, c_l5], materialien):
         with c:
-            st.markdown(f"**{mat.upper()}**")
-            werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store.get(mat, 0)))
-            werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get(mat, 1000)))
+            st.markdown(f"### {mat.upper()}")
+            # Einzigartige Keys hinzugefügt, um den DuplicateElementId-Fehler zu beheben!
+            werte[f"v_{mat}"] = st.number_input("Aktueller Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store.get(mat, 0)), key=f"input_val_{mat}")
+            werte[f"g_{mat}"] = st.number_input("Kritischer Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get(mat, 1000)), key=f"input_grenz_{mat}")
+            
+            if werte[f"v_{mat}"] <= werte[f"g_{mat}"]:
+                st.error("🚨 Nachfüllen empfohlen!")
+            else:
+                st.success("✅ Bestand OK")
             
     if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
         for mat in materialien:
@@ -446,18 +407,19 @@ elif menu == "📝 LU-Auftragsbuch":
     
     with col_a:
         st.subheader("➕ Neuen Auftrag erfassen")
-        a_kunde = st.selectbox("Kunde:", aktuelle_kunden if aktuelle_kunden else ["Standard Kunde"])
+        a_kunde = st.selectbox("Kunde:", aktuelle_kunden)
         a_feld = st.text_input("Feld / Ort:", placeholder="z.B. Feld 12")
-        a_arbeit = st.text_input("Arbeitsschritt:", placeholder="z.B. Dreschen")
+        a_arbeit = st.text_input("Arbeitsschritt:", placeholder="z.B. Dreschen, Pressen")
         a_status = st.selectbox("Status:", ["⏳ Ausstehend", "🚜 In Arbeit", "✔️ Erledigt"])
         a_preis = st.number_input("Vereinbarter Lohn (€):", min_value=0.0, value=500.0)
         
         if st.button("💾 Auftrag eintragen", type="primary", use_container_width=True):
-            st.session_state._global_auftrags_store.append({
-                "kunde": a_kunde, "ort": a_feld, "arbeit": a_arbeit, "status": a_status, "lohn": a_preis
-            })
-            speichere_gesamte_daten()
-            st.rerun()
+            if a_feld.strip() and a_arbeit.strip():
+                st.session_state._global_auftrags_store.append({
+                    "kunde": a_kunde, "ort": a_feld.strip(), "arbeit": a_arbeit.strip(), "status": a_status, "lohn": a_preis
+                })
+                speichere_gesamte_daten()
+                st.rerun()
 
     with col_b:
         st.subheader("📋 Aktuelle Auftragsliste")
@@ -477,126 +439,55 @@ elif menu == "📝 LU-Auftragsbuch":
 # SEITE 6: PRODUKTIONEN
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktionsbetriebe & Fabrik-Logistik")
+    st.title("🏭 Produktionsbetriebe & Weiterverarbeitung")
     col_p1, col_p2 = st.columns(2)
     
     with col_p1:
-        st.subheader("🛠️ Fabrik / Rezeptur hinzufügen")
-        p_name = st.text_input("Fabrik Name:")
-        p_in_ware = st.text_input("Eingangs-Rohstoff (z.B. dinkel):").lower().strip()
-        p_in_menge = st.number_input("Bedarf Menge (L):", min_value=1.0, value=100.0)
-        p_out_ware = st.text_input("Ausgangs-Produkt (z.B. mehl):").lower().strip()
-        p_out_menge = st.number_input("Erzeugte Menge (L):", min_value=1.0, value=150.0)
+        st.subheader("🛠️ Neue Produktionslinie erstellen")
+        p_name = st.text_input("Name der Produktion:")
+        p_in_ware = st.selectbox("Eingangs-Lagerware:", ["saat", "kalk", "dueng", "herbi", "diesel"])
+        p_in_menge = st.number_input("Verbrauch pro Zyklus (L):", min_value=1.0, value=500.0)
+        p_out_ware = st.selectbox("Ausgangs-Zielware:", ["saat", "kalk", "dueng", "herbi", "diesel"], index=2)
+        p_out_menge = st.number_input("Ertrag pro Zyklus (L):", min_value=1.0, value=600.0)
         
-        if st.button("🏗️ Registrieren", type="primary", use_container_width=True):
+        if st.button("🏗️ Produktionslinie registrieren", type="primary", use_container_width=True):
             if p_name.strip():
                 st.session_state._global_produktionen_store.append({
-                    "name": p_name, "input_ware": p_in_ware, "input_menge": p_in_menge,
+                    "name": p_name.strip(), "input_ware": p_in_ware, "input_menge": p_in_menge,
                     "output_ware": p_out_ware, "output_menge": p_out_menge
                 })
                 speichere_gesamte_daten()
                 st.rerun()
 
     with col_p2:
-        st.subheader("⚙️ Produktion starten")
+        st.subheader("⚙️ Verarbeitung starten")
         if st.session_state._global_produktionen_store:
             fab_namen = [f["name"] for f in st.session_state._global_produktionen_store]
-            auswahl_fab = st.selectbox("Fabrik wählen:", fab_namen)
+            auswahl_fab = st.selectbox("Aktive Fabrik wählen:", fab_namen)
             fab = next(f for f in st.session_state._global_produktionen_store if f["name"] == auswahl_fab)
             
-            zyklen = st.number_input("Durchläufe (Zyklen):", min_value=1, value=1)
+            zyklen = st.number_input("Anzahl Zyklen ausführen:", min_value=1, value=1)
             gesamt_in = fab['input_menge'] * zyklen
             gesamt_out = fab['output_menge'] * zyklen
             
-            st.info(f"Benötigt: {fmt_int(gesamt_in)}L {fab['input_ware']} ➡️ Erzeugt: {fmt_int(gesamt_out)}L {fab['output_ware']}")
+            st.info(f"Bedarf: {fmt_int(gesamt_in)}L {fab['input_ware'].upper()} ➡️ Erwartet: {fmt_int(gesamt_out)}L {fab['output_ware'].upper()}")
             
             if st.button("🚀 Charge produzieren", use_container_width=True):
                 r_key, z_key = fab['input_ware'], fab['output_ware']
+                
                 if st.session_state._global_lager_store.get(r_key, 0) >= gesamt_in:
                     st.session_state._global_lager_store[r_key] -= gesamt_in
                     st.session_state._global_lager_store[z_key] = st.session_state._global_lager_store.get(z_key, 0) + gesamt_out
                     speichere_gesamte_daten()
-                    st.success("Produktion erfolgreich abgeschlossen!")
+                    st.success(f"Erfolgreich produziert! {fmt_int(gesamt_out)}L {z_key.upper()} ins Hauptlager überführt.")
                     st.rerun()
                 else:
-                    st.error("Zu wenig Rohstoffe im Lager!")
+                    st.error(f"Fehler: Zu wenig {r_key.upper()} im Hauptlager!")
+        else:
+            st.info("Noch keine benutzerdefinierten Produktionen angelegt.")
 
 # ---------------------------------------------------------
-# SEITE 7: MANUELLE LAGERVERWALTUNG
-# ---------------------------------------------------------
-elif menu == "📦 Manuelle Lagerverwaltung":
-    st.title("📦 Manuelle Lagerverwaltung (Direktbuchungen)")
-    col_m1, col_m2 = st.columns(2)
-    
-    with col_m1:
-        st.subheader("📥 Hinzufügen")
-        add_name = st.text_input("Produkt Name:", placeholder="z.B. weizen").strip().lower()
-        add_menge = st.number_input("Menge (L):", min_value=1, value=1000)
-        if st.button("Eintragen", type="primary", use_container_width=True):
-            if add_name:
-                st.session_state._global_lager_store[add_name] = st.session_state._global_lager_store.get(add_name, 0) + add_menge
-                speichere_gesamte_daten()
-                st.rerun()
-
-    with col_m2:
-        st.subheader("📤 Abbuchen")
-        if st.session_state._global_lager_store:
-            sub_name = st.selectbox("Produkt auswählen:", list(st.session_state._global_lager_store.keys()))
-            sub_menge = st.number_input("Abzuziehende Menge (L):", min_value=1, value=500)
-            if st.button("Abziehen", use_container_width=True):
-                if st.session_state._global_lager_store.get(sub_name, 0) >= sub_menge:
-                    st.session_state._global_lager_store[sub_name] -= sub_menge
-                    speichere_gesamte_daten()
-                    st.rerun()
-
-# ---------------------------------------------------------
-# SEITE 8: SCHÜTTGUT-SILOS
-# ---------------------------------------------------------
-elif menu == "🏗️ Schüttgut-Silos":
-    st.title("🏗️ Silo-Management für Schüttgüter")
-    col_silo_anlegen, col_silo_aktion = st.columns([1, 1])
-
-    with col_silo_anlegen:
-        st.subheader("🛠️ Neues Silo errichten")
-        neue_silo_id = st.text_input("Silo Bezeichnung:", placeholder="z.B. Hofsilo Nord")
-        silo_kapazitaet_l = st.number_input("Max. Volumen (L):", min_value=1000, value=100000)
-        if st.button("🏗️ Aktivieren", type="primary", use_container_width=True):
-            if neue_silo_id.strip() not in st.session_state._global_silos:
-                st.session_state._global_silos[neue_silo_id.strip()] = {"max_kapazitaet_l": float(silo_kapazitaet_l), "produkt": None, "menge_liter": 0.0}
-                speichere_gesamte_daten()
-                st.rerun()
-
-    with col_silo_aktion:
-        st.subheader("🔄 Ein-/Auslagerung")
-        if st.session_state._global_silos:
-            s_auswahl = st.selectbox("Silo:", list(st.session_state._global_silos.keys()))
-            s_daten = st.session_state._global_silos[s_auswahl]
-            akt = st.radio("Aktion:", ["Einlagern", "Herausnehmen"])
-            
-            if akt == "Einlagern":
-                prod = st.selectbox("Frucht:", st.session_state._global_fruchtarten)
-                t_gewicht = st.number_input("Tonnen von Waage:", min_value=0.1, value=10.0)
-                dichte = st.number_input("Dichte (kg/L):", value=0.75)
-                berechnete_liter = (t_gewicht * 1000.0) / dichte
-                
-                if st.button("In Silo füllen"):
-                    if s_daten["produkt"] is None or s_daten["produkt"] == prod:
-                        st.session_state._global_silos[s_auswahl]["produkt"] = prod
-                        st.session_state._global_silos[s_auswahl]["menge_liter"] += berechnete_liter
-                        speichere_gesamte_daten()
-                        st.rerun()
-            else:
-                st.write(f"Inhalt: {fmt_int(s_daten['menge_liter'])}L {s_daten['produkt']}")
-                ent_l = st.number_input("Menge entnehmen (L):", max_value=float(s_daten['menge_liter']) if s_daten['menge_liter'] > 0 else 1.0)
-                if st.button("Rausnehmen") and s_daten['menge_liter'] >= ent_l:
-                    st.session_state._global_silos[s_auswahl]["menge_liter"] -= ent_l
-                    if st.session_state._global_silos[s_auswahl]["menge_liter"] <= 0:
-                        st.session_state._global_silos[s_auswahl]["produkt"] = None
-                    speichere_gesamte_daten()
-                    st.rerun()
-
-# ---------------------------------------------------------
-# SEITE 9: DETILLIERTES KASSENBUCH
+# SEITE 7: DETILLIERTES KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch")
