@@ -104,7 +104,7 @@ def fmt_float(wert):
 class ManagementPDF(FPDF):
     def header(self):
         self.set_font("Helvetica", "B", 16)
-        self.cell(0, 10, "LU-BETRIEB MANAGEMENT & LOGISTIK", ln=True)
+        self.cell(0, 10, "PLATTNER & AUER AGRARSERVICE", ln=True)
         self.line(10, 20, 200, 20) 
         self.ln(10)
     def footer(self):
@@ -140,9 +140,25 @@ def generate_invoice_pdf(kunden_name, posten, rabatt_prozent, rechnungs_id, inga
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return bytes(pdf.output())
 
-# Google Sheets Dummy / Fallback
-preis_dict = {}
-aktuelle_kunden = ["Müller Agrar", "Hof Lehmann", "Bio-Hof Weber", "Agrar-GmbH Ost"]
+# ---------------------------------------------------------
+# GOOGLE SHEETS ANBINDUNG (Wieder voll aktiv)
+# ---------------------------------------------------------
+SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
+PREIS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+KUNDEN_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=568043650"
+
+@st.cache_data(ttl=5)
+def load_data(url):
+    try:
+        df = pd.read_csv(url)
+        df.columns = [c.strip() for c in df.columns]
+        return df
+    except: return pd.DataFrame()
+
+df_preise = load_data(PREIS_URL)
+preis_dict = dict(zip(df_preise['Geraet'], df_preise['Preis'])) if not df_preise.empty else {}
+df_kunden = load_data(KUNDEN_URL)
+aktuelle_kunden = df_kunden['Name'].dropna().unique().tolist() if not df_kunden.empty else ["Müller Agrar", "Hof Lehmann", "Bio-Hof Weber"]
 
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
 if "global_verbrauch_kalk" not in st.session_state: st.session_state.global_verbrauch_kalk = 2000
@@ -308,7 +324,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN
+# SEITE 3: RECHNUNGEN (Mit Google Sheets Preisliste)
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title("📋 Dienstleistungs-Rechnungen erstellen")
@@ -328,13 +344,16 @@ elif menu == "📋 Rechnungen":
             e_p = st.number_input("Preis pro Hektar (€/ha):", value=50.0)
             einheit_str = "ha"
         else: 
-            auswahl = st.text_input("Maschine/Gerät:", value="Standard-Traktor")
+            # Greift auf geladene Google-Tabelle zu
+            auswahl = st.selectbox("Maschine/Gerät (aus Google Sheet):", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
             menge = st.number_input("Stunden (h):", min_value=0.1, value=1.0)
-            e_p = st.number_input("Preis pro Stunde (€/h):", value=75.0)
+            # Automatische Preisermittlung aus der Tabelle
+            standard_preis = float(preis_dict.get(auswahl, 75.0)) if preis_dict else 75.0
+            e_p = st.number_input("Preis pro Stunde (€/h):", value=standard_preis)
             einheit_str = "h"
             
         if st.button("➕ Posten hinzufügen", use_container_width=True):
-            if auswahl.strip():
+            if str(auswahl).strip():
                 st.session_state.rechnungs_posten.append({"name": auswahl, "menge": menge, "preis": e_p, "einheit": einheit_str, "gesamt": menge * e_p})
                 st.rerun()
 
@@ -382,7 +401,6 @@ elif menu == "🛒 Material & Aufträge":
     for c, mat in zip([c_l1, c_l2, c_l3, c_l4, c_l5], materialien):
         with c:
             st.markdown(f"### {mat.upper()}")
-            # Einzigartige Keys hinzugefügt, um den DuplicateElementId-Fehler zu beheben!
             werte[f"v_{mat}"] = st.number_input("Aktueller Bestand (L):", min_value=0, value=int(st.session_state._global_lager_store.get(mat, 0)), key=f"input_val_{mat}")
             werte[f"g_{mat}"] = st.number_input("Kritischer Grenzwert (L):", min_value=0, value=int(st.session_state._global_lager_grenzwerte.get(mat, 1000)), key=f"input_grenz_{mat}")
             
@@ -487,10 +505,57 @@ elif menu == "🏭 Produktionen":
             st.info("Noch keine benutzerdefinierten Produktionen angelegt.")
 
 # ---------------------------------------------------------
-# SEITE 7: DETILLIERTES KASSENBUCH
+# SEITE 7: DETILLIERTES KASSENBUCH (Mit manuellen Buchungen)
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Detailliertes Kassenbuch")
+    
+    # Formular für manuelle Buchungen
+    with st.expander("➕ Manuelle Einnahme / Ausgabe buchen", expanded=False):
+        c_btyp, c_bbetrag = st.columns(2)
+        m_typ = c_btyp.selectbox("Buchungstyp:", ["Einnahme", "Ausgabe"])
+        m_betrag = c_bbetrag.number_input("Betrag (€):", min_value=0.01, value=100.0, step=10.0)
+        
+        m_details = st.text_input("Buchungstext / Verwendungszweck:", placeholder="z.B. Maschinen-Reparatur, Helferlohn, etc.")
+        
+        c_bm, c_bj = st.columns(2)
+        m_monat = c_bm.selectbox("In-Game Monat:", LISTE_MONATE, key="man_m")
+        m_jahr = c_bj.number_input("In-Game Jahr:", min_value=1, value=1, key="man_j")
+        
+        if st.button("💾 Buchung festschreiben", type="primary", use_container_width=True):
+            if m_details.strip():
+                full_ingame_date = f"J{m_jahr}-{m_monat}"
+                
+                if m_typ == "Einnahme":
+                    st.session_state._global_finanzen["einnahmen"] += m_betrag
+                    rechnungs_kennung = f"#MAN-E-{st.session_state._global_finanzen.get('naechste_rechnung_id', 1):04d}"
+                else:
+                    st.session_state._global_finanzen["ausgaben"] += m_betrag
+                    rechnungs_kennung = f"#MAN-A-{st.session_state._global_finanzen.get('naechste_bestellung_id', 1):04d}"
+                
+                st.session_state._global_finanzen["historie"].append({
+                    "In-Game Datum": full_ingame_date, 
+                    "Sort_Jahr": int(m_jahr), 
+                    "Sort_Monat": m_monat,
+                    "Typ": m_typ, 
+                    "Nummer": rechnungs_kennung,
+                    "Details": m_details.strip(), 
+                    "Betrag (EUR)": m_betrag
+                })
+                
+                if m_typ == "Einnahme":
+                    st.session_state._global_finanzen["naechste_rechnung_id"] = st.session_state._global_finanzen.get("naechste_rechnung_id", 1) + 1
+                else:
+                    st.session_state._global_finanzen["naechste_bestellung_id"] = st.session_state._global_finanzen.get("naechste_bestellung_id", 1) + 1
+                    
+                speichere_gesamte_daten()
+                st.success("Erfolgreich im Kassenbuch verbucht!")
+                st.rerun()
+            else:
+                st.error("Bitte gib einen Buchungstext an.")
+
+    st.write("---")
+    st.subheader("📋 Letzte Transaktionen")
     if st.session_state._global_finanzen.get("historie"):
         st.dataframe(pd.DataFrame(st.session_state._global_finanzen["historie"]), use_container_width=True, hide_index=True)
     else:
