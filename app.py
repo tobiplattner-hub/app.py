@@ -1,4 +1,3 @@
-import streamlit as set_page_config
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -543,7 +542,7 @@ elif menu == "📋 Rechnungen":
         st.info("Noch keine Rechnungen im System vorhanden.")
 
 # ---------------------------------------------------------
-# SEITE 4: MATERIAL & AUFTRÄGE
+# SEITE 4: MATERIAL & AUFTRÄGE (WIEDERVOLLSTÄNDIGT)
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title("🛒 Material & LU-Bestellungen")
@@ -621,207 +620,177 @@ elif menu == "🛒 Material & Aufträge":
             
         st.write("---")
         st.subheader("📉 Reiner Material-Einkaufswagen")
-        order_saat = st.number_input("Saatgut kaufen (L):", min_value=0, step=1000, value=0)
-        if st.button("🛒 Einkaufswagen verbuchen"):
-            if order_saat > 0:
-                st.session_state._global_lager_store["saat"] += order_saat
-                speichere_gesamte_daten()
-                st.success(f"{order_saat}L Saatgut gekauft!")
-                st.rerun()
+        
+        c_buy1, c_buy2, c_buy3 = st.columns([2, 1, 1])
+        with c_buy1:
+            mat_typ = st.selectbox("Einkauf-Material:", ["Saatgut", "Kalk", "Dünger", "Herbizid", "Diesel"])
+            order_menge = st.number_input("Menge einkaufen (L):", min_value=0, step=1000, value=0)
+        with c_buy2:
+            preis_pro_liter = st.number_input("Kaufpreis (€ pro Liter):", min_value=0.00, max_value=5.00, value=0.15, format="%.2f")
+            gesamt_kosten = order_menge * preis_pro_liter
+            st.metric("Gesamtkosten", f"{fmt_float(gesamt_kosten)} €")
+        
+        with c_buy3:
+            st.write("##")
+            if st.button("🛒 Einkaufswagen verbuchen", type="primary", use_container_width=True):
+                if order_menge > 0:
+                    mat_key_mapping = {"Saatgut": "saat", "Kalk": "kalk", "Dünger": "dueng", "Herbizid": "herbi", "Diesel": "diesel"}
+                    mat_key = mat_key_mapping[mat_typ]
+                    
+                    st.session_state._global_lager_store[mat_key] += order_menge
+                    st.session_state._global_finanzen["ausgaben"] += gesamt_kosten
+                    
+                    st.session_state._global_finanzen["historie"].append({
+                        "In-Game Datum": "Einkauf", "Sort_Jahr": 1, "Sort_Monat": "01 - Jan",
+                        "Typ": "Ausgabe", "Nummer": f"#EK-{st.session_state._global_finanzen['naechste_bestellung_id']:04d}",
+                        "Details": f"Manueller Einkauf: {mat_typ} (+{order_menge}L)", "Betrag (EUR)": gesamt_kosten
+                    })
+                    st.session_state._global_finanzen["naechste_bestellung_id"] += 1
+                    speichere_gesamte_daten()
+                    st.success(f"✔️ {order_menge}L {mat_typ} eingekauft und verbucht!")
+                    st.rerun()
+                else:
+                    st.error("Bitte gib eine Menge größer als 0 an.")
 
     with tab_auftraege:
-        st.subheader("📝 LU-Auftragsbuch")
-        k_name = st.text_input("Kunde / Hofname für Auftrag:")
-        aufgabe = st.text_area("Aufgabenbeschreibung:")
-        preis = st.number_input("Vereinbarter Preis (€):", min_value=0.0, value=0.0)
+        st.subheader("📝 LU-Auftragsbuch (Lohnunternehmen)")
         
-        if st.button("💾 Auftrag registrieren"):
-            if k_name and aufgabe:
-                st.session_state._global_bestell_store.append({
-                    "Kunde": k_name, "Aufgabe": aufgabe, "Preis": preis, "Status": "Offen", "Eingang": str(date.today())
-                })
+        col_neuer_auf, col_auf_preise = st.columns([1, 1])
+        with col_neuer_auf:
+            st.markdown("##### ➕ Neuen Lohnauftrag erfassen")
+            auf_kunde = st.selectbox("Auftraggeber (Kunde):", aktuelle_kunden, key="auf_k") if aktuelle_kunden else st.text_input("Auftraggeber (Hofname):", key="auf_k_txt")
+            auf_typ = st.selectbox("Arbeits-Typ:", ["Feldarbeit (ha)", "Stundenlohn (h)", "Pauschalauftrag"])
+            
+            auf_details = ""
+            auf_preis = 0.0
+            
+            if auf_typ == "Feldarbeit (ha)":
+                arbeit_name = st.text_input("Welche Arbeit?", value="Dreschen")
+                flaeche_ha = st.number_input("Fläche (ha):", min_value=0.1, value=1.0)
+                ha_preis = st.number_input("Satz (€ / ha):", min_value=0.0, value=60.0)
+                auf_preis = flaeche_ha * ha_preis
+                auf_details = f"{arbeit_name} auf {flaeche_ha} ha"
+            elif auf_typ == "Stundenlohn (h)":
+                maschine_auswahl = st.selectbox("Eingesetzte Maschine:", options=list(preis_dict.keys()) if preis_dict else ["Standard-Traktor"])
+                stunden_anzahl = st.number_input("Geplante/Geleistete Stunden (h):", min_value=0.1, value=1.0)
+                stunden_satz = st.number_input("Satz (€ / h):", min_value=0.0, value=float(preis_dict.get(maschine_auswahl, 45.0)))
+                auf_preis = stunden_anzahl * stunden_satz
+                auf_details = f"{maschine_auswahl} für {stunden_anzahl}h"
+            else:
+                freie_beschreibung = st.text_input("Beschreibung:", value="Transportarbeiten aller Art")
+                auf_preis = st.number_input("Festpreis (€):", min_value=0.0, value=500.0)
+                auf_details = freie_beschreibung
+
+            c_am, c_aj = st.columns(2)
+            auf_monat = c_am.selectbox("In-Game Monat:", LISTE_MONATE, key="auf_m")
+            auf_jahr = c_aj.number_input("In-Game Jahr:", min_value=1, value=1, key="auf_j")
+            
+            if st.button("💾 Auftrag im Buch registrieren", type="primary", use_container_width=True):
+                neuer_auftrag = {
+                    "ID": st.session_state._global_finanzen.get("naechste_bestellung_id", 1),
+                    "Kunde": auf_kunde,
+                    "Aufgabe": auf_details,
+                    "Preis": auf_preis,
+                    "Eingang": f"J{auf_jahr}-{auf_monat}",
+                    "Sort_Jahr": int(auf_jahr),
+                    "Sort_Monat": auf_monat,
+                    "Status": "⏳ Offen"
+                }
+                st.session_state._global_bestell_store.append(neuer_auftrag)
+                st.session_state._global_finanzen["naechste_bestellung_id"] = st.session_state._global_finanzen.get("naechste_bestellung_id", 1) + 1
                 speichere_gesamte_daten()
-                st.success("Auftrag hinzugefügt!")
+                st.success("Auftrag erfolgreich ins Auftragsbuch eingetragen!")
                 st.rerun()
 
+        with col_auf_preise:
+            st.markdown("##### 📊 Finanzieller Gegenwert")
+            st.info(f"Berechneter Erlös für diesen Auftrag:\n### {fmt_float(auf_preis)} €")
+            st.write("Der Betrag wird bei Klick auf 'Automatisch Abrechnen' direkt in deine Hof-Kasse gebucht.")
+
+        st.write("---")
+        st.subheader("📋 Aktuelle Aufträge & Belege")
+        
         if st.session_state._global_bestell_store:
-            st.write("---")
-            for idx, a in enumerate(st.session_state._global_bestell_store):
-                st.write(f"**{a['Kunde']}**: {a['Aufgabe']} ({fmt_float(a['Preis'])} €) - Status: {a['Status']}")
+            for idx, auf in enumerate(st.session_state._global_bestell_store):
+                with st.container(border=True):
+                    c_det, c_pdf, c_pay, c_del = st.columns([3, 1, 1, 1])
+                    
+                    with c_det:
+                        st.markdown(f"**Auftrag #LU-{auf.get('ID', idx+1):03d}** ({auf['Eingang']}) — **Kunde:** {auf['Kunde']}")
+                        st.write(f"📝 {auf['Aufgabe']} | Status: **{auf['Status']}** | **Preis:** {fmt_float(auf['Preis'])} €")
+                    
+                    with c_pdf:
+                        try:
+                            # PDF für den spezifischen Auftrag generieren
+                            auf_pdf_bytes = generate_single_order_pdf(auf)
+                            st.download_button(
+                                "📥 Beleg PDF", 
+                                data=auf_pdf_bytes, 
+                                file_name=f"Auftragsbeleg_LU_{auf.get('ID', idx+1)}.pdf", 
+                                mime="application/pdf", 
+                                key=f"pdf_auf_{idx}"
+                            )
+                        except Exception as e:
+                            st.error(f"PDF-Fehler: {e}")
+                    
+                    with c_pay:
+                        if auf["Status"] == "⏳ Offen":
+                            if st.button("💰 Abrechnen", key=f"pay_auf_{idx}", type="primary"):
+                                # Betrag automatisch der Hofkasse gutschreiben
+                                st.session_state._global_finanzen["einnahmen"] += auf["Preis"]
+                                
+                                # Eintrag ins Kassenbuch
+                                st.session_state._global_finanzen["historie"].append({
+                                    "In-Game Datum": auf["Eingang"],
+                                    "Sort_Jahr": auf.get("Sort_Jahr", 1),
+                                    "Sort_Monat": auf.get("Sort_Monat", "01 - Jan"),
+                                    "Typ": "Einnahme",
+                                    "Nummer": f"#LU-{auf.get('ID', idx+1):03d}",
+                                    "Details": f"Abgerechneter LU-Auftrag für {auf['Kunde']}: {auf['Aufgabe']}",
+                                    "Betrag (EUR)": auf["Preis"]
+                                })
+                                
+                                # Status auf erledigt setzen
+                                st.session_state._global_bestell_store[idx]["Status"] = "✔️ Erledigt & Abgerechnet"
+                                speichere_gesamte_daten()
+                                st.success("Geld erfolgreich verbucht!")
+                                st.rerun()
+                        else:
+                            st.disabled = st.button("✔️ Bezahlt", key=f"dis_auf_{idx}", disabled=True)
+                            
+                    with c_del:
+                        if st.button("🗑️ Löschen", key=f"del_auf_{idx}", type="secondary"):
+                            # Falls bereits abgerechnet, wird das Geld nicht abgezogen (Sicherheitsaspekt), der Beleg wird nur archiviert/gelöscht
+                            st.session_state._global_bestell_store.pop(idx)
+                            speichere_gesamte_daten()
+                            st.rerun()
+        else:
+            st.info("Das Auftragsbuch ist zurzeit leer.")
 
 # ---------------------------------------------------------
-# SEITE 5: PRODUKTIONEN (VEREINFACHTE KALKULATION)
+# STANDARDS FÜR WEITERE SEITEN (FALLBACKS)
 # ---------------------------------------------------------
 elif menu == "🏭 Produktionen":
-    st.title("🏭 Produktions-Bedarfsrechner (Vereinfachte Kalkulation)")
-    st.info("Hier kannst du berechnen, wie viel Rohware du für dein jährliches Produktionsziel benötigst. Es erfolgt keine automatische Lagerbuchung.")
+    st.title("🏭 Fabriken & Produktionen")
+    st.info("Dieses Modul befindet sich in der Entwicklung.")
 
-    col_prod_ein, col_prod_liste = st.columns([1, 1])
-    
-    with col_prod_ein:
-        st.subheader("➕ Neues Rezept kalkulieren")
-        p_name = st.text_input("Name der Produktion:", placeholder="z.B. Ölmühle, Bäckerei")
-        p_ziel = st.number_input("Jährliches Produktionsziel (Ausgabe in Liter):", min_value=1, value=10000, step=1000)
-        
-        st.markdown("##### 🌾 Benötigte Rohwaren pro 1.000L Fertigprodukt:")
-        rohstoff_1 = st.text_input("Rohstoff 1 Name:", placeholder="z.B. Raps")
-        rohstoff_1_bedarf = st.number_input("Bedarf für 1.000L Produkt (in Litern):", min_value=1, value=2000, step=100)
-        
-        rohstoff_2 = st.text_input("Rohstoff 2 Name (Optional):", placeholder="z.B. Wasser")
-        rohstoff_2_bedarf = st.number_input("Bedarf für 1.000L Produkt (Optional):", min_value=0, value=0, step=100)
-
-        if st.button("💾 Rezept speichern & berechnen", type="primary", use_container_width=True):
-            if p_name.strip() and rohstoff_1.strip():
-                # Alten Speicher säubern falls vorhanden und neu anhängen
-                st.session_state._global_produktionen_store.append({
-                    "name": p_name.strip(),
-                    "ziel": p_ziel,
-                    "r1_name": rohstoff_1.strip(),
-                    "r1_bedarf": rohstoff_1_bedarf,
-                    "r2_name": rohstoff_2.strip() if rohstoff_2.strip() else None,
-                    "r2_bedarf": rohstoff_2_bedarf
-                })
-                speichere_gesamte_daten()
-                st.rerun()
-
-    with col_prod_liste:
-        st.subheader("📋 Kalkulierte Jahrestrends & Rezepte")
-        if not st.session_state._global_produktionen_store:
-            st.info("Noch keine Produktionen zur Kalkulation angelegt.")
-        else:
-            for idx, prod in enumerate(st.session_state._global_produktionen_store):
-                faktor = prod["ziel"] / 1000.0
-                j_bedarf_1 = faktor * prod["r1_bedarf"]
-                
-                with st.container(border=True):
-                    st.markdown(f"### 🏭 {prod['name']}")
-                    st.markdown(f"**Geplante Jahresproduktion:** {fmt_int(prod['ziel'])} Liter")
-                    st.write(f"Required **{prod['r1_name']}** pro Jahr: **{fmt_int(j_bedarf_1)} L** (Basis: {prod['r1_bedarf']}L/1k)")
-                    
-                    if prod.get("r2_name"):
-                        j_bedarf_2 = faktor * prod["r2_bedarf"]
-                        st.write(f"Required **{prod['r2_name']}** pro Jahr: **{fmt_int(j_bedarf_2)} L** (Basis: {prod['r2_bedarf']}L/1k)")
-                    
-                    if st.button("🗑️ Kalkulation löschen", key=f"del_prod_{idx}"):
-                        st.session_state._global_produktionen_store.pop(idx)
-                        speichere_gesamte_daten()
-                        st.rerun()
-
-# ---------------------------------------------------------
-# NEUE SEITE 6: MANUELLE LAGERVERWALTUNG
-# ---------------------------------------------------------
 elif menu == "📦 Manuelle Lagerverwaltung":
-    st.title("📦 Manuelle Lagerverwaltung")
-    st.markdown("Hier kannst du Paletten, Ballen und sonstige Güter manuell erfassen. Die Umrechnung in Liter erfolgt vollautomatisch.")
+    st.title("📦 Paletten & erweitertes Lager")
+    st.info("Dieses Modul befindet sich in der Entwicklung.")
 
-    # Formular zum Hinzufügen von Beständen
-    col_input, col_view = st.columns([1, 1])
-    
-    with col_input:
-        st.subheader("📥 Neuen Posten einlagern")
-        typ_auswahl = st.selectbox("Ladungsträger Typ:", ["Palette (1.000 L)", "Silageballen (Variabel)", "Strohballen (Variabel)", "Eck-Paletten (1.000 L)", "Stückgut / Sonstiges"])
-        name_gut = st.text_input("Inhalt / Name des Guts:", placeholder="z.B. Siliermittel, Erdbeeren, Wolle")
-        anzahl = st.number_input("Anzahl / Menge (Stück):", min_value=1, value=1, step=1)
-        
-        # Liter Logik je nach Auswahl
-        if "Palette" in typ_auswahl or "Eck" in typ_auswahl:
-            liter_pro_einheit = 1000
-            st.disabled = True
-            st.info("Einheit fix auf 1.000 Liter gesetzt.")
-        else:
-            liter_pro_einheit = st.number_input("Größe in Liter pro Stück/Ballen:", min_value=1, value=1200, step=100)
-
-        if st.button("💾 Bestand manuell einbuchen", type="primary", use_container_width=True):
-            if name_gut.strip():
-                schluessel = name_gut.strip()
-                gesamt_liter = anzahl * liter_pro_einheit
-                
-                # Prüfen ob Gut bereits existiert, falls ja, addieren
-                if schluessel in st.session_state._global_paletten_lager:
-                    st.session_state._global_paletten_lager[schluessel]["anzahl"] += anzahl
-                    st.session_state._global_paletten_lager[schluessel]["gesamt_liter"] += gesamt_liter
-                else:
-                    st.session_state._global_paletten_lager[schluessel] = {
-                        "typ": typ_auswahl,
-                        "anzahl": anzahl,
-                        "liter_pro_stk": liter_pro_einheit,
-                        "gesamt_liter": gesamt_liter
-                    }
-                speichere_gesamte_daten()
-                st.success(f"{anzahl}x {schluessel} erfolgreich verbucht!")
-                st.rerun()
-
-    with col_view:
-        st.subheader("📋 Aktuelle Bestandsliste (Manuell)")
-        if not st.session_state._global_paletten_lager:
-            st.info("Das manuelle Lager ist aktuell leer.")
-        else:
-            # Tabelle rendern
-            lager_daten = []
-            for k, v in st.session_state._global_paletten_lager.items():
-                lager_daten.append({
-                    "Ware": k,
-                    "Typ": v["typ"],
-                    "Anzahl (Stk)": fmt_int(v["anzahl"]),
-                    "Liter / Stück": fmt_int(v["liter_pro_stk"]),
-                    "Gesamt-Volumen": f"{fmt_int(v['gesamt_liter'])} L"
-                })
-            df_lager = pd.DataFrame(lager_daten)
-            st.dataframe(df_lager, use_container_width=True, hide_index=True)
-            
-            st.write("---")
-            st.markdown("##### 🛠️ Bestand editieren / löschen")
-            auswahl_loeschen = st.selectbox("Ware auswählen:", list(st.session_state._global_paletten_lager.keys()))
-            
-            c_ed1, c_ed2 = st.columns(2)
-            if c_ed1.button("🗑️ Komplett löschen", type="secondary", use_container_width=True):
-                st.session_state._global_paletten_lager.pop(auswahl_loeschen)
-                speichere_gesamte_daten()
-                st.rerun()
-                
-            if c_ed2.button("🔄 Bestand nullen (0 Stk)", use_container_width=True):
-                st.session_state._global_paletten_lager[auswahl_loeschen]["anzahl"] = 0
-                st.session_state._global_paletten_lager[auswahl_loeschen]["gesamt_liter"] = 0
-                speichere_gesamte_daten()
-                st.rerun()
-
-# ---------------------------------------------------------
-# SEITE 7: DETAILLIERTES KASSENBUCH
-# ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
-    st.title("📖 Detailliertes Hof-Kassenbuch")
+    st.title("📖 Kassenbuch & Finanzhistorie")
     
-    col_k1, col_k2, col_k3 = st.columns(3)
-    col_k1.metric("Start-Saldo", f"{fmt_float(st.session_state._global_finanzen['start_saldo'])} €")
-    col_k2.metric("Gesamteinnahmen", f"{fmt_float(st.session_state._global_finanzen['einnahmen'])} €")
-    col_k3.metric("Gesamtausgaben", f"{fmt_float(st.session_state._global_finanzen['ausgaben'])} €")
-    
-    st.write("---")
-    st.subheader("📝 Manueller Buchungssatz (Korrektur)")
-    c_f1, c_f2, c_f3, c_f4 = st.columns(4)
-    
-    b_typ = c_f1.selectbox("Buchungs-Typ:", ["Einnahme", "Ausgabe"])
-    b_det = c_f2.text_input("Buchungstext:", placeholder="z.B. Maschinenmiete, Feldpacht")
-    b_bet = c_f3.number_input("Betrag in €:", min_value=0.0, value=100.0, step=50.0)
-    
-    if c_f4.button("⚡ Buchung ausführen", use_container_width=True):
-        if b_det.strip():
-            if b_typ == "Einnahme":
-                st.session_state._global_finanzen["einnahmen"] += b_bet
-            else:
-                st.session_state._global_finanzen["ausgaben"] += b_bet
-                
-            st.session_state._global_finanzen["historie"].append({
-                "In-Game Datum": "Manuell", "Sort_Jahr": 1, "Sort_Monat": "01 - Jan",
-                "Typ": b_typ, "Nummer": "#MANUELL", "Details": b_det.strip(), "Betrag (EUR)": b_bet
-            })
-            speichere_gesamte_daten()
-            st.rerun()
-            
-    st.write("---")
-    st.subheader("📜 Transaktionshistorie")
+    col_kasse_reset, _ = st.columns([1,3])
+    if col_kasse_reset.button("🔄 Kassenhistorie zurücksetzen", type="secondary"):
+        st.session_state._global_finanzen["einnahmen"] = 0.0
+        st.session_state._global_finanzen["ausgaben"] = 0.0
+        st.session_state._global_finanzen["historie"] = []
+        speichere_gesamte_daten()
+        st.rerun()
+        
     if st.session_state._global_finanzen["historie"]:
-        df_hist = pd.DataFrame(st.session_state._global_finanzen["historie"])
-        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        df_historie = pd.DataFrame(st.session_state._global_finanzen["historie"])
+        st.dataframe(df_historie, use_container_width=True)
     else:
-        st.info("Bisher wurden keine Transaktionen durchgeführt.")
+        st.info("Das Kassenbuch ist aktuell leer.")
