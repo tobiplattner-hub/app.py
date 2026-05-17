@@ -251,7 +251,7 @@ menu = st.sidebar.radio("Hauptmenü Navigation", [
 ])
 
 # ---------------------------------------------------------
-# SEITE 1: ERNTE & VERBRAUCHSRATEN
+# SEITE 1: ERNTE & VERBRAUCHSRATEN (MIT VERKAUFSRECHNER)
 # ---------------------------------------------------------
 if menu == "💰 Ernte & Verbrauchsraten":
     st.title("🚜 Ernte-Kalkulator & Globale Raten")
@@ -272,6 +272,41 @@ if menu == "💰 Ernte & Verbrauchsraten":
         
         st.info(f"🌱 **Erlaubte Aussaat:** {', '.join(saat_monate) if saat_monate else 'Keine (Spezial)'}  \n🌾 **Erntezeit:** {', '.join(ernte_monate) if ernte_monate else 'Keine (Spezial)'}")
 
+    st.write("---")
+    
+    # Der gewünschte Waren-Verkaufsrechner
+    st.subheader("💰 Waren-Verkaufsrechner")
+    c_vk1, c_vk2, c_vk3 = st.columns([1.5, 1.2, 1.2])
+    
+    vk_frucht = c_vk1.selectbox("Verkaufte Fruchtart / Ware:", st.session_state._global_fruchtarten, key="vk_f")
+    vk_menge = c_vk2.number_input("Verkaufte Menge (L oder kg):", min_value=0, value=10000, step=1000)
+    vk_preis = c_vk3.number_input("Preis pro 1.000 L (€):", min_value=0.0, value=1200.0, step=50.0)
+    
+    # Berechnung des Erlöses
+    erloes = (vk_menge / 1000.0) * vk_preis
+    st.markdown(f"### 📈 Berechneter Erlös: **{fmt_float(erloes)} €**")
+    
+    if st.button("💾 Erlös direkt verbuchen & Kassenbuch eintragen", type="primary"):
+        full_ingame_date = f"J{st.session_state._global_ingame_jahr}-{st.session_state._global_ingame_monat}"
+        
+        # Auf das globale Finanzkonto einzahlen
+        st.session_state._global_finanzen["einnahmen"] += erloes
+        
+        # In die Historie eintragen
+        st.session_state._global_finanzen["historie"].append({
+            "In-Game Datum": full_ingame_date,
+            "Sort_Jahr": int(st.session_state._global_ingame_jahr),
+            "Sort_Monat": st.session_state._global_ingame_monat,
+            "Typ": "Einnahme",
+            "Nummer": f"#VK-{os.urandom(2).hex().upper()}",
+            "Details": f"Ernteverkauf: {fmt_int(vk_menge)}L {vk_frucht}",
+            "Betrag (EUR)": erloes
+        })
+        
+        speichere_gesamte_daten()
+        st.success(f"Erlös von {fmt_float(erloes)} € wurde erfolgreich als Einnahme registriert!")
+        st.rerun()
+
 # ---------------------------------------------------------
 # SEITE 2: MEINE FELDER & ANBAU
 # ---------------------------------------------------------
@@ -286,7 +321,7 @@ elif menu == "🚜 Meine Felder & Anbau":
         saat_monate_auswahl = c_nf2.multiselect("In welchen Monaten wird gesät?", LISTE_MONATE, key="cust_saat")
         ernte_monate_auswahl = c_nf3.multiselect("In welchen Monaten wird geerntet?", LISTE_MONATE, key="cust_ernte")
         
-        if st.button("💾 Fruchtart im System registrieren", use_container_width=True):
+        if st.button("💾 Fruchtart im System registrieren", use_width=True):
             if neue_frucht_name.strip():
                 f_name = neue_frucht_name.strip()
                 saat_ints = [extrahiere_monat_int(m) for m in saat_monate_auswahl]
@@ -570,12 +605,11 @@ elif menu == "🚛 Fuhrpark-Manager":
                     speichere_gesamte_daten(); st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 7: KASSENBUCH (JETZT MIT MANUELLER BUCHUNGSMÖGLICHKEIT)
+# SEITE 7: KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title("📖 Kassenbuch & Finanzzentrale")
     
-    # NEU: Das Buchungsformular für manuelle Ein- und Ausgaben
     with st.expander("➕ Manuelle Buchung durchführen (Einnahme / Ausgabe)"):
         c_kb1, c_kb2, c_kb3 = st.columns([1, 2, 1.2])
         b_typ = c_kb1.selectbox("Buchungs-Typ:", ["Ausgabe", "Einnahme"])
@@ -593,7 +627,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
                     st.session_state._global_finanzen["ausgaben"] += b_betrag
                     prefix = "#MAN-AUS"
                 
-                # In den historischen Datenstrom einfügen
                 st.session_state._global_finanzen["historie"].append({
                     "In-Game Datum": full_ingame_date, 
                     "Sort_Jahr": int(st.session_state._global_ingame_jahr), 
@@ -612,7 +645,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
 
     st.write("---")
     
-    # Tabellenanzeige der Buchungshistorie
     st.subheader("📊 Transaktionsverlauf")
     historie_liste = st.session_state._global_finanzen.get("historie", [])
     if historie_liste:
