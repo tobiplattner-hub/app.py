@@ -320,7 +320,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH
+# BEREICH 2: LU-AUFTRAGSBUCH (JETZT MIT MOD-FRUCHT / MOD-ARBEITSART EINGABE)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -331,7 +331,15 @@ elif bereich == "💼 LU-Auftragsbuch":
     with col_a:
         a_kunde = st.selectbox("Auftraggeber (Kunde aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         a_lu = st.selectbox("Auftragnehmer (Lohnunternehmen):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-        a_typ = st.selectbox("Arbeitsart:", ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen"])
+        
+        # Arbeitsarten-Auswahl erweitert um Mod-Eingabe
+        arbeitsart_optionen = ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen", "– Eigene Mod-Arbeitsart eingeben –"]
+        a_typ_sel = st.selectbox("Arbeitsart:", arbeitsart_optionen)
+        
+        if a_typ_sel == "– Eigene Mod-Arbeitsart eingeben –":
+            a_typ = st.text_input("Name der Mod-Frucht / Arbeit eingeben:", placeholder="z. B. Klee dreschen, Luzerne häckseln")
+        else:
+            a_typ = a_typ_sel
         
     with col_b:
         if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
@@ -343,18 +351,21 @@ elif bereich == "💼 LU-Auftragsbuch":
         a_feld = st.number_input("Auf Feld Nummer:", min_value=1, step=1)
         
     if st.button("Auftrag live ausschreiben"):
-        neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-        stundensatz_aus_sheet = 150.0
-        if df_sheet_masch is not None and a_maschine in df_sheet_masch['geraet'].values:
-            stundensatz_aus_sheet = float(df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values[0])
-            
-        db["auftraege"].append({
-            "id": neuer_id, "kunde": a_kunde, "auftragnehmer": a_lu, "typ": a_typ,
-            "feld": int(a_feld), "maschine": a_maschine, "stundensatz": stundensatz_aus_sheet, "status": "Offen"
-        })
-        speichere_globalen_speicher(db)
-        st.success(f"Auftrag mit ID #{neuer_id} registriert. Preis: {stundensatz_aus_sheet} €/h.")
-        st.rerun()
+        if a_typ.strip() == "":
+            st.error("Bitte gib einen Namen für die Mod-Arbeitsart ein!")
+        else:
+            neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
+            stundensatz_aus_sheet = 150.0
+            if df_sheet_masch is not None and a_maschine in df_sheet_masch['geraet'].values:
+                stundensatz_aus_sheet = float(df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values[0])
+                
+            db["auftraege"].append({
+                "id": neuer_id, "kunde": a_kunde, "auftragnehmer": a_lu, "typ": a_typ,
+                "feld": int(a_feld), "maschine": a_maschine, "stundensatz": stundensatz_aus_sheet, "status": "Offen"
+            })
+            speichere_globalen_speicher(db)
+            st.success(f"Auftrag mit ID #{neuer_id} registriert. Preis: {stundensatz_aus_sheet} €/h.")
+            st.rerun()
 
     st.write("---")
     st.subheader("💳 Offene Aufträge über Zählerstände abrechnen")
@@ -517,7 +528,7 @@ elif bereich == "🗺️ Feldverwaltung":
         f_status = st.selectbox("Status:", ["Gepflügt", "Gesät", "Wachstum", "Erntebereit", "Abgeerntet"])
         f_typ = st.selectbox("Ernte-Art:", ["Normale Ernte", "Silage (50% LU-Rabatt)"])
         
-        if st.button("Feld speichern"):
+        if st.button("Feld gespeichert"):
             db["felder"] = [x for x in db["felder"] if x["id"] != f_id]
             db["felder"].append({"id": int(f_id), "besitzer": f_besitzer, "groesse": float(f_groesse), "frucht": f_frucht, "status": f_status, "ernte_typ": f_typ})
             speichere_globalen_speicher(db)
