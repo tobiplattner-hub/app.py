@@ -28,6 +28,8 @@ st.markdown("""
     h1, h2, h3 { color: #1b5e20; font-family: 'Segoe UI', sans-serif; }
     .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; }
     .stButton>button:hover { background-color: #1b5e20; color: white; }
+    /* Fix für Tabellen-Sichtbarkeit */
+    .stDataFrame { background-color: #ffffff; border-radius: 8px; padding: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -146,6 +148,8 @@ def lade_globalen_speicher():
                 daten["manuelle_buchungen"] = []
             if "auftraege" not in daten:
                 daten["auftraege"] = []
+            if "felder" not in daten:
+                daten["felder"] = default_daten["felder"]
             return daten
     except:
         return default_daten
@@ -202,7 +206,6 @@ bereich = st.sidebar.radio(
 if bereich == "📊 Dashboard & Finanzen":
     st.title("🚜 LS25 Server-Dashboard")
     
-    # 1. Kontostände anzeigen
     col1, col2, col3 = st.columns(3)
     for i, (k, v) in enumerate(db["hoefe"].items()):
         with [col1, col2, col3][i]:
@@ -210,7 +213,6 @@ if bereich == "📊 Dashboard & Finanzen":
             
     st.write("---")
     
-    # 2. MANUELLES EINNAHMEN & ABBUCHEN (KORREKTUREN)
     st.subheader("💰 Manuelle Buchung durchführen (Kassierer-Zentrale)")
     with st.expander("🛠️ Gelder direkt einbuchen oder abbuchen", expanded=False):
         col_m1, col_m2, col_m3 = st.columns(3)
@@ -241,8 +243,6 @@ if bereich == "📊 Dashboard & Finanzen":
                 st.rerun()
 
     st.write("---")
-    
-    # 3. Das zentrale Kassenbuch (Transaktionshistorie)
     st.subheader("📖 Zentrales Server-Kassenbuch")
     
     tab1, tab2, tab3 = st.tabs(["💼 Abgerechnete LU-Aufträge", "🌾 Getätigte Warenverkäufe", "🛠️ Manuelle Buchungen & Korrekturen"])
@@ -251,15 +251,11 @@ if bereich == "📊 Dashboard & Finanzen":
         erledigte_auftraege = [x for x in db["auftraege"] if x.get("status") == "Abgerechnet"]
         if erledigte_auftraege:
             df_erledigt = pd.DataFrame(erledigte_auftraege)
-            
-            # ABSICHERUNG gegen KeyError: Fehlende Spalten auffüllen, falls sie nicht im Datensatz existieren
             for col in ["id", "kunde", "auftragnehmer", "typ", "maschine", "stunden_gefahren", "preis"]:
                 if col not in df_erledigt.columns:
                     df_erledigt[col] = 0 if col in ["stunden_gefahren", "preis", "id"] else "Unbekannt"
-            
             df_erledigt["Kunde"] = df_erledigt["kunde"].map(HOF_MAPPING)
             df_erledigt["Lohnunternehmen"] = df_erledigt["auftragnehmer"].map(HOF_MAPPING)
-            
             st.dataframe(
                 df_erledigt[["id", "Kunde", "Lohnunternehmen", "typ", "maschine", "stunden_gefahren", "preis"]].rename(
                     columns={"typ": "Arbeit", "maschine": "Fahrzeug", "stunden_gefahren": "Betriebsstunden", "preis": "Erlös (€)"}
@@ -271,11 +267,9 @@ if bereich == "📊 Dashboard & Finanzen":
     with tab2:
         if db["verkaeufe"]:
             df_v = pd.DataFrame(db["verkaeufe"])
-            
             for col in ["id", "verkaeufer", "kaeufer", "frucht", "menge", "erloes"]:
                 if col not in df_v.columns:
                     df_v[col] = 0 if col in ["id", "menge", "erloes"] else "Unbekannt"
-                    
             df_v["Verkäufer"] = df_v["verkaeufer"].map(HOF_MAPPING)
             df_v["Käufer"] = df_v["kaeufer"].map(lambda x: HOF_MAPPING[x] if x in HOF_MAPPING else x)
             st.dataframe(
@@ -323,7 +317,6 @@ elif bereich == "💼 LU-Auftragsbuch":
         
     if st.button("Auftrag live ausschreiben"):
         neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-        
         stundensatz_aus_sheet = 150.0
         if df_sheet_masch is not None and a_maschine in df_sheet_masch['geraet'].values:
             stundensatz_aus_sheet = float(df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values[0])
@@ -356,7 +349,6 @@ elif bereich == "💼 LU-Auftragsbuch":
         if st.button("💰 Zählerstände auswerten & Rechnung buchen"):
             stunden_gefahren = std_ende - std_start
             auftrag = next(x for x in db["auftraege"] if x["id"] == auf_id)
-            
             end_preis = stunden_gefahren * auftrag["stundensatz"]
             
             feld_treffer = next((f for f in db["felder"] if f["id"] == auftrag["feld"]), None)
@@ -398,13 +390,11 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
         
     with col_v2:
         v_menge = st.number_input("Menge in Liter (L):", min_value=0, step=1000, value=10000)
-        
         preis_pro_1k = float(db["preise"].get(v_frucht, 500.0))
         st.info(f"💵 Aktueller App-Livepreis: **{preis_pro_1k:,.2f} €** pro 1.000 Liter")
         
     if st.button("🚀 Verkauf abrechnen & Gutschrift erstellen"):
         gesamt_erloes = (v_menge / 1000) * preis_pro_1k
-        
         db["hoefe"][v_verkaeufer]["konto"] += gesamt_erloes
         if v_kaeufer in db["hoefe"]:
             db["hoefe"][v_kaeufer]["konto"] -= gesamt_erloes
@@ -448,10 +438,58 @@ elif bereich == "📈 Fruchtpreise (Manuell)":
         st.rerun()
 
 # ==============================================================================
-# BEREICH 5: FELDVERWALTUNG
+# BEREICH 5: FELDVERWALTUNG (NEU & INTERAKTIV GEGEN WHITE-SCREEN)
 # ==============================================================================
 elif bereich == "🗺️ Feldverwaltung":
     st.title("🗺️ Globale Feldverwaltung")
-    if db["felder"]:
+    st.write("Hier kannst du alle Felder des Servers einsehen, anpassen oder neue hinzufügen.")
+    
+    # 1. Felder auflisten
+    if db.get("felder"):
         df_felder = pd.DataFrame(db["felder"])
-        st.dataframe(df_felder, use_container_width=True, hide_index=True)
+        df_felder["Besitzer Hof"] = df_felder["besitzer"].map(HOF_MAPPING)
+        
+        # Spalten leserlich umbenennen
+        df_anzeige = df_felder[["id", "Besitzer Hof", "groesse", "frucht", "status", "ernte_typ"]].rename(
+            columns={"id": "Feld-Nr.", "groesse": "Größe (ha)", "frucht": "Aktuelle Frucht", "status": "Status", "ernte_typ": "Ernte-Art"}
+        )
+        st.dataframe(df_anzeige, use_container_width=True, hide_index=True)
+    else:
+        st.info("Aktuell sind keine Felder registriert.")
+        
+    st.write("---")
+    
+    # 2. Neues Feld hinzufügen oder bestehendes löschen
+    col_f1, col_f2 = st.columns(2)
+    
+    with col_f1:
+        st.subheader("➕ Neues Feld registrieren")
+        f_id = st.number_input("Feld-Nummer:", min_value=1, step=1, value=3)
+        f_besitzer = st.selectbox("Besitzer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="f_bes")
+        f_groesse = st.number_input("Größe in Hektar (ha):", min_value=0.1, step=0.1, value=2.0)
+        f_frucht = st.selectbox("Fruchtart auf dem Feld:", db["fruchtarten"], key="f_fru")
+        f_status = st.selectbox("Feld-Status:", ["Gepflügt", "Gesät", "Wachstum", "Erntebereit", "Abgeerntet"])
+        f_typ = st.selectbox("Ernte-Abrechnungstyp:", ["Normale Ernte", "Silage (50% LU-Rabatt)"])
+        
+        if st.button("Feld speichern"):
+            # Prüfen ob ID existiert, falls ja überschreiben, sonst neu anhängen
+            db["felder"] = [x for x in db["felder"] if x["id"] != f_id]
+            db["felder"].append({
+                "id": int(f_id), "besitzer": f_besitzer, "groesse": float(f_groesse),
+                "frucht": f_frucht, "status": f_status, "ernte_typ": f_typ
+            })
+            speichere_globalen_speicher(db)
+            st.success(f"Feld Nummer {f_id} wurde erfolgreich gespeichert!")
+            st.rerun()
+            
+    with col_f2:
+        st.subheader("🗑️ Feld löschen / entfernen")
+        if db.get("felder"):
+            f_loesch_id = st.selectbox("Welches Feld entfernen?", [x["id"] for x in db["felder"]])
+            if st.button("🔴 Feld unwiderruflich löschen"):
+                db["felder"] = [x for x in db["felder"] if x["id"] != f_loesch_id]
+                speichere_globalen_speicher(db)
+                st.success(f"Feld {f_loesch_id} gelöscht!")
+                st.rerun()
+        else:
+            st.write("Keine Felder zum Löschen vorhanden.")
