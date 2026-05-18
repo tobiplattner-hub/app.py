@@ -33,10 +33,9 @@ DB_DATEI = "ls25_multiplayer_live_data.json"
 def lade_globalen_speicher():
     """Lädt alle Daten live für alle Spieler aus der gemeinsamen Datei"""
     if not os.path.exists(DB_DATEI):
-        # Das absolute Standard-Setup, falls die Datei noch komplett neu ist
         default_daten = {
             "hoefe": {
-                "Hof 1": {"name": "Hof 1 - Hauptbetrieb", "konto": 500000.0},
+                "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": 500000.0},
                 "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": 350000.0},
                 "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": 200000.0}
             },
@@ -62,7 +61,7 @@ def lade_globalen_speicher():
                 {"id": 2, "hof": "Hof 1", "typ": "Drescher", "name": "New Holland CR11", "status": "Im Einsatz"}
             ],
             "auftraege": [
-                {"id": 1, "kunde": "Hof 2", "typ": "Dreschen", "feld": 2, "preis": 4500.0, "status": "Offen"}
+                {"id": 1, "kunde": "Hof 2", "auftragnehmer": "Hof 1", "typ": "Dreschen", "feld": 2, "preis": 4500.0, "status": "Offen"}
             ]
         }
         speichere_globalen_speicher(default_daten)
@@ -72,7 +71,7 @@ def lade_globalen_speicher():
         return json.load(f)
 
 def speichere_globalen_speicher(daten):
-    """Speichert Änderungen sofort auf dem Server ab, damit andere Spieler es live sehen"""
+    """Speichert Änderungen sofort auf dem Server ab"""
     with open(DB_DATEI, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False, indent=4)
 
@@ -83,12 +82,11 @@ LISTE_MONATE = ["März", "April", "Mai", "Juni", "Juli", "August", "September", 
 LISTE_STATUS = ["Wachstum", "Erntebereit", "Gegrubbert", "Gepflügt", "Gekalkt", "Stoppel"]
 
 # ==============================================================================
-# 3. SIDEBAR (SERVER-STEUERUNG FÜR HOFNAMEN & MONATE)
+# 3. SIDEBAR (SERVER-STEUERUNG FÜR HOFNAMEN & NAVIGATION)
 # ==============================================================================
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
 
-# Live-Anpassung der Hofnamen
 with st.sidebar.expander("📝 Hofnamen live ändern"):
     h1_n = st.text_input("Name Hof 1:", db["hoefe"]["Hof 1"]["name"])
     h2_n = st.text_input("Name Hof 2:", db["hoefe"]["Hof 2"]["name"])
@@ -101,13 +99,11 @@ with st.sidebar.expander("📝 Hofnamen live ändern"):
         st.success("Erfolgreich gespeichert!")
         st.rerun()
 
-# Schnell-Auswahl für die Navigation
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
     ["📊 Dashboard & Finanzen", "🌾 Fruchtpreise", "📅 Saatenkalender", "🗺️ Feldverwaltung", "🚜 Maschinenpool", "💼 LU-Auftragsbuch", "🌱 Mod-Früchte hinzufügen"]
 )
 
-# Erstelle ein Mapping für einfachere Zuweisung in Menüs
 HOF_MAPPING = {
     "Hof 1": db["hoefe"]["Hof 1"]["name"],
     "Hof 2": db["hoefe"]["Hof 2"]["name"],
@@ -119,9 +115,7 @@ HOF_MAPPING = {
 # ==============================================================================
 if bereich == "📊 Dashboard & Finanzen":
     st.title("🚜 LS25 Server-Dashboard")
-    st.info("Live-Multiplayer-Modus aktiv. Alle Spieler teilen sich diese Übersicht.")
     
-    # 3 Spalten für die Höfe
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric(label=db["hoefe"]["Hof 1"]["name"], value=f"{db['hoefe']['Hof 1']['konto']:,.2f} €")
@@ -143,7 +137,7 @@ if bereich == "📊 Dashboard & Finanzen":
         else:
             db["hoefe"][sel_hof]["konto"] -= betrag
         speichere_globalen_speicher(db)
-        st.success(f"Kontostand von {HOF_MAPPING[sel_hof]} erfolgreich live aktualisiert!")
+        st.success(f"Kontostand von {HOF_MAPPING[sel_hof]} live aktualisiert!")
         st.rerun()
 
 # ==============================================================================
@@ -152,20 +146,18 @@ if bereich == "📊 Dashboard & Finanzen":
 elif bereich == "🌾 Fruchtpreise":
     st.title("🌾 Live-Marktplatz & Fruchtpreise")
     
-    # Tabelle anzeigen
     df_preise = pd.DataFrame(list(db["preise"].items()), columns=["Fruchtart", "Aktueller Preis pro 1.000L (€)"])
     st.dataframe(df_preise, use_container_width=True, hide_index=True)
     
     st.write("---")
     st.subheader("📈 Preisänderung für den Server eintragen")
-    
     f_auswahl = st.selectbox("Fruchtart:", db["fruchtarten"])
     neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500.0)), step=10.0)
     
     if st.button("Preis für alle Spieler ändern"):
         db["preise"][f_auswahl] = neuer_preis
         speichere_globalen_speicher(db)
-        st.success(f"Preis für {f_auswahl} wurde live auf {neuer_preis} € aktualisiert!")
+        st.success(f"Preis für {f_auswahl} live aktualisiert!")
         st.rerun()
 
 # ==============================================================================
@@ -173,13 +165,10 @@ elif bereich == "🌾 Fruchtpreise":
 # ==============================================================================
 elif bereich == "📅 Saatenkalender":
     st.title("📅 LS25 Frucht- und Erntekalender")
-    st.caption("Übersicht aller aktiven Früchte auf dem Server.")
-    
     for f in db["fruchtarten"]:
         k = db["kalender"].get(f, {"sa": [], "er": []})
         saat_namen = [LISTE_MONATE[i-1] for i in k["sa"]]
         ernte_namen = [LISTE_MONATE[i-1] for i in k["er"]]
-        
         with st.container():
             st.markdown(f"### 🌾 {f}")
             st.write(f"🟢 **Aussaat:** {', '.join(saat_namen) if saat_namen else 'Nicht definiert'}")
@@ -194,7 +183,6 @@ elif bereich == "🗺️ Feldverwaltung":
     
     if db["felder"]:
         df_felder = pd.DataFrame(db["felder"])
-        # Namen schick anzeigen
         df_felder["besitzer"] = df_felder["besitzer"].map(HOF_MAPPING)
         st.dataframe(df_felder, use_container_width=True, hide_index=True)
     else:
@@ -206,18 +194,16 @@ elif bereich == "🗺️ Feldverwaltung":
     with col_add:
         st.subheader(" Feld hinzufügen")
         f_id = st.number_input("Feldnummer:", min_value=1, step=1)
-        f_besitzer = st.selectbox("Besitzer Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="add_f_bes")
+        f_besitzer = st.selectbox("Besitzer Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         f_groesse = st.number_input("Größe (ha):", min_value=0.1, step=0.1)
-        f_frucht = st.selectbox("Aktuelle Frucht:", db["fruchtarten"], key="add_f_fru")
-        f_status = st.selectbox("Feldstatus:", LISTE_STATUS, key="add_f_stat")
+        f_frucht = st.selectbox("Aktuelle Frucht:", db["fruchtarten"])
+        f_status = st.selectbox("Feldstatus:", LISTE_STATUS)
         
         if st.button("Feld global eintragen"):
-            # Prüfen ob ID schon da
             if any(x['id'] == f_id for x in db["felder"]):
                 st.error("Feldnummer existiert bereits!")
             else:
-                neues_feld = {"id": int(f_id), "besitzer": f_besitzer, "groesse": f_groesse, "frucht": f_frucht, "status": f_status}
-                db["felder"].append(neues_feld)
+                db["felder"].append({"id": int(f_id), "besitzer": f_besitzer, "groesse": f_groesse, "frucht": f_frucht, "status": f_status})
                 speichere_globalen_speicher(db)
                 st.success("Feld registriert!")
                 st.rerun()
@@ -226,8 +212,8 @@ elif bereich == "🗺️ Feldverwaltung":
         st.subheader(" Feldstatus live updaten")
         if db["felder"]:
             f_id_waehl = st.selectbox("Feld zum Bearbeiten:", [x["id"] for x in db["felder"]])
-            f_neu_status = st.selectbox("Neuer Status:", LISTE_STATUS, key="edit_f_stat")
-            f_neu_frucht = st.selectbox("Neue Frucht drauf:", db["fruchtarten"], key="edit_f_fru")
+            f_neu_status = st.selectbox("Neuer Status:", LISTE_STATUS)
+            f_neu_frucht = st.selectbox("Neue Frucht drauf:", db["fruchtarten"])
             
             if st.button("Feld aktualisieren"):
                 for feld in db["felder"]:
@@ -250,81 +236,111 @@ elif bereich == "🚜 Maschinenpool":
         df_masch["hof"] = df_masch["hof"].map(HOF_MAPPING)
         st.dataframe(df_masch, use_container_width=True, hide_index=True)
     else:
-        st.info("Keine Maschinen im Fuhrpark eingetragen.")
+        st.info("Keine Maschinen im Fuhrpark.")
         
     st.write("---")
     st.subheader("➕ Neue Maschine registrieren")
     m_hof = st.selectbox("Gehört Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-    m_typ = st.selectbox("Kategorie:", ["Traktor", "Drescher", "Häcksler", "Sämaschine", "Gülle/Mist", "Transport", "Sonstiges"])
-    m_name = st.text_input("Genaue Mod/Modell-Bezeichnung:", placeholder="z.B. Fendt Vario 942")
+    m_typ = st.selectbox("Kategorie:", ["Traktor", "Drescher", "Häcksler", "Sämaschine", "Sonstiges"])
+    m_name = st.text_input("Bezeichnung:")
     
     if st.button("Maschine für alle eintragen"):
         if m_name:
             neue_m_id = max([x["id"] for x in db["maschinen"]], default=0) + 1
-            neue_masch = {"id": neue_m_id, "hof": m_m_hof if 'm_m_hof' in locals() else m_hof, "typ": m_typ, "name": m_name, "status": "Frei"}
-            db["maschinen"].append(neue_masch)
+            db["maschinen"].append({"id": neue_m_id, "hof": m_hof, "typ": m_typ, "name": m_name, "status": "Frei"})
             speichere_globalen_speicher(db)
-            st.success("Maschine erfolgreich im Server-Fuhrpark!")
+            st.success("Maschine registriert!")
             st.rerun()
 
 # ==============================================================================
-# BEREICH 6: LU-AUFTRAGSBUCH
+# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION (KORRIGIERT & LIVE)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
-    st.title("💼 Lohnunternehmen & Auftragsbuch")
+    st.title("💼 LU-Auftragsbuch & Rechnungszentrum")
     
     if db["auftraege"]:
+        # Schicke Tabelle zum Anschauen bauen
         df_auf = pd.DataFrame(db["auftraege"])
-        df_auf["kunde"] = df_auf["kunde"].map(HOF_MAPPING)
-        st.dataframe(df_auf, use_container_width=True, hide_index=True)
+        df_auf_anzeige = df_auf.copy()
+        df_auf_anzeige["kunde"] = df_auf_anzeige["kunde"].map(HOF_MAPPING)
+        df_auf_anzeige["auftragnehmer"] = df_auf_anzeige["auftragnehmer"].map(HOF_MAPPING)
+        st.dataframe(df_auf_anzeige, use_container_width=True, hide_index=True)
     else:
-        st.info("Aktuell keine offenen oder aktiven Lohnaufträge.")
+        st.info("Aktuell keine Lohnaufträge eingetragen.")
         
     st.write("---")
-    st.subheader("📌 Neuen Auftrag für das Team erstellen")
+    col_rechnung, col_neu_auf = st.columns(2)
     
-    a_kunde = st.selectbox("Auftraggeber (Kunde):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-    a_typ = st.selectbox("Arbeitsart:", ["Pflügen", "Grubbern", "Säen", "Düngen", "Kalken", "Dreschen / Ernten", "Häckseln", "Ballen pressen"])
-    a_feld = st.number_input("Auf Feld Nummer:", min_value=1, step=1)
-    a_preis = st.number_input("Verhandeltes Honorar (€):", min_value=0.0, step=100.0)
-    
-    if st.button("Auftrag live ausschreiben"):
-        neuer_a_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-        neu_auftrag = {"id": neuer_a_id, "kunde": a_kunde, "typ": a_typ, "feld": int(a_feld), "preis": a_preis, "status": "Offen"}
-        db["auftraege"].append(neu_auftrag)
-        speichere_globalen_speicher(db)
-        st.success("Auftrag im Board ausgehängt!")
-        st.rerun()
+    # RECHNUNGSFUNKTION (Geld wird live verschoben!)
+    with col_rechnung:
+        st.subheader("💳 Auftrag abrechnen (Geld überweisen)")
+        offene_auftraege = [x for x in db["auftraege"] if x["status"] == "Offen"]
+        
+        if offene_auftraege:
+            auswahl_auftrag_id = st.selectbox(
+                "Welcher Auftrag wurde erledigt?",
+                options=[x["id"] for x in offene_auftraege],
+                format_func=lambda x: f"ID {x}: {[a['typ'] for a in offene_auftraege if a['id']==x][0]} auf Feld {[a['feld'] for a in offene_auftraege if a['id']==x][0]} ({[a['preis'] for a in offene_auftraege if a['id']==x][0]:,.2f} €)"
+            )
+            
+            if st.button("💰 Erledigt & Live Abrechnen"):
+                # Den ausgewählten Auftrag im Speicher finden
+                for auf in db["auftraege"]:
+                    if auf["id"] == auswahl_auftrag_id:
+                        kunde = auf["kunde"]
+                        lu = auf["auftragnehmer"]
+                        preis = auf["preis"]
+                        
+                        # Live-Überweisung durchführen!
+                        db["hoefe"][kunde]["konto"] -= preis  # Dem Kunden abziehen
+                        db["hoefe"][lu]["konto"] += preis     # Dem LU gutschreiben
+                        auf["status"] = "Abgerechnet"         # Status ändern
+                        break
+                        
+                speichere_globalen_speicher(db)
+                st.success(f"Rechnung beglichen! Das Honorar wurde live verbucht.")
+                st.rerun()
+        else:
+            st.success("Alle Aufträge wurden bereits bezahlt und abgerechnet! 🎉")
+            
+    # NEUEN AUFTRAG ERSTELLEN
+    with col_neu_auf:
+        st.subheader("📌 Neuen Auftrag ausschreiben")
+        a_kunde = st.selectbox("Auftraggeber (Kunde):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="ku")
+        a_lu = st.selectbox("Auftragnehmer (Lohnunternehmen):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="lu")
+        a_typ = st.selectbox("Arbeitsart:", ["Pflügen", "Grubbern", "Säen", "Düngen", "Dreschen / Ernten", "Häckseln"])
+        a_feld = st.number_input("Auf Feld Nummer:", min_value=1, step=1, key="fe")
+        a_preis = st.number_input("Verhandeltes Honorar (€):", min_value=0.0, step=100.0, key="pr")
+        
+        if st.button("Auftrag live buchen"):
+            neuer_a_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
+            db["auftraege"].append({
+                "id": neuer_a_id, "kunde": a_kunde, "auftragnehmer": a_lu, 
+                "typ": a_typ, "feld": int(a_feld), "preis": a_preis, "status": "Offen"
+            })
+            speichere_globalen_speicher(db)
+            st.success("Auftrag im Board ausgehängt!")
+            st.rerun()
 
 # ==============================================================================
 # BEREICH 7: MOD-FRÜCHTE HINZUFÜGEN
 # ==============================================================================
 elif bereich == "🌱 Mod-Früchte hinzufügen":
-    st.title("🌱 Neue Mod-Früchte für den Server registrieren")
-    st.write("Wenn du Mods mit neuen Fruchtarten auf dem LS-Server nutzt, kannst du sie hier live für alle ins Tool einpflegen.")
+    st.title("🌱 Neue Mod-Früchte registrieren")
     
-    neue_frucht = st.text_input("Name der Frucht (z.B. Roggen, Dinkel, Klee):").strip()
+    neue_frucht = st.text_input("Name der Frucht:").strip()
     neu_saat = st.multiselect("In welchen Monaten wird gesät?", LISTE_MONATE)
     neu_ernte = st.multiselect("In welchen Monaten wird geerntet?", LISTE_MONATE)
     std_preis = st.number_input("Standard-Startpreis pro 1000L (€):", min_value=10.0, value=800.0, step=50.0)
     
     if st.button("🚀 Frucht auf dem Server aktivieren"):
-        if neue_frucht:
-            if neue_frucht in db["fruchtarten"]:
-                st.warning("Diese Frucht gibt es schon auf dem Server!")
-            else:
-                # 1. Fruchtliste erweitern
-                db["fruchtarten"].append(neue_frucht)
-                # 2. Kalendermonate umrechnen
-                saat_indices = [LISTE_MONATE.index(m) + 1 for m in neu_saat]
-                ernte_indices = [LISTE_MONATE.index(m) + 1 for m in neu_ernte]
-                db["kalender"][neue_frucht] = {"sa": saat_indices, "er": ernte_indices}
-                # 3. Standardpreis setzen
-                db["preise"][neue_frucht] = std_preis
-                
-                # Cloud-Speicher überschreiben
-                speichere_globalen_speicher(db)
-                st.success(f"Genial! '{neue_frucht}' wurde live für alle Bereiche und Spieler freigeschaltet!")
-                st.rerun()
-        else:
-            st.error("Bitte gib einen Namen für die Frucht ein.")
+        if neue_frucht and neue_frucht not in db["fruchtarten"]:
+            db["fruchtarten"].append(neue_frucht)
+            saat_indices = [LISTE_MONATE.index(m) + 1 for m in neu_saat]
+            ernte_indices = [LISTE_MONATE.index(m) + 1 for m in neu_ernte]
+            db["kalender"][neue_frucht] = {"sa": saat_indices, "er": ernte_indices}
+            db["preise"][neue_frucht] = std_preis
+            
+            speichere_globalen_speicher(db)
+            st.success(f"'{neue_frucht}' wurde live für alle Bereiche freigeschaltet!")
+            st.rerun()
