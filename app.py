@@ -10,7 +10,7 @@ from fpdf import FPDF
 # ---------------------------------------------------------
 st.set_page_config(page_title="LS25 LU- & Hof-Manager", layout="wide", initial_sidebar_state="expanded")
 
-# CSS für ein modernes, landwirtschaftliches Dashboard-Design
+# CSS für ein modernes, landwirtschaftliches Dashboard-Design (KORRIGIERT auf unsafe_allow_html)
 st.markdown("""
 <style>
     .reportview-container { background: #f4f6f0; }
@@ -36,7 +36,7 @@ def extrahiere_monat_int(m_name):
     try: return LISTE_MONATE.index(m_name) + 1
     except: return 1
 
-# Standard-Erntekalender für Basis-Früchte (Aussaat- und Erntemonat-Indizes)
+# Standard-Erntekalender für Basis-Früchte
 KALENDER_STANDARD = {
     "Weizen": {"sa": [1, 2], "er": [5, 6]},
     "Gerste": {"sa": [1, 2], "er": [5]},
@@ -71,7 +71,6 @@ def berechne_erntestatus(frucht, saat_monat, aktueller_monat_name, manueller_sta
         if moegliche_ernte and idx_jetzt > max(moegliche_ernte): return "🚨 ERNTEZEIT VERPASST!", "🚨"
         return "🌱 Im Wachstum", "🌱"
     elif idx_jetzt < idx_saat:
-        # Jahresübergreifend
         return "🌱 Im Wachstum (Überwinterung)", "🌱"
     return "🌱 Im Wachstum", "🌱"
 
@@ -120,19 +119,18 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     return pdf.output(dest="S").encode("latin-1", errors="ignore")
 
 # ---------------------------------------------------------
-# DATA-LOADING (GOOGLE SHEETS ANBINDUNG)
+# DATA-LOADING (ORIGINAL-LOGIK AUS DEINEM CODE)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
     try:
-        csv_url = url.replace("/edit?usp=sharing", "/export?format=csv")
+        csv_url = url.replace('/edit?usp=sharing', '/export?format=csv')
         df = pd.read_csv(csv_url)
         return df
     except Exception as e:
         st.sidebar.error(f"Fehler beim Sheets-Download: {e}")
         return pd.DataFrame()
 
-# Externe Preis- und Kundenlisten laden
 sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/edit?usp=sharing"
 sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/edit?usp=sharing"
 
@@ -149,7 +147,7 @@ if not df_kunden.empty and "Kundenname" in df_kunden.columns:
     aktuelle_kunden = df_kunden["Kundenname"].dropna().astype(str).tolist()
 
 # ---------------------------------------------------------
-# INITIALISIERUNG DES SESSIONS STATES (ZENTRALER SPEICHER)
+# INITIALISIERUNG DES SESSIONS STATES
 # ---------------------------------------------------------
 if "_global_custom_kalender" not in st.session_state: st.session_state._global_custom_kalender = {}
 if "_global_fruchtarten" not in st.session_state: st.session_state._global_fruchtarten = sorted(list(KALENDER_STANDARD.keys()))
@@ -158,7 +156,6 @@ if "_global_ingame_jahr" not in st.session_state: st.session_state._global_ingam
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
 if "temp_lu_maschinen" not in st.session_state: st.session_state.temp_lu_maschinen = []
 
-# Erstellung der drei autonomen Höfe im Speicher
 if "_global_hoefe" not in st.session_state:
     st.session_state._global_hoefe = {
         "Hof 1 — Hauptbetrieb": {
@@ -183,16 +180,12 @@ if "_global_hoefe" not in st.session_state:
 
 if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 — Freier Verbund"
 
-def speichere_gesamte_daten():
-    pass  # In Streamlit Cloud bleibt alles live im session_state erhalten.
-
 # ---------------------------------------------------------
 # SIDEBAR: MANAGEMENT & SWITCHER
 # ---------------------------------------------------------
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/2760/2760010.png", width=70)
 st.sidebar.title("🚜 LS25 Control Center")
 
-# Dynamischer Namens-Switcher für Hof 3
 alter_hof3_key = st.session_state.hof3_name_custom
 neuer_hof3_name = st.sidebar.text_input("📝 Name für Hof 3 vergeben:", value=alter_hof3_key)
 if neuer_hof3_name.strip() and neuer_hof3_name != alter_hof3_key:
@@ -222,7 +215,6 @@ if neues_jahr != j_alt or neuer_monat != m_alt:
 
 st.sidebar.write("---")
 
-# Live-Konto & Schnellspeicheranzeige in der Sidebar
 kontostand = hof_daten["finanzen"]["einnahmen"] - hof_daten["finanzen"]["ausgaben"]
 st.sidebar.metric("💰 Kontostand (Aktuell)", f"{fmt_float(kontostand)} €")
 
@@ -233,17 +225,19 @@ for mat, menge in hof_daten["lager_store"].items():
         st.sidebar.warning(f"⚠️ {mat.upper()}: {fmt_int(menge)}L (Limit: {fmt_int(grenze)}L)")
 
 st.sidebar.write("---")
+
+# Hier wurde "🏗️ Silo-Manager" als neuer Navigationspunkt hinzugefügt
 menu = st.sidebar.radio("Navigation", [
     "💰 Ernte & Verbrauchsraten",
     "🚜 Meine Felder & Anbau",
     "📋 Rechnungen",
     "🛒 Material & Aufträge",
+    "🏗️ Silo-Manager",
     "📝 LU-Auftragsbuch",
     "🚛 Fuhrpark-Manager",
     "📖 Detailliertes Kassenbuch"
 ])
 
-# Verbrauchskalkulationen im session_state verankern
 if "global_verbrauch_kalk" not in st.session_state: st.session_state.global_verbrauch_kalk = 2000
 if "global_verbrauch_saat" not in st.session_state: st.session_state.global_verbrauch_saat = 150
 if "global_verbrauch_dueng" not in st.session_state: st.session_state.global_verbrauch_dueng = 180
@@ -272,7 +266,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         if f_auswahl in cust_k:
             saat_monate = [LISTE_MONATE[i-1] for i in cust_k[f_auswahl]["sa"]]
             ernte_monate = [LISTE_MONATE[i-1] for i in cust_k[f_auswahl]["er"]]
-            st.info(f"Mod-Fruchtart '{f_auswahl}' aktiv.")
+            st.info(f"Mod-Fruchtart '{f_auswahl}' active.")
         else:
             s_idx = KALENDER_STANDARD.get(f_auswahl, {"sa":[]})["sa"]
             e_idx = KALENDER_STANDARD.get(f_auswahl, {"er":[]})["er"]
@@ -298,7 +292,6 @@ if menu == "💰 Ernte & Verbrauchsraten":
                 "In-Game Datum": f_date, "Sort_Jahr": int(st.session_state._global_ingame_jahr), "Sort_Monat": st.session_state._global_ingame_monat,
                 "Typ": "Einnahme", "Nummer": f"#VK-{os.urandom(2).hex().upper()}", "Details": f"Verkauf {v_menge}L {f_auswahl} ({v_details})", "Betrag (EUR)": erloes
             })
-            speichere_gesamte_daten()
             st.success(f"Erfolgreich gebucht! + {fmt_float(erloes)} €")
             st.rerun()
 
@@ -324,7 +317,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                 if f_name not in st.session_state._global_fruchtarten:
                     st.session_state._global_fruchtarten.append(f_name)
                     st.session_state._global_fruchtarten.sort()
-                speichere_gesamte_daten(); st.success(f"Frucht '{f_name}' registriert!"); st.rerun()
+                st.success(f"Frucht '{f_name}' registriert!"); st.rerun()
 
     st.write("---")
     col_feld_ein, col_feld_stats = st.columns([1.2, 0.8])
@@ -343,7 +336,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                     "rate_kalk": st.session_state.global_verbrauch_kalk, "rate_saat": st.session_state.global_verbrauch_saat, "rate_dueng": st.session_state.global_verbrauch_dueng,
                     "saat_monat": "Nicht gesät", "manueller_status": "Automatisch (Kalender)"
                 })
-                speichere_gesamte_daten(); st.rerun()
+                st.rerun()
 
     with col_feld_stats:
         st.subheader("📊 Betriebszusammenfassung")
@@ -367,26 +360,26 @@ elif menu == "🚜 Meine Felder & Anbau":
                     st.markdown(f"**Verbrauch:**  \n⚪ Kalk: {fmt_int(f['kalk_verbraucht'])}L  \n🌱 Saat: {fmt_int(f['saat_verbraucht'])}L")
                 with c_change:
                     ch_opt = st.selectbox("Frucht wechseln:", st.session_state._global_fruchtarten, index=st.session_state._global_fruchtarten.index(aktuelle_frucht) if aktuelle_frucht in st.session_state._global_fruchtarten else 0, key=f"ch_{idx}")
-                    if ch_opt != aktuelle_frucht: hof_daten["felder_store"][idx]["frucht"] = ch_opt; speichere_gesamte_daten(); st.rerun()
+                    if ch_opt != aktuelle_frucht: hof_daten["felder_store"][idx]["frucht"] = ch_opt; st.rerun()
                 with c_time:
                     neuer_saat_monat = st.selectbox("Gesät im:", ["Nicht gesät"] + LISTE_MONATE, index=(["Nicht gesät"] + LISTE_MONATE).index(s_monat) if s_monat in (["Nicht gesät"] + LISTE_MONATE) else 0, key=f"chs_{idx}")
-                    if neuer_saat_monat != s_monat: hof_daten["felder_store"][idx]["saat_monat"] = neuer_saat_monat; speichere_gesamte_daten(); st.rerun()
+                    if neuer_saat_monat != s_monat: hof_daten["felder_store"][idx]["saat_monat"] = neuer_saat_monat; st.rerun()
                 with c_manual_state:
                     neuer_m_status = st.selectbox("Status-Override:", ["Automatisch (Kalender)", "🌱 Im Wachstum", "🟢 REIF ZUR ERNTE!", "⏳ Brachland / Bereit", "🚨 ERNTEZEIT VERPASST!"], index=["Automatisch (Kalender)", "🌱 Im Wachstum", "🟢 REIF ZUR ERNTE!", "⏳ Brachland / Bereit", "🚨 ERNTEZEIT VERPASST!"].index(m_status) if m_status in ["Automatisch (Kalender)", "🌱 Im Wachstum", "🟢 REIF ZUR ERNTE!", "⏳ Brachland / Bereit", "🚨 ERNTEZEIT VERPASST!"] else 0, key=f"chm_{idx}")
-                    if neuer_m_status != m_status: hof_daten["felder_store"][idx]["manueller_status"] = neuer_m_status; speichere_gesamte_daten(); st.rerun()
+                    if neuer_m_status != m_status: hof_daten["felder_store"][idx]["manueller_status"] = neuer_m_status; st.rerun()
 
                 if c_act1.button(f"🌱 Säen ({fmt_int(bedarf_saat)}L)", key=f"saat_{idx}", use_container_width=True):
                     if hof_daten["lager_store"].get("saat", 0) >= bedarf_saat:
                         hof_daten["lager_store"]["saat"] -= bedarf_saat
                         hof_daten["felder_store"][idx]["saat_verbraucht"] += bedarf_saat
                         hof_daten["felder_store"][idx]["saat_monat"] = st.session_state._global_ingame_monat
-                        speichere_gesamte_daten(); st.rerun()
+                        st.rerun()
                     else: st.error("Zu wenig Saatgut!")
                 if c_act2.button(f"🚜 Ernte", key=f"ernte_{idx}", use_container_width=True):
                     hof_daten["felder_store"][idx]["saat_monat"] = "Nicht gesät"
                     hof_daten["felder_store"][idx]["manueller_status"] = "Automatisch (Kalender)"
-                    speichere_gesamte_daten(); st.success("Feld zurückgesetzt!"); st.rerun()
-                if c_del.button("🗑️", key=f"d_{idx}", use_container_width=True): hof_daten["felder_store"].pop(idx); speichere_gesamte_daten(); st.rerun()
+                    st.success("Feld zurückgesetzt!"); st.rerun()
+                if c_del.button("🗑️", key=f"d_{idx}", use_container_width=True): hof_daten["felder_store"].pop(idx); st.rerun()
 
 # ---------------------------------------------------------
 # SEITE 3: RECHNUNGEN
@@ -450,17 +443,17 @@ elif menu == "📋 Rechnungen":
             })
             hof_daten["finanzen"]["naechste_rechnung_id"] += 1
             st.session_state.rechnungs_posten = []
-            speichere_gesamte_daten(); st.rerun()
+            st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 4: MATERIAL & AUFTRÄGE (INKL. SILO-MANAGER)
+# SEITE 4: MATERIAL & AUFTRÄGE (UNBERÜHRT)
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
-    st.title(f"🛒 Material-Lagerbestand & Silo — {akt_hof_name}")
+    st.title(f"🛒 Material-Lagerbestand — {akt_hof_name}")
     
-    if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
+    # Schlüssel absichern
     if "frischgut" not in hof_daten["lager_store"]: hof_daten["lager_store"]["frischgut"] = 0
-    if "silos" not in hof_daten: hof_daten["silos"] = []
+    if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
 
     materialien = ["saat", "kalk", "dueng", "herbi", "diesel", "frischgut", "silage"]
     
@@ -480,16 +473,20 @@ elif menu == "🛒 Material & Aufträge":
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
-        speichere_gesamte_daten()
         st.success("Lagerbestände erfolgreich aktualisiert!")
         st.rerun()
 
-    st.write("---")
+# ---------------------------------------------------------
+# NEUE FUNKTION: SEITE 5: SILO-MANAGER
+# ---------------------------------------------------------
+elif menu == "🏗️ Silo-Manager":
+    st.title(f"🏗️ Fahrsilo-Zentrale (Gärprozess) — {akt_hof_name}")
+    st.info("Hier kannst du dein geerntetes Frischgut (Gras/Häckselgut) einlagern und gären lassen.")
     
-    # --- FAHRSILO / GÄRSYSTEM ---
-    st.subheader("🏗️ Fahrsilo-Zentrale (Gärprozess)")
-    st.info("Tipp: Die Silage gärt automatisch weiter, wenn du die globale In-Game-Zeit in der Sidebar änderst!")
-    
+    if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
+    if "frischgut" not in hof_daten["lager_store"]: hof_daten["lager_store"]["frischgut"] = 0
+    if "silos" not in hof_daten: hof_daten["silos"] = []
+
     col_s1, col_s2 = st.columns([1, 1.5])
     
     with col_s1:
@@ -510,8 +507,7 @@ elif menu == "🛒 Material & Aufträge":
                     "dauer_monate": gaer_dauer,
                     "geoeffnet": False
                 })
-                speichere_gesamte_daten()
-                st.success("Silo verdichtet und abgedeckt!")
+                st.success("Silo erfolgreich verdichtet und abgedeckt!")
                 st.rerun()
             else:
                 st.error("Nicht genug Frischgut im Lager!")
@@ -537,11 +533,10 @@ elif menu == "🛒 Material & Aufträge":
                     st.write(f"Menge: {fmt_int(silo['menge'])} Liter | Eingelagert: {silo['start_monat']} J{silo['start_jahr']}")
                     
                     if fertig:
-                        st.success("🟢 REIF! Die Silage ist fertig gegoren und bereit zur Öffnung.")
+                        st.success("🟢 REIF! Die Silage ist fertig gegoren.")
                         if st.button("📥 Silo öffnen & ins Lager umbuchen", key=f"open_silo_{idx}", use_container_width=True):
                             hof_daten["lager_store"]["silage"] += silo["menge"]
                             hof_daten["silos"].pop(idx)
-                            speichere_gesamte_daten()
                             st.success("Silage ins Hauptlager übertragen!")
                             st.rerun()
                     else:
@@ -549,11 +544,10 @@ elif menu == "🛒 Material & Aufträge":
                         st.progress(progress)
                         if st.button("🗑️ Silo verwerfen", key=f"del_silo_{idx}"):
                             hof_daten["silos"].pop(idx)
-                            speichere_gesamte_daten()
                             st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 5: LU-AUFTRAGSBUCH
+# SEITE 6: LU-AUFTRAGSBUCH
 # ---------------------------------------------------------
 elif menu == "📝 LU-Auftragsbuch":
     st.title(f"📝 LU-Auftragsbuch — {akt_hof_name}")
@@ -578,10 +572,10 @@ elif menu == "📝 LU-Auftragsbuch":
         if st.button("💾 Auftrag speichern", type="primary", use_container_width=True):
             if v_einheit == "h" and st.session_state.temp_lu_maschinen:
                 hof_daten["auftrags_store"].append({"kunde": a_kunde, "ort": a_feld, "einheit": "h", "status": "⏳ Ausstehend", "monat": st.session_state._global_ingame_monat, "jahr": st.session_state._global_ingame_jahr, "maschinen": st.session_state.temp_lu_maschinen.copy(), "arbeit": "Maschinenverleih"})
-                st.session_state.temp_lu_maschinen = []; speichere_gesamte_daten(); st.rerun()
+                st.session_state.temp_lu_maschinen = []; st.rerun()
             elif v_einheit != "h":
                 hof_daten["auftrags_store"].append({"kunde": a_kunde, "ort": a_feld, "arbeit": a_arbeit, "status": "⏳ Ausstehend", "menge": a_menge, "einheit": v_einheit, "preis_einheit": a_preis, "monat": st.session_state._global_ingame_monat, "jahr": st.session_state._global_ingame_jahr, "maschinen": []})
-                speichere_gesamte_daten(); st.rerun()
+                st.rerun()
                 
     with col_b:
         st.subheader("📋 Aktive Aufträge")
@@ -596,7 +590,7 @@ elif menu == "📝 LU-Auftragsbuch":
                         if anf != m['anfangs_h'] or end != m['end_h']:
                             hof_daten["auftrags_store"][idx]['maschinen'][m_idx]['anfangs_h'] = anf
                             hof_daten["auftrags_store"][idx]['maschinen'][m_idx]['end_h'] = end
-                            speichere_gesamte_daten(); st.rerun()
+                            st.rerun()
                         total_wert += (end - anf) * m['preis_h']
                 else: total_wert = aut['menge'] * aut['preis_einheit']
                 st.write(f"Wert: **{fmt_float(total_wert)} €**")
@@ -606,10 +600,10 @@ elif menu == "📝 LU-Auftragsbuch":
                 if st.button("💾 Erledigt & Buchen", key=f"f_j_{idx}", type="primary"):
                     st.session_state._global_hoefe[lu_ziel]["finanzen"]["einnahmen"] += total_wert
                     st.session_state._global_hoefe[lu_ziel]["finanzen"]["historie"].append({"In-Game Datum": f"{aut['monat']}", "Sort_Jahr": aut['jahr'], "Sort_Monat": aut['monat'], "Typ": "Einnahme", "Nummer": f"#LU-{os.urandom(2).hex().upper()}", "Details": f"LU Job abgeschlossen ({akt_hof_name})", "Betrag (EUR)": total_wert})
-                    hof_daten["auftrags_store"].pop(idx); speichere_gesamte_daten(); st.rerun()
+                    hof_daten["auftrags_store"].pop(idx); st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 6: FUHRPARK-MANAGER
+# SEITE 7: FUHRPARK-MANAGER
 # ---------------------------------------------------------
 elif menu == "🚛 Fuhrpark-Manager":
     st.title(f"🚛 Fuhrpark-Manager — {akt_hof_name}")
@@ -620,7 +614,7 @@ elif menu == "🚛 Fuhrpark-Manager":
             m_h = st.number_input("Betriebsstunden (h):", min_value=0.0, step=0.1)
             if st.button("💾 Hinzufügen", use_container_width=True, type="primary"):
                 hof_daten["fuhrpark_store"][m_waehlen] = m_h
-                speichere_gesamte_daten(); st.rerun()
+                st.rerun()
         else: st.info("Keine Maschinen im Google-Sheet gefunden.")
         
     with col_f2:
@@ -629,11 +623,11 @@ elif menu == "🚛 Fuhrpark-Manager":
                 c_fn, c_fh, c_fdel = st.columns([2.5, 1.5, 0.5])
                 c_fn.write(f"**{f_name}**")
                 neue_stunden = c_fh.number_input("h", min_value=0.0, value=float(f_stunden), key=f"f_h_{f_name}")
-                if neue_stunden != f_stunden: hof_daten["fuhrpark_store"][f_name] = neue_stunden; speichere_gesamte_daten(); st.rerun()
-                if c_fdel.button("🗑️", key=f"del_m_{f_name}"): del hof_daten["fuhrpark_store"][f_name]; speichere_gesamte_daten(); st.rerun()
+                if neue_stunden != f_stunden: hof_daten["fuhrpark_store"][f_name] = neue_stunden; st.rerun()
+                if c_fdel.button("🗑️", key=f"del_m_{f_name}"): del hof_daten["fuhrpark_store"][f_name]; st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 7: KASSENBUCH
+# SEITE 8: KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title(f"📖 Kassenbuch & Finanzzentrale — {akt_hof_name}")
@@ -657,7 +651,7 @@ elif menu == "📖 Detailliertes Kassenbuch":
                     "In-Game Datum": full_ingame_date, "Sort_Jahr": int(st.session_state._global_ingame_jahr), "Sort_Monat": st.session_state._global_ingame_monat,
                     "Typ": b_typ, "Nummer": f"{prefix}-{os.urandom(2).hex().upper()}", "Details": b_text.strip(), "Betrag (EUR)": b_betrag
                 })
-                speichere_gesamte_daten(); st.success("Gebucht!"); st.rerun()
+                st.success("Gebucht!"); st.rerun()
 
     st.write("---")
     st.subheader("📊 Transaktionsverlauf")
@@ -666,5 +660,3 @@ elif menu == "📖 Detailliertes Kassenbuch":
         df_anzeige = pd.DataFrame(historie_liste).iloc[::-1]
         st.dataframe(df_anzeige[["In-Game Datum", "Nummer", "Typ", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
     else: st.info(f"Noch keine Einträge im Kassenbuch von {akt_hof_name} vorhanden.")
-
-speichere_gesamte_daten()
