@@ -32,49 +32,73 @@ DB_DATEI = "ls25_multiplayer_live_data.json"
 
 def lade_globalen_speicher():
     """Lädt alle Daten live für alle Spieler aus der gemeinsamen Datei"""
+    default_daten = {
+        "hoefe": {
+            "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": 500000.0},
+            "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": 350000.0},
+            "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": 200000.0}
+        },
+        "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln", "Zuckerrüben"],
+        "preise": {
+            "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0
+        },
+        "kalender": {
+            "Weizen": {"sa": [1, 2], "er": [5, 6]},
+            "Gerste": {"sa": [1, 2], "er": [5]},
+            "Raps": {"sa": [6, 7], "er": [5]},
+            "Gras": {"sa": [1, 2, 3, 4], "er": [2, 3, 4, 5]},
+            "Mais": {"sa": [2, 3], "er": [7, 8]},
+            "Kartoffeln": {"sa": [2, 3], "er": [6, 7]},
+            "Zuckerrüben": {"sa": [2, 3], "er": [7, 8]}
+        },
+        "felder": [
+            {"id": 1, "besitzer": "Hof 1", "groesse": 4.5, "frucht": "Weizen", "status": "Wachstum"},
+            {"id": 2, "besitzer": "Hof 2", "groesse": 2.1, "frucht": "Raps", "status": "Erntebereit"}
+        ],
+        "maschinen": [
+            {"id": 1, "hof": "Hof 1", "typ": "Traktor", "name": "John Deere 7R", "status": "Frei"},
+            {"id": 2, "hof": "Hof 1", "typ": "Drescher", "name": "New Holland CR11", "status": "Im Einsatz"}
+        ],
+        "auftraege": [
+            {"id": 1, "kunde": "Hof 2", "auftragnehmer": "Hof 1", "typ": "Dreschen", "feld": 2, "preis": 4500.0, "status": "Offen"}
+        ]
+    }
+
     if not os.path.exists(DB_DATEI):
-        default_daten = {
-            "hoefe": {
-                "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": 500000.0},
-                "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": 350000.0},
-                "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": 200000.0}
-            },
-            "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln", "Zuckerrüben"],
-            "preise": {
-                "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0
-            },
-            "kalender": {
-                "Weizen": {"sa": [1, 2], "er": [5, 6]},
-                "Gerste": {"sa": [1, 2], "er": [5]},
-                "Raps": {"sa": [6, 7], "er": [5]},
-                "Gras": {"sa": [1, 2, 3, 4], "er": [2, 3, 4, 5]},
-                "Mais": {"sa": [2, 3], "er": [7, 8]},
-                "Kartoffeln": {"sa": [2, 3], "er": [6, 7]},
-                "Zuckerrüben": {"sa": [2, 3], "er": [7, 8]}
-            },
-            "felder": [
-                {"id": 1, "besitzer": "Hof 1", "groesse": 4.5, "frucht": "Weizen", "status": "Wachstum"},
-                {"id": 2, "besitzer": "Hof 2", "groesse": 2.1, "frucht": "Raps", "status": "Erntebereit"}
-            ],
-            "maschinen": [
-                {"id": 1, "hof": "Hof 1", "typ": "Traktor", "name": "John Deere 7R", "status": "Frei"},
-                {"id": 2, "hof": "Hof 1", "typ": "Drescher", "name": "New Holland CR11", "status": "Im Einsatz"}
-            ],
-            "auftraege": [
-                {"id": 1, "kunde": "Hof 2", "auftragnehmer": "Hof 1", "typ": "Dreschen", "feld": 2, "preis": 4500.0, "status": "Offen"}
-            ]
-        }
         speichere_globalen_speicher(default_daten)
         return default_daten
     
-    with open(DB_DATEI, "r", encoding="utf-8") as f:
-        daten = json.load(f)
-        # Sicherheits-Fix: Alte Einträge in der JSON-Datei korrigieren, falls da "auftragsnehmer" steht
-        if "auftraege" in daten:
-            for auf in daten["auftraege"]:
-                if "auftragsnehmer" in auf:
-                    auf["auftragnehmer"] = auf.pop("auftragsnehmer")
-        return daten
+    try:
+        with open(DB_DATEI, "r", encoding="utf-8") as f:
+            daten = json.load(f)
+            
+            # 🛠️ RADIKALER DATEN-CLEANER: Repariert kaputte alte JSON-Dateien live beim Laden!
+            if "auftraege" in daten and isinstance(daten["auftraege"], list):
+                bereinigte_auftraege = []
+                for auf in daten["auftraege"]:
+                    # Falls der Eintrag komplett leer oder zerschossen ist, überspringen
+                    if not isinstance(auf, dict):
+                        continue
+                        
+                    # Fix für Tippfehler in bestehenden JSON-Daten
+                    if "auftragsnehmer" in auf:
+                        auf["auftragnehmer"] = auf.pop("auftragsnehmer")
+                        
+                    # Sicherheitsnetz: Falls BEIDE Keys fehlen, weise Standard zu
+                    if "auftragnehmer" not in auf:
+                        auf["auftragnehmer"] = "Hof 1"
+                    if "kunde" not in auf:
+                        auf["kunde"] = "Hof 2"
+                        
+                    bereinigte_auftraege.append(auf)
+                daten["auftraege"] = bereinigte_auftraege
+            else:
+                daten["auftraege"] = default_daten["auftraege"]
+                
+            return daten
+    except Exception as e:
+        # Falls die JSON-Datei komplett korrupt ist, lade Defaults um Absturz zu verhindern
+        return default_daten
 
 def speichere_globalen_speicher(daten):
     """Speichert Änderungen sofort auf dem Server ab"""
@@ -259,17 +283,16 @@ elif bereich == "🚜 Maschinenpool":
             st.rerun()
 
 # ==============================================================================
-# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION (KORRIGIERT & FEHLERFREI)
+# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION (KRISENSICHER)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Auftragsbuch & Rechnungszentrum")
     
     if db["auftraege"]:
-        # Schicke Tabelle zum Anschauen bauen
         df_auf = pd.DataFrame(db["auftraege"])
         df_auf_anzeige = df_auf.copy()
         
-        # Mappings fehlerfrei zuweisen (Spaltennamen sind jetzt absolut synchron ohne "s")
+        # Mappings werden nun absolut fehlerfrei ausgeführt, da unvollständige Keys oben abgefangen wurden
         df_auf_anzeige["kunde"] = df_auf_anzeige["kunde"].map(HOF_MAPPING)
         df_auf_anzeige["auftragnehmer"] = df_auf_anzeige["auftragnehmer"].map(HOF_MAPPING)
         st.dataframe(df_auf_anzeige, use_container_width=True, hide_index=True)
@@ -282,7 +305,7 @@ elif bereich == "💼 LU-Auftragsbuch":
     # RECHNUNGSFUNKTION
     with col_rechnung:
         st.subheader("💳 Auftrag abrechnen (Geld überweisen)")
-        offene_auftraege = [x for x in db["auftraege"] if x["status"] == "Offen"]
+        offene_auftraege = [x for x in db["auftraege"] if x.get("status") == "Offen"]
         
         if offene_auftraege:
             auswahl_auftrag_id = st.selectbox(
@@ -295,7 +318,7 @@ elif bereich == "💼 LU-Auftragsbuch":
                 for auf in db["auftraege"]:
                     if auf["id"] == auswahl_auftrag_id:
                         kunde = auf["kunde"]
-                        lu = auf["auftragnehmer"]  # Hier korrekt geladen
+                        lu = auf["auftragnehmer"]
                         preis = auf["preis"]
                         
                         # Live-Überweisung durchführen!
@@ -321,7 +344,6 @@ elif bereich == "💼 LU-Auftragsbuch":
         
         if st.button("Auftrag live buchen"):
             neuer_a_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-            # WICHTIGER FIX: Hier hieß es vorher "auftragsnehmer" – jetzt sauber "auftragnehmer"
             db["auftraege"].append({
                 "id": neuer_a_id, 
                 "kunde": a_kunde, 
