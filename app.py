@@ -85,7 +85,6 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf = FPDF()
     pdf.add_page()
     
-    # Nutzt das lokale logo.png für die Rechnungen, falls vorhanden
     if os.path.exists(LOGO_DATEI):
         try:
             pdf.image(LOGO_DATEI, x=10, y=8, w=33)
@@ -177,7 +176,6 @@ sheet_url_kunden = f"https://docs.google.com/spreadsheets/d/{TABELLEN_ID}/export
 df_preise = load_data(sheet_url_preise)
 df_kunden = load_data(sheet_url_kunden)
 
-# Verarbeitung der Preise
 preis_dict = {}
 if not df_preise.empty:
     gefundene_spalten = list(df_preise.columns)
@@ -229,7 +227,6 @@ if "_global_hoefe" not in st.session_state:
         }
     }
 
-# Dynamisches Mapping der benutzerdefinierten Namen
 HOF_MAPPING = {
     "Hof 1": st.session_state.hof1_name_custom,
     "Hof 2": st.session_state.hof2_name_custom,
@@ -238,15 +235,13 @@ HOF_MAPPING = {
 HOF_MAPPING_REVERSE = {v: k for k, v in HOF_MAPPING.items()}
 
 # ---------------------------------------------------------
-# SIDEBAR: MANAGEMENT (Logo hier komplett entfernt)
+# SIDEBAR: MANAGEMENT
 # ---------------------------------------------------------
 st.sidebar.title("🚜 LS25 Control Center")
 
-# Dropdown mit den schönen, editierten Namen anzeigen
 liste_schoene_namen = [HOF_MAPPING["Hof 1"], HOF_MAPPING["Hof 2"], HOF_MAPPING["Hof 3"]]
 akt_schoener_name = st.sidebar.selectbox("🎯 Aktiven Hof verwalten:", liste_schoene_namen)
 
-# Interne ID holen
 akt_interner_schluessel = HOF_MAPPING_REVERSE[akt_schoener_name]
 hof_daten = st.session_state._global_hoefe[akt_interner_schluessel]
 
@@ -278,7 +273,6 @@ menu = st.sidebar.radio("Navigation", [
     "📖 Detailliertes Kassenbuch"
 ])
 
-# ⚙️ MANUELLE HOFNAMEN-ÄNDERUNG IN SIDEBAR
 st.sidebar.write("---")
 with st.sidebar.expander("⚙️ Hofnamen anpassen"):
     h1_new = st.text_input("Name Hof 1:", value=st.session_state.hof1_name_custom)
@@ -290,7 +284,6 @@ with st.sidebar.expander("⚙️ Hofnamen anpassen"):
         st.session_state.hof3_name_custom = h3_new
         st.rerun()
 
-# Kundenliste verarbeiten
 aktuelle_kunden = ["Hof 1", "Hof 2", "Hof 3 Extern", "Landi AG", "Zuckerfabrik"]
 if not df_kunden.empty:
     gefundene_k_spalten = list(df_kunden.columns)
@@ -613,8 +606,22 @@ elif menu == "📖 Detailliertes Kassenbuch":
                 else: hof_daten["finanzen"]["ausgaben"] += b_betrag
                 hof_daten["finanzen"]["historie"].append({"In-Game Datum": full_ingame_date, "Sort_Jahr": int(st.session_state._global_ingame_jahr), "Sort_Monat": st.session_state._global_ingame_monat, "Typ": b_typ, "Nummer": f"#MAN-{os.urandom(2).hex().upper()}", "Details": b_text.strip(), "Betrag (EUR)": b_betrag})
                 st.rerun()
+                
     st.write("---")
     historie_liste = hof_daten["finanzen"].get("historie", [])
     if historie_liste:
         df_anzeige = pd.DataFrame(historie_liste).iloc[::-1]
         st.dataframe(df_anzeige[["In-Game Datum", "Nummer", "Typ", "Details", "Betrag (EUR)"]], use_container_width=True, hide_index=True)
+    else:
+        st.info("Dieses Kassenbuch ist aktuell leer (Kontostand startet bei 0 €).")
+        
+    # HIER NEU EINGEBAUT: DIE FUNKTION ZUM ZURÜCKSETZEN
+    st.write("---")
+    with st.expander("🚨 Gefahrenzone: Finanzen zurücksetzen"):
+        st.warning(f"Achtung: Dies löscht unwiderruflich die gesamte Historie und setzt das Konto von **{akt_schoener_name}** auf 0 €.")
+        if st.button(f"💥 Kassenbuch für {akt_schoener_name} auf Null setzen", type="secondary"):
+            hof_daten["finanzen"]["einnahmen"] = 0.0
+            hof_daten["finanzen"]["ausgaben"] = 0.0
+            hof_daten["finanzen"]["historie"] = []
+            st.success("Finanzen erfolgreich zurückgesetzt!")
+            st.rerun()
