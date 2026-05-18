@@ -320,7 +320,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH (JETZT MIT MOD-FRUCHT / MOD-ARBEITSART EINGABE)
+# BEREICH 2: LU-AUFTRAGSBUCH
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -332,7 +332,6 @@ elif bereich == "💼 LU-Auftragsbuch":
         a_kunde = st.selectbox("Auftraggeber (Kunde aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         a_lu = st.selectbox("Auftragnehmer (Lohnunternehmen):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         
-        # Arbeitsarten-Auswahl erweitert um Mod-Eingabe
         arbeitsart_optionen = ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen", "– Eigene Mod-Arbeitsart eingeben –"]
         a_typ_sel = st.selectbox("Arbeitsart:", arbeitsart_optionen)
         
@@ -416,7 +415,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         st.info("Hervorragend! Keine offenen Aufträge im System.")
 
 # ==============================================================================
-# BEREICH 3: WARENVERKAUF
+# BEREICH 3: WARENVERKAUF & RECHNUNGEN
 # ==============================================================================
 elif bereich == "🌾 Warenverkauf & Rechnungen":
     st.title("🌾 Verkaufsrechnungen (Getreide- & Ernte-Verkauf)")
@@ -431,7 +430,7 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
         v_frucht_sel = st.selectbox("Verkaufte Fruchtart:", frucht_optionen)
         
         if v_frucht_sel == "– Eigene Mod-Frucht eingeben –":
-            v_frucht = st.text_input("Name der Mod-Frucht eingeben:", placeholder="z.B. Klee, Alfalfa")
+            v_frucht = st.text_input("Name der Mod-Frucht eingeben:", placeholder="z.B. Klee, Alfalfa, Dinkel")
             preis_pro_1k = st.number_input("Manueller Preis (€ pro 1.000L):", min_value=0.0, value=500.0, step=50.0)
         else:
             v_frucht = v_frucht_sel
@@ -505,7 +504,7 @@ elif bereich == "📈 Fruchtpreise (Manuell)":
         st.rerun()
 
 # ==============================================================================
-# BEREICH 6: FELDVERWALTUNG
+# BEREICH 6: FELDVERWALTUNG (JETZT MIT MOD-FRUCHT OPTION)
 # ==============================================================================
 elif bereich == "🗺️ Feldverwaltung":
     st.title("🗺️ Globale Feldverwaltung")
@@ -524,16 +523,28 @@ elif bereich == "🗺️ Feldverwaltung":
         f_id = st.number_input("Feld-Nummer:", min_value=1, step=1, value=3)
         f_besitzer = st.selectbox("Besitzer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         f_groesse = st.number_input("Größe in Hektar (ha):", min_value=0.1, step=0.1, value=2.0)
-        f_frucht = st.selectbox("Fruchtart:", db["fruchtarten"])
+        
+        # Fruchtarten-Auswahl für Felder erweitert um Mod-Eingabe
+        feld_frucht_optionen = db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"]
+        f_frucht_sel = st.selectbox("Fruchtart:", feld_frucht_optionen)
+        
+        if f_frucht_sel == "– Eigene Mod-Frucht eingeben –":
+            f_frucht = st.text_input("Name der Mod-Frucht eingeben (Feld):", placeholder="z.B. Klee, Luzerne, Vermehrungsgras")
+        else:
+            f_frucht = f_frucht_sel
+            
         f_status = st.selectbox("Status:", ["Gepflügt", "Gesät", "Wachstum", "Erntebereit", "Abgeerntet"])
         f_typ = st.selectbox("Ernte-Art:", ["Normale Ernte", "Silage (50% LU-Rabatt)"])
         
         if st.button("Feld gespeichert"):
-            db["felder"] = [x for x in db["felder"] if x["id"] != f_id]
-            db["felder"].append({"id": int(f_id), "besitzer": f_besitzer, "groesse": float(f_groesse), "frucht": f_frucht, "status": f_status, "ernte_typ": f_typ})
-            speichere_globalen_speicher(db)
-            st.success(f"Feld {f_id} gespeichert!")
-            st.rerun()
+            if f_frucht.strip() == "":
+                st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
+            else:
+                db["felder"] = [x for x in db["felder"] if x["id"] != f_id]
+                db["felder"].append({"id": int(f_id), "besitzer": f_besitzer, "groesse": float(f_groesse), "frucht": f_frucht, "status": f_status, "ernte_typ": f_typ})
+                speichere_globalen_speicher(db)
+                st.success(f"Feld {f_id} gespeichert!")
+                st.rerun()
             
     with col_f2:
         st.subheader("🗑️ Feld entfernen")
