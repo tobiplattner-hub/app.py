@@ -10,7 +10,7 @@ from fpdf import FPDF
 # ---------------------------------------------------------
 st.set_page_config(page_title="LS25 LU- & Hof-Manager", layout="wide", initial_sidebar_state="expanded")
 
-# CSS für ein modernes, landwirtschaftliches Dashboard-Design (KORRIGIERT auf unsafe_allow_html)
+# CSS für ein modernes, landwirtschaftliches Dashboard-Design
 st.markdown("""
 <style>
     .reportview-container { background: #f4f6f0; }
@@ -119,7 +119,7 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     return pdf.output(dest="S").encode("latin-1", errors="ignore")
 
 # ---------------------------------------------------------
-# DATA-LOADING (ORIGINAL-LOGIK AUS DEINEM CODE)
+# DATA-LOADING (DIREKT-LINKS GEGEN 404-FEHLER)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
@@ -131,8 +131,8 @@ def load_data(url):
         st.sidebar.error(f"Fehler beim Sheets-Download: {e}")
         return pd.DataFrame()
 
-sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/edit?usp=sharing"
-sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/edit?usp=sharing"
+sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/export?format=csv"
+sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/export?format=csv"
 
 df_preise = load_data(sheet_url_preise)
 df_kunden = load_data(sheet_url_kunden)
@@ -156,21 +156,26 @@ if "_global_ingame_jahr" not in st.session_state: st.session_state._global_ingam
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
 if "temp_lu_maschinen" not in st.session_state: st.session_state.temp_lu_maschinen = []
 
+# Namen-Tracker für die manuelle Änderung der drei Höfe
+if "hof1_name_custom" not in st.session_state: st.session_state.hof1_name_custom = "Hof 1 — Hauptbetrieb"
+if "hof2_name_custom" not in st.session_state: st.session_state.hof2_name_custom = "Hof 2 — Bio-Betrieb"
+if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 — Freier Verbund"
+
 if "_global_hoefe" not in st.session_state:
     st.session_state._global_hoefe = {
-        "Hof 1 — Hauptbetrieb": {
+        st.session_state.hof1_name_custom: {
             "finanzen": {"einnahmen": 500000.0, "ausgaben": 0.0, "historie": [], "naechste_rechnung_id": 1},
             "lager_store": {"saat": 5000, "kalk": 10000, "dueng": 4000, "herbi": 2000, "diesel": 5000, "frischgut": 0, "silage": 0},
             "lager_grenzwerte": {"saat": 1000, "kalk": 2000, "dueng": 1000, "herbi": 500, "diesel": 1000, "frischgut": 2000, "silage": 2000},
             "felder_store": [], "auftrags_store": [], "fuhrpark_store": {}, "silos": []
         },
-        "Hof 2 — Bio-Betrieb": {
+        st.session_state.hof2_name_custom: {
             "finanzen": {"einnahmen": 350000.0, "ausgaben": 0.0, "historie": [], "naechste_rechnung_id": 1},
             "lager_store": {"saat": 3000, "kalk": 6000, "dueng": 2000, "herbi": 0, "diesel": 3000, "frischgut": 0, "silage": 0},
             "lager_grenzwerte": {"saat": 800, "kalk": 1500, "dueng": 500, "herbi": 0, "diesel": 800, "frischgut": 2000, "silage": 2000},
             "felder_store": [], "auftrags_store": [], "fuhrpark_store": {}, "silos": []
         },
-        "Hof 3 — Freier Verbund": {
+        st.session_state.hof3_name_custom: {
             "finanzen": {"einnahmen": 200000.0, "ausgaben": 0.0, "historie": [], "naechste_rechnung_id": 1},
             "lager_store": {"saat": 2000, "kalk": 4000, "dueng": 1500, "herbi": 1000, "diesel": 2000, "frischgut": 0, "silage": 0},
             "lager_grenzwerte": {"saat": 500, "kalk": 1000, "dueng": 500, "herbi": 200, "diesel": 500, "frischgut": 2000, "silage": 2000},
@@ -178,20 +183,37 @@ if "_global_hoefe" not in st.session_state:
         }
     }
 
-if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 — Freier Verbund"
-
 # ---------------------------------------------------------
 # SIDEBAR: MANAGEMENT & SWITCHER
 # ---------------------------------------------------------
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/2760/2760010.png", width=70)
 st.sidebar.title("🚜 LS25 Control Center")
 
-alter_hof3_key = st.session_state.hof3_name_custom
-neuer_hof3_name = st.sidebar.text_input("📝 Name für Hof 3 vergeben:", value=alter_hof3_key)
-if neuer_hof3_name.strip() and neuer_hof3_name != alter_hof3_key:
-    st.session_state._global_hoefe[neuer_hof3_name] = st.session_state._global_hoefe.pop(alter_hof3_key)
-    st.session_state.hof3_name_custom = neuer_hof3_name
+# --- BEREICH: ALLE DREI HOFNAMEN MANUELL ÄNDERN ---
+st.sidebar.subheader("📝 Hofnamen anpassen")
+
+alter_hof1 = st.session_state.hof1_name_custom
+neuer_hof1 = st.sidebar.text_input("Name Hof 1:", value=alter_hof1)
+if neuer_hof1.strip() and neuer_hof1 != alter_hof1:
+    st.session_state._global_hoefe[neuer_hof1] = st.session_state._global_hoefe.pop(alter_hof1)
+    st.session_state.hof1_name_custom = neuer_hof1
     st.rerun()
+
+alter_hof2 = st.session_state.hof2_name_custom
+neuer_hof2 = st.sidebar.text_input("Name Hof 2:", value=alter_hof2)
+if neuer_hof2.strip() and neuer_hof2 != alter_hof2:
+    st.session_state._global_hoefe[neuer_hof2] = st.session_state._global_hoefe.pop(alter_hof2)
+    st.session_state.hof2_name_custom = neuer_hof2
+    st.rerun()
+
+alter_hof3 = st.session_state.hof3_name_custom
+neuer_hof3 = st.sidebar.text_input("Name Hof 3:", value=alter_hof3)
+if neuer_hof3.strip() and neuer_hof3 != alter_hof3:
+    st.session_state._global_hoefe[neuer_hof3] = st.session_state._global_hoefe.pop(alter_hof3)
+    st.session_state.hof3_name_custom = neuer_hof3
+    st.rerun()
+
+st.sidebar.write("---")
 
 liste_hoefe = list(st.session_state._global_hoefe.keys())
 akt_hof_name = st.sidebar.selectbox("🎯 Aktiven Hof verwalten:", liste_hoefe)
@@ -226,7 +248,6 @@ for mat, menge in hof_daten["lager_store"].items():
 
 st.sidebar.write("---")
 
-# Hier wurde "🏗️ Silo-Manager" als neuer Navigationspunkt hinzugefügt
 menu = st.sidebar.radio("Navigation", [
     "💰 Ernte & Verbrauchsraten",
     "🚜 Meine Felder & Anbau",
@@ -446,12 +467,11 @@ elif menu == "📋 Rechnungen":
             st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 4: MATERIAL & AUFTRÄGE (UNBERÜHRT)
+# SEITE 4: MATERIAL & AUFTRÄGE
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title(f"🛒 Material-Lagerbestand — {akt_hof_name}")
     
-    # Schlüssel absichern
     if "frischgut" not in hof_daten["lager_store"]: hof_daten["lager_store"]["frischgut"] = 0
     if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
 
@@ -477,7 +497,7 @@ elif menu == "🛒 Material & Aufträge":
         st.rerun()
 
 # ---------------------------------------------------------
-# NEUE FUNKTION: SEITE 5: SILO-MANAGER
+# SEITE 5: SILO-MANAGER
 # ---------------------------------------------------------
 elif menu == "🏗️ Silo-Manager":
     st.title(f"🏗️ Fahrsilo-Zentrale (Gärprozess) — {akt_hof_name}")
