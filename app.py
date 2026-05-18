@@ -338,7 +338,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         a_kunde = st.selectbox("Auftraggeber (Kunde aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         a_lu = st.selectbox("Auftragnehmer (Lohnunternehmen):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         
-        arbeitsart_optionen = ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen", "– Eigene Mod-Arbeitsart eingeben –"]
+        arbeitsart_optionen = db["fruchtarten"] + ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen", "– Eigene Mod-Arbeitsart eingeben –"]
         a_typ_sel = st.selectbox("Arbeitsart:", arbeitsart_optionen)
         
         if a_typ_sel == "– Eigene Mod-Arbeitsart eingeben –":
@@ -449,6 +449,11 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
         if v_frucht.strip() == "":
             st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
         else:
+            # Falls es eine neue Mod-Frucht war, direkt global registrieren
+            if v_frucht.strip() not in db["fruchtarten"]:
+                db["fruchtarten"].append(v_frucht.strip())
+                db["preise"][v_frucht.strip()] = preis_pro_1k
+
             gesamt_erloes = (v_menge / 1000) * preis_pro_1k
             db["hoefe"][v_verkaeufer]["konto"] += gesamt_erloes
             if v_kaeufer in db["hoefe"]:
@@ -491,22 +496,48 @@ elif bereich == "🚜 Fuhrpark & Geräte":
         st.error("Preisliste konnte nicht aus Google Sheets geladen werden. Bitte Freigabe prüfen.")
 
 # ==============================================================================
-# BEREICH 5: MANUELLE FRUCHTPREISE
+# BEREICH 5: MANUELLE FRUCHTPREISE (JETZT MIT MOD-FRUCHT OPTION)
 # ==============================================================================
 elif bereich == "📈 Fruchtpreise (Manuell)":
     st.title("🌾 Fruchtpreis-Zentrale für den Server")
+    
+    # Tabelle mit aktuellen Preisen anzeigen
     df_preise = pd.DataFrame(list(db["preise"].items()), columns=["Fruchtart", "Preis pro 1.000L (€)"])
     st.dataframe(df_preise, use_container_width=True, hide_index=True)
     
     st.write("---")
-    f_auswahl = st.selectbox("Fruchtart auswählen:", db["fruchtarten"])
-    neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500.0)), step=10.0)
+    col_p1, col_p2 = st.columns(2)
     
-    if st.button("Kurs live aktualisieren"):
-        db["preise"][f_auswahl] = neuer_preis
-        speichere_globalen_speicher(db)
-        st.success("Preis aktualisiert!")
-        st.rerun()
+    with col_p1:
+        st.subheader("🔄 Bestehenden Preis ändern")
+        f_auswahl = st.selectbox("Fruchtart auswählen:", db["fruchtarten"])
+        neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500.0)), step=10.0, key="edit_price")
+        
+        if st.button("Kurs live aktualisieren"):
+            db["preise"][f_auswahl] = neuer_preis
+            speichere_globalen_speicher(db)
+            st.success(f"Preis für {f_auswahl} aktualisiert!")
+            st.rerun()
+            
+    with col_p2:
+        st.subheader("➕ Neue Mod-Frucht registrieren")
+        neue_mod_frucht = st.text_input("Name der neuen Mod-Frucht:", placeholder="z. B. Dinkel, Alfalfa, Klee, Senf")
+        mod_start_preis = st.number_input("Startpreis (€ pro 1.000L):", min_value=0.0, value=500.0, step=50.0)
+        
+        if st.button("Mod-Frucht global hinzufügen"):
+            frucht_name_clean = neue_mod_frucht.strip()
+            if frucht_name_clean == "":
+                st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
+            elif frucht_name_clean in db["preise"]:
+                st.error("Diese Frucht existiert bereits im Preissystem!")
+            else:
+                # Frucht global in beide Listen eintragen
+                if frucht_name_clean not in db["fruchtarten"]:
+                    db["fruchtarten"].append(frucht_name_clean)
+                db["preise"][frucht_name_clean] = mod_start_preis
+                speichere_globalen_speicher(db)
+                st.success(f"'{frucht_name_clean}' wurde erfolgreich hinzugefügt und mit {mod_start_preis} € bepreist!")
+                st.rerun()
 
 # ==============================================================================
 # BEREICH 6: FELDVERWALTUNG
@@ -544,6 +575,11 @@ elif bereich == "🗺️ Feldverwaltung":
             if f_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
             else:
+                if f_frucht.strip() not in db["fruchtarten"]:
+                    db["fruchtarten"].append(f_frucht.strip())
+                    if f_frucht.strip() not in db["preise"]:
+                        db["preise"][f_frucht.strip()] = 500.0
+                        
                 db["felder"] = [x for x in db["felder"] if x["id"] != f_id]
                 db["felder"].append({"id": int(f_id), "besitzer": f_besitzer, "groesse": float(f_groesse), "frucht": f_frucht, "status": f_status, "ernte_typ": f_typ})
                 speichere_globalen_speicher(db)
@@ -614,7 +650,12 @@ elif bereich == "📅 Sähe- & Erntekalender":
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
-                # Überschreiben alter, fehlerhafter und gleichnamiger Einträge
+                if k_frucht.strip() not in db["fruchtarten"]:
+                    db["fruchtarten"].append(k_frucht.strip())
+                    if k_frucht.strip() not in db["preise"]:
+                        db["preise"][k_frucht.strip()] = 500.0
+
+                # Überschreiben aller gleichnamigen Einträge
                 neuer_kalender = [x for x in bereinigter_kalender if x["frucht"].lower() != k_frucht.strip().lower()]
                 neuer_kalender.append({
                     "frucht": k_frucht.strip(),
