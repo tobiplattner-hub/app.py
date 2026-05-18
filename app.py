@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import os
+import urllib.request
 from fpdf import FPDF
 
 # ---------------------------------------------------------
@@ -10,7 +11,6 @@ from fpdf import FPDF
 # ---------------------------------------------------------
 st.set_page_config(page_title="LS25 LU- & Hof-Manager", layout="wide", initial_sidebar_state="expanded")
 
-# CSS für ein modernes, landwirtschaftliches Dashboard-Design
 st.markdown("""
 <style>
     .reportview-container { background: #f4f6f0; }
@@ -36,7 +36,6 @@ def extrahiere_monat_int(m_name):
     try: return LISTE_MONATE.index(m_name) + 1
     except: return 1
 
-# Standard-Erntekalender für Basis-Früchte
 KALENDER_STANDARD = {
     "Weizen": {"sa": [1, 2], "er": [5, 6]},
     "Gerste": {"sa": [1, 2], "er": [5]},
@@ -74,7 +73,7 @@ def berechne_erntestatus(frucht, saat_monat, aktueller_monat_name, manueller_sta
         return "🌱 Im Wachstum (Überwinterung)", "🌱"
     return "🌱 Im Wachstum", "🌱"
 
-# PDF-Generator für Rechnungen via FPDF (Extrem abgesichert gegen Unicode-Abstürze)
+# PDF-Generator: Version-safe für alte und neue FPDF2-Bibliotheken
 def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herkunft_hof):
     def clean_str(s):
         if not s: return ""
@@ -127,21 +126,32 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.set_font("Arial", "B", 12)
     pdf.cell(150, 10, "ENDSUMME:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
-    return pdf.output(dest="S").encode("latin-1", errors="ignore")
+    
+    # Output-Sicherheitsnetz gegen fpdf / fpdf2 Versionsunterschiede
+    try:
+        pdf_out = pdf.output(dest="S")
+    except:
+        pdf_out = pdf.output()
+        
+    if isinstance(pdf_out, str):
+        return pdf_out.encode("latin-1", errors="ignore")
+    return pdf_out
 
 # ---------------------------------------------------------
-# DATA-LOADING (GOOGLE SHEETS)
+# DATA-LOADING (GOOGLE SHEETS MIT USER-AGENT FALLBACK)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
     try:
-        df = pd.read_csv(url)
+        # Fallback über urllib, falls pandas direkt blockiert wird
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            df = pd.read_csv(response)
         return df
     except Exception as e:
-        st.sidebar.error(f"Sheets-Fehler: {e}")
+        st.sidebar.error(f"Sheets-Verbindung fehlgeschlagen: {e}")
         return pd.DataFrame()
 
-# Korrigierte, saubere CSV-Export-Links
 sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/export?format=csv"
 sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/export?format=csv"
 
@@ -158,7 +168,7 @@ if not df_kunden.empty and "Kundenname" in df_kunden.columns:
     aktuelle_kunden = df_kunden["Kundenname"].dropna().astype(str).tolist()
 
 # ---------------------------------------------------------
-# INITIALISIERUNG DES SESSIONS STATES (OHNE GADANKENSTRICHE)
+# INITIALISIERUNG DES SESSION STATES
 # ---------------------------------------------------------
 if "_global_custom_kalender" not in st.session_state: st.session_state._global_custom_kalender = {}
 if "_global_fruchtarten" not in st.session_state: st.session_state._global_fruchtarten = sorted(list(KALENDER_STANDARD.keys()))
@@ -167,7 +177,6 @@ if "_global_ingame_jahr" not in st.session_state: st.session_state._global_ingam
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
 if "temp_lu_maschinen" not in st.session_state: st.session_state.temp_lu_maschinen = []
 
-# Ersetzung der langen Gedankenstriche durch normale Bindestriche gegen PDF-Crashes
 if "hof1_name_custom" not in st.session_state: st.session_state.hof1_name_custom = "Hof 1 - Hauptbetrieb"
 if "hof2_name_custom" not in st.session_state: st.session_state.hof2_name_custom = "Hof 2 - Bio-Betrieb"
 if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 - Freier Verbund"
@@ -226,8 +235,10 @@ if neuer_hof3.strip() and neuer_hof3 != alter_hof3:
 st.sidebar.write("---")
 
 liste_hoefe = list(st.session_state._global_hoefe.keys())
-akt_hof_name = st.sidebar.selectbox("🎯 Aktiven Hof verwalten:", liste_hoefe)
-hof_daten = st.session_state._global_hoefe[akt_hof_name]
+if akt_hof_name := st.sidebar.selectbox("🎯 Aktiven Hof verwalten:", liste_hoefe):
+    hof_daten = st.session_state._global_hoefe[akt_hof_name]
+else:
+    st.stop()
 
 st.sidebar.write("---")
 
@@ -498,7 +509,7 @@ elif menu == "🛒 Material & Aufträge":
                 werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
                 werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
     
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
@@ -510,7 +521,6 @@ elif menu == "🛒 Material & Aufträge":
 # ---------------------------------------------------------
 elif menu == "🏗️ Silo-Manager":
     st.title(f"🏗️ Fahrsilo-Zentrale (Gärprozess) - {akt_hof_name}")
-    st.info("Hier kannst du dein geerntetes Frischgut (Gras/Häckselgut) einlagern und gären lassen.")
     
     if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
     if "frischgut" not in hof_daten["lager_store"]: hof_daten["lager_store"]["frischgut"] = 0
@@ -536,7 +546,7 @@ elif menu == "🏗️ Silo-Manager":
                     "dauer_monate": gaer_dauer,
                     "geoeffnet": False
                 })
-                st.success("Silo erfolgreich verdichtet und abgedeckt!")
+                st.success("Silo erfolgreich verdichtet!")
                 st.rerun()
             else:
                 st.error("Nicht genug Frischgut im Lager!")
@@ -559,17 +569,16 @@ elif menu == "🏗️ Silo-Manager":
                 
                 with st.container(border=True):
                     st.markdown(f"**Silo ID: {silo['id']}** ({silo['typ']})")
-                    st.write(f"Menge: {fmt_int(silo['menge'])} Liter | Eingelagert: {silo['start_monat']} J{silo['start_jahr']}")
+                    st.write(f"Menge: {fmt_int(silo['menge'])} Liter")
                     
                     if fertig:
                         st.success("🟢 REIF! Die Silage ist fertig gegoren.")
                         if st.button("📥 Silo öffnen & ins Lager umbuchen", key=f"open_silo_{idx}", use_container_width=True):
                             hof_daten["lager_store"]["silage"] += silo["menge"]
                             hof_daten["silos"].pop(idx)
-                            st.success("Silage ins Hauptlager übertragen!")
                             st.rerun()
                     else:
-                        st.warning(f"⏳ Gärt noch... (Fortschritt: {int(progress * 100)}%)")
+                        st.warning(f"⏳ Gärt noch... ({int(progress * 100)}%)")
                         st.progress(progress)
                         if st.button("🗑️ Silo verwerfen", key=f"del_silo_{idx}"):
                             hof_daten["silos"].pop(idx)
