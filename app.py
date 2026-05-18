@@ -151,8 +151,8 @@ def load_data(url):
         return pd.DataFrame()
 
 # ⚠️ PASSE DIESE BEIDEN LINKS GEMÄSS DER ANLEITUNG UNTEN AN!
-sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/export?format=csv"
-sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/export?format=csv"
+sheet_url_preise = "https://docs.google.com/spreadsheets/d/1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo/edit?gid=0#gid=0"
+sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo/edit?gid=568043650#gid=568043650"
 
 df_preise = load_data(sheet_url_preise)
 df_kunden = load_data(sheet_url_kunden)
