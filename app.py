@@ -23,7 +23,7 @@ st.markdown("""
     .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; }
     .stButton>button:hover { background-color: #1b5e20; color: white; }
 </style>
-""", unsafe_index=True)
+""", unsafe_allow_html=True)
 
 # ==============================================================================
 # 2. INTERNE LIVE-DATENBANK (ZENTRALER CLOUD-SPEICHER)
