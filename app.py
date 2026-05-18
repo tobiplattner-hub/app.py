@@ -74,19 +74,27 @@ def berechne_erntestatus(frucht, saat_monat, aktueller_monat_name, manueller_sta
         return "🌱 Im Wachstum (Überwinterung)", "🌱"
     return "🌱 Im Wachstum", "🌱"
 
-# PDF-Generator für Rechnungen via FPDF (Bereinigt von inkompatiblen Unicode-Zeichen)
+# PDF-Generator für Rechnungen via FPDF (Extrem abgesichert gegen Unicode-Abstürze)
 def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herkunft_hof):
+    def clean_str(s):
+        if not s: return ""
+        s = str(s).replace("—", "-").replace("–", "-").replace("€", "EUR")
+        return s.encode("latin-1", errors="ignore").decode("latin-1")
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
     
-    # Unicode-sichere Texte (keine langen Gedankenstriche)
-    pdf.cell(190, 10, f"RECHNUNG - {herkunft_hof.upper()}", ln=True, align="C")
+    clean_hof = clean_str(herkunft_hof).upper()
+    clean_kunde = clean_str(kunde)
+    clean_date = clean_str(ingame_date)
+    
+    pdf.cell(190, 10, f"RECHNUNG - {clean_hof}", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 5, f"In-Game Datum: {ingame_date} | ID: #RE-{rechnungs_id:04d}", ln=True, align="C")
+    pdf.cell(190, 5, f"In-Game Datum: {clean_date} | ID: #RE-{rechnungs_id:04d}", ln=True, align="C")
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(100, 10, f"Empfaenger / Kunde: {kunde}", ln=True)
+    pdf.cell(100, 10, f"Empfaenger / Kunde: {clean_kunde}", ln=True)
     pdf.ln(5)
     
     # Tabellenkopf
@@ -100,10 +108,9 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.set_font("Arial", "", 10)
     summe = 0
     for p in posten:
-        # Ersetze Euro-Zeichen durch EUR für FPDF-Kompatibilität
-        name_clean = str(p["name"]).replace("—", "-").replace("€", "EUR")
+        name_clean = clean_str(p["name"])
         pdf.cell(80, 8, name_clean, border=1)
-        pdf.cell(30, 8, f"{p['menge']} {p['einheit']}", border=1, align="C")
+        pdf.cell(30, 8, f"{p['menge']} {clean_str(p['einheit'])}", border=1, align="C")
         pdf.cell(40, 8, f"{fmt_float(p['preis'])} EUR", border=1, align="R")
         pdf.cell(40, 8, f"{fmt_float(p['gesamt'])} EUR", border=1, align="R")
         pdf.ln()
@@ -112,7 +119,7 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     total = summe - (summe * (rabatt / 100))
     pdf.ln(5)
     if rabatt > 0:
-        pdf.cell(150, 8, f"Zwischensumme:", align="R")
+        pdf.cell(150, 8, "Zwischensumme:", align="R")
         pdf.cell(40, 8, f"{fmt_float(summe)} EUR", align="R", ln=True)
         pdf.cell(150, 8, f"Rabatt ({rabatt}%):", align="R")
         pdf.cell(40, 8, f"-{fmt_float(summe*(rabatt/100))} EUR", align="R", ln=True)
@@ -123,7 +130,7 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     return pdf.output(dest="S").encode("latin-1", errors="ignore")
 
 # ---------------------------------------------------------
-# DATA-LOADING (KORRIGIERTE LINKS MIT /edit/ VERWEIS)
+# DATA-LOADING (GOOGLE SHEETS)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
@@ -131,10 +138,10 @@ def load_data(url):
         df = pd.read_csv(url)
         return df
     except Exception as e:
-        st.sidebar.error(f"Fehler beim Sheets-Download: {e}")
+        st.sidebar.error(f"Sheets-Fehler: {e}")
         return pd.DataFrame()
 
-# Korrigierte Export-Links, die Google fehlerfrei auflösen kann
+# Korrigierte, saubere CSV-Export-Links
 sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/export?format=csv"
 sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/export?format=csv"
 
@@ -151,7 +158,7 @@ if not df_kunden.empty and "Kundenname" in df_kunden.columns:
     aktuelle_kunden = df_kunden["Kundenname"].dropna().astype(str).tolist()
 
 # ---------------------------------------------------------
-# INITIALISIERUNG DES SESSIONS STATES
+# INITIALISIERUNG DES SESSIONS STATES (OHNE GADANKENSTRICHE)
 # ---------------------------------------------------------
 if "_global_custom_kalender" not in st.session_state: st.session_state._global_custom_kalender = {}
 if "_global_fruchtarten" not in st.session_state: st.session_state._global_fruchtarten = sorted(list(KALENDER_STANDARD.keys()))
@@ -160,10 +167,10 @@ if "_global_ingame_jahr" not in st.session_state: st.session_state._global_ingam
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
 if "temp_lu_maschinen" not in st.session_state: st.session_state.temp_lu_maschinen = []
 
-# Namen-Tracker für die manuelle Änderung der drei Höfe
-if "hof1_name_custom" not in st.session_state: st.session_state.hof1_name_custom = "Hof 1 — Hauptbetrieb"
-if "hof2_name_custom" not in st.session_state: st.session_state.hof2_name_custom = "Hof 2 — Bio-Betrieb"
-if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 — Freier Verbund"
+# Ersetzung der langen Gedankenstriche durch normale Bindestriche gegen PDF-Crashes
+if "hof1_name_custom" not in st.session_state: st.session_state.hof1_name_custom = "Hof 1 - Hauptbetrieb"
+if "hof2_name_custom" not in st.session_state: st.session_state.hof2_name_custom = "Hof 2 - Bio-Betrieb"
+if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 - Freier Verbund"
 
 if "_global_hoefe" not in st.session_state:
     st.session_state._global_hoefe = {
@@ -193,7 +200,6 @@ if "_global_hoefe" not in st.session_state:
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/2760/2760010.png", width=70)
 st.sidebar.title("🚜 LS25 Control Center")
 
-# --- BEREICH: ALLE DREI HOFNAMEN MANUELL ÄNDERN ---
 st.sidebar.subheader("📝 Hofnamen anpassen")
 
 alter_hof1 = st.session_state.hof1_name_custom
@@ -225,7 +231,6 @@ hof_daten = st.session_state._global_hoefe[akt_hof_name]
 
 st.sidebar.write("---")
 
-# Globale In-Game Zeitsteuerung
 st.sidebar.subheader("📅 Globale Betriebszeit")
 c_t1, c_t2 = st.sidebar.columns(2)
 j_alt = st.session_state._global_ingame_jahr
@@ -272,7 +277,7 @@ if "global_verbrauch_herbi" not in st.session_state: st.session_state.global_ver
 # SEITE 1: ERNTE & VERBRAUCHSRATEN
 # ---------------------------------------------------------
 if menu == "💰 Ernte & Verbrauchsraten":
-    st.title(f"💰 Ernteverkauf & Verbrauchs-Mittelung — {akt_hof_name}")
+    st.title(f"💰 Ernteverkauf & Verbrauchs-Mittelung - {akt_hof_name}")
     
     with st.expander("⚙️ Globale Standard-Verbrauchsraten anpassen (pro Hektar)"):
         cl1, cl2, cl3, cl4 = st.columns(4)
@@ -291,7 +296,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
         if f_auswahl in cust_k:
             saat_monate = [LISTE_MONATE[i-1] for i in cust_k[f_auswahl]["sa"]]
             ernte_monate = [LISTE_MONATE[i-1] for i in cust_k[f_auswahl]["er"]]
-            st.info(f"Mod-Fruchtart '{f_auswahl}' active.")
+            st.info(f"Mod-Fruchtart '{f_auswahl}' aktiv.")
         else:
             s_idx = KALENDER_STANDARD.get(f_auswahl, {"sa":[]})["sa"]
             e_idx = KALENDER_STANDARD.get(f_auswahl, {"er":[]})["er"]
@@ -324,7 +329,7 @@ if menu == "💰 Ernte & Verbrauchsraten":
 # SEITE 2: MEINE FELDER & ANBAU
 # ---------------------------------------------------------
 elif menu == "🚜 Meine Felder & Anbau":
-    st.title(f"🚜 Feld-Verwaltung & Kalender — {akt_hof_name}")
+    st.title(f"🚜 Feld-Verwaltung & Kalender - {akt_hof_name}")
     
     with st.expander("✨ Neue Mod-Fruchtart definieren"):
         c_nf1, c_nf2, c_nf3 = st.columns([1.5, 2, 2])
@@ -377,7 +382,7 @@ elif menu == "🚜 Meine Felder & Anbau":
             m_status = f.get('manueller_status', 'Automatisch (Kalender)')
             status_text, farbe = berechne_erntestatus(aktuelle_frucht, s_monat, st.session_state._global_ingame_monat, m_status)
             
-            with st.expander(f"🗺️ {f['nummer']} — ({fmt_float(f['groesse'])} ha) — [{status_text}]"):
+            with st.expander(f"🗺️ {f['nummer']} - ({fmt_float(f['groesse'])} ha) - [{status_text}]"):
                 c_inf, c_change, c_time, c_manual_state, c_act1, c_act2, c_del = st.columns([1.5, 1.3, 1.2, 1.3, 0.9, 0.9, 0.6])
                 bedarf_saat = f["groesse"] * f.get("rate_saat", 150)
                 
@@ -410,7 +415,7 @@ elif menu == "🚜 Meine Felder & Anbau":
 # SEITE 3: RECHNUNGEN
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
-    st.title(f"📋 Rechnungs-Zentrale — Erstellt von: {akt_hof_name}")
+    st.title(f"📋 Rechnungs-Zentrale - Erstellt von: {akt_hof_name}")
     col_eingabe, col_liste = st.columns([1, 1.2])
     with col_eingabe:
         st.subheader("Posten hinzufügen")
@@ -474,7 +479,7 @@ elif menu == "📋 Rechnungen":
 # SEITE 4: MATERIAL & AUFTRÄGE
 # ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
-    st.title(f"🛒 Material-Lagerbestand — {akt_hof_name}")
+    st.title(f"🛒 Material-Lagerbestand - {akt_hof_name}")
     
     if "frischgut" not in hof_daten["lager_store"]: hof_daten["lager_store"]["frischgut"] = 0
     if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
@@ -493,7 +498,7 @@ elif menu == "🛒 Material & Aufträge":
                 werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
                 werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
     
-    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
@@ -504,7 +509,7 @@ elif menu == "🛒 Material & Aufträge":
 # SEITE 5: SILO-MANAGER
 # ---------------------------------------------------------
 elif menu == "🏗️ Silo-Manager":
-    st.title(f"🏗️ Fahrsilo-Zentrale (Gärprozess) — {akt_hof_name}")
+    st.title(f"🏗️ Fahrsilo-Zentrale (Gärprozess) - {akt_hof_name}")
     st.info("Hier kannst du dein geerntetes Frischgut (Gras/Häckselgut) einlagern und gären lassen.")
     
     if "silage" not in hof_daten["lager_store"]: hof_daten["lager_store"]["silage"] = 0
@@ -574,7 +579,7 @@ elif menu == "🏗️ Silo-Manager":
 # SEITE 6: LU-AUFTRAGSBUCH
 # ---------------------------------------------------------
 elif menu == "📝 LU-Auftragsbuch":
-    st.title(f"📝 LU-Auftragsbuch — {akt_hof_name}")
+    st.title(f"📝 LU-Auftragsbuch - {akt_hof_name}")
     col_a, col_b = st.columns([1.1, 1.4])
     with col_a:
         st.subheader("➕ Auftrag erstellen")
@@ -630,7 +635,7 @@ elif menu == "📝 LU-Auftragsbuch":
 # SEITE 7: FUHRPARK-MANAGER
 # ---------------------------------------------------------
 elif menu == "🛒 Fuhrpark-Manager":
-    st.title(f"🚛 Fuhrpark-Manager — {akt_hof_name}")
+    st.title(f"🚛 Fuhrpark-Manager - {akt_hof_name}")
     col_f1, col_f2 = st.columns([1, 1.5])
     with col_f1:
         if preis_dict:
@@ -654,7 +659,7 @@ elif menu == "🛒 Fuhrpark-Manager":
 # SEITE 8: KASSENBUCH
 # ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
-    st.title(f"📖 Kassenbuch & Finanzzentrale — {akt_hof_name}")
+    st.title(f"📖 Kassenbuch & Finanzzentrale - {akt_hof_name}")
     with st.expander("➕ Manuelle Buchung durchführen"):
         c_kb1, c_kb2, c_kb3 = st.columns([1, 2, 1.2])
         b_typ = c_kb1.selectbox("Buchungs-Typ:", ["Ausgabe", "Einnahme"])
