@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# Helper-Funktion für PDF-Erstellung (Logo nochmals vergrößert)
+# Helper-Funktion für PDF-Erstellung
 # ==============================================================================
 def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     buffer = io.BytesIO()
@@ -45,10 +45,9 @@ def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, leading=16)
     bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=11, leading=16, fontName='Helvetica-Bold')
 
-    # 1. Logo einbinden (Extragroß für optimale Lesbarkeit)
+    # 1. Logo einbinden (Extragroß)
     if os.path.exists("logo.png"):
         try:
-            # Breite auf 280 und Höhe auf 110 erhöht, damit Details im Logo gut erkennbar sind
             logo = Image("logo.png", width=280, height=110)
             logo.hAlign = 'RIGHT'
             story.append(logo)
@@ -90,7 +89,6 @@ def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
         ('TOPPADDING', (1,-1), (-1,-1), 10),
     ]))
     
-    # Textfarbe für den Tabellenheader fixen (auf Weiss stellen)
     for i in range(3):
         data[0][i].style.textColor = colors.whitesmoke
 
@@ -105,12 +103,11 @@ def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     return buffer
 
 # ==============================================================================
-# 2. INTERNE LIVE-DATENBANK (ZENTRALER CLOUD-SPEICHER)
+# 2. INTERNE LIVE-DATENBANK
 # ==============================================================================
 DB_DATEI = "ls25_multiplayer_live_data.json"
 
 def lade_globalen_speicher():
-    """Lädt alle Daten live für alle Spieler aus der gemeinsamen Datei"""
     default_daten = {
         "hoefe": {
             "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": 500000.0},
@@ -170,18 +167,16 @@ def lade_globalen_speicher():
         return default_daten
 
 def speichere_globalen_speicher(daten):
-    """Speichert Änderungen sofort auf dem Server ab"""
     with open(DB_DATEI, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False, indent=4)
 
-# Live-Daten holen
 db = lade_globalen_speicher()
 
 LISTE_MONATE = ["März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember", "Januar", "Februar"]
 LISTE_STATUS = ["Wachstum", "Erntebereit", "Gegrubbert", "Gepflügt", "Gekalkt", "Stoppel"]
 
 # ==============================================================================
-# 3. SIDEBAR (SERVER-STEUERUNG FÜR HOFNAMEN & NAVIGATION)
+# 3. SIDEBAR
 # ==============================================================================
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
@@ -275,7 +270,7 @@ elif bereich == "📅 Saatenkalender":
             st.write("---")
 
 # ==============================================================================
-# BEREICH 4: FELDVERWALTUNG
+# BEREICH 4: FELDVERWALTUNG (Mit neuer Lösch-Option)
 # ==============================================================================
 elif bereich == "🗺️ Feldverwaltung":
     st.title("🗺️ Globale Feldverwaltung")
@@ -288,10 +283,10 @@ elif bereich == "🗺️ Feldverwaltung":
         st.info("Es sind noch keine Felder registriert.")
         
     st.write("---")
-    col_add, col_edit = st.columns(2)
+    col_add, col_edit, col_del = st.columns(3)
     
     with col_add:
-        st.subheader(" Feld hinzufügen")
+        st.subheader("➕ Feld hinzufügen")
         f_id = st.number_input("Feldnummer:", min_value=1, step=1)
         f_besitzer = st.selectbox("Besitzer Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         f_groesse = st.number_input("Größe (ha):", min_value=0.1, step=0.1)
@@ -308,9 +303,9 @@ elif bereich == "🗺️ Feldverwaltung":
                 st.rerun()
                 
     with col_edit:
-        st.subheader(" Feldstatus live updaten")
+        st.subheader("🔄 Feldstatus live updaten")
         if db["felder"]:
-            f_id_waehl = st.selectbox("Feld zum Bearbeiten:", [x["id"] for x in db["felder"]])
+            f_id_waehl = st.selectbox("Feld zum Bearbeiten:", [x["id"] for x in db["felder"]], key="edit_select")
             f_neu_status = st.selectbox("Neuer Status:", LISTE_STATUS)
             f_neu_frucht = st.selectbox("Neue Frucht drauf:", db["fruchtarten"])
             
@@ -323,6 +318,24 @@ elif bereich == "🗺️ Feldverwaltung":
                 speichere_globalen_speicher(db)
                 st.success(f"Feld {f_id_waehl} live geupdated!")
                 st.rerun()
+        else:
+            st.caption("Keine Felder zum Bearbeiten da.")
+
+    with col_del:
+        st.subheader("❌ Feld entfernen")
+        if db["felder"]:
+            f_id_loeschen = st.selectbox("Welches Feld soll gelöscht werden?", [x["id"] for x in db["felder"]], key="del_select")
+            
+            # Warnhinweis zur Sicherheit
+            st.warning(f"Achtung: Feld {f_id_loeschen} wird permanent vom Server gelöscht!")
+            if st.button("🗑️ Feld unwiderruflich entfernen"):
+                # Filtert das ausgewählte Feld aus der Liste heraus
+                db["felder"] = [x for x in db["felder"] if x["id"] != f_id_loeschen]
+                speichere_globalen_speicher(db)
+                st.success(f"Feld {f_id_loeschen} erfolgreich entfernt!")
+                st.rerun()
+        else:
+            st.caption("Keine Felder zum Löschen vorhanden.")
 
 # ==============================================================================
 # BEREICH 5: MASCHINENPOOL
@@ -370,7 +383,6 @@ elif bereich == "💼 LU-Auftragsbuch":
     st.write("---")
     col_rechnung, col_neu_auf = st.columns(2)
     
-    # RECHNUNGSFUNKTION
     with col_rechnung:
         st.subheader("💳 Auftrag abrechnen (Geld überweisen)")
         offene_auftraege = [x for x in db["auftraege"] if x.get("status") == "Offen"]
@@ -390,7 +402,6 @@ elif bereich == "💼 LU-Auftragsbuch":
                         lu = auf["auftragnehmer"]
                         preis = auf["preis"]
                         
-                        # Live-Überweisung durchführen!
                         db["hoefe"][kunde]["konto"] -= preis  
                         db["hoefe"][lu]["konto"] += preis     
                         auf["status"] = "Abgerechnet"
@@ -420,7 +431,6 @@ elif bereich == "💼 LU-Auftragsbuch":
                 mime="application/pdf"
             )
             
-    # NEUEN AUFTRAG ERSTELLEN
     with col_neu_auf:
         st.subheader("📌 Neuen Auftrag ausschreiben")
         a_kunde = st.selectbox("Auftraggeber (Kunde):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="ku")
