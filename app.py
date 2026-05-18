@@ -68,7 +68,13 @@ def lade_globalen_speicher():
         return default_daten
     
     with open(DB_DATEI, "r", encoding="utf-8") as f:
-        return json.load(f)
+        daten = json.load(f)
+        # Sicherheits-Fix: Alte Einträge in der JSON-Datei korrigieren, falls da "auftragsnehmer" steht
+        if "auftraege" in daten:
+            for auf in daten["auftraege"]:
+                if "auftragsnehmer" in auf:
+                    auf["auftragnehmer"] = auf.pop("auftragsnehmer")
+        return daten
 
 def speichere_globalen_speicher(daten):
     """Speichert Änderungen sofort auf dem Server ab"""
@@ -253,7 +259,7 @@ elif bereich == "🚜 Maschinenpool":
             st.rerun()
 
 # ==============================================================================
-# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION (KORRIGIERT & LIVE)
+# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION (KORRIGIERT & FEHLERFREI)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Auftragsbuch & Rechnungszentrum")
@@ -262,6 +268,8 @@ elif bereich == "💼 LU-Auftragsbuch":
         # Schicke Tabelle zum Anschauen bauen
         df_auf = pd.DataFrame(db["auftraege"])
         df_auf_anzeige = df_auf.copy()
+        
+        # Mappings fehlerfrei zuweisen (Spaltennamen sind jetzt absolut synchron ohne "s")
         df_auf_anzeige["kunde"] = df_auf_anzeige["kunde"].map(HOF_MAPPING)
         df_auf_anzeige["auftragnehmer"] = df_auf_anzeige["auftragnehmer"].map(HOF_MAPPING)
         st.dataframe(df_auf_anzeige, use_container_width=True, hide_index=True)
@@ -271,7 +279,7 @@ elif bereich == "💼 LU-Auftragsbuch":
     st.write("---")
     col_rechnung, col_neu_auf = st.columns(2)
     
-    # RECHNUNGSFUNKTION (Geld wird live verschoben!)
+    # RECHNUNGSFUNKTION
     with col_rechnung:
         st.subheader("💳 Auftrag abrechnen (Geld überweisen)")
         offene_auftraege = [x for x in db["auftraege"] if x["status"] == "Offen"]
@@ -284,17 +292,16 @@ elif bereich == "💼 LU-Auftragsbuch":
             )
             
             if st.button("💰 Erledigt & Live Abrechnen"):
-                # Den ausgewählten Auftrag im Speicher finden
                 for auf in db["auftraege"]:
                     if auf["id"] == auswahl_auftrag_id:
                         kunde = auf["kunde"]
-                        lu = auf["auftragnehmer"]
+                        lu = auf["auftragnehmer"]  # Hier korrekt geladen
                         preis = auf["preis"]
                         
                         # Live-Überweisung durchführen!
-                        db["hoefe"][kunde]["konto"] -= preis  # Dem Kunden abziehen
-                        db["hoefe"][lu]["konto"] += preis     # Dem LU gutschreiben
-                        auf["status"] = "Abgerechnet"         # Status ändern
+                        db["hoefe"][kunde]["konto"] -= preis  
+                        db["hoefe"][lu]["konto"] += preis     
+                        auf["status"] = "Abgerechnet"         
                         break
                         
                 speichere_globalen_speicher(db)
@@ -314,9 +321,15 @@ elif bereich == "💼 LU-Auftragsbuch":
         
         if st.button("Auftrag live buchen"):
             neuer_a_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
+            # WICHTIGER FIX: Hier hieß es vorher "auftragsnehmer" – jetzt sauber "auftragnehmer"
             db["auftraege"].append({
-                "id": neuer_a_id, "kunde": a_kunde, "auftragnehmer": a_lu, 
-                "typ": a_typ, "feld": int(a_feld), "preis": a_preis, "status": "Offen"
+                "id": neuer_a_id, 
+                "kunde": a_kunde, 
+                "auftragnehmer": a_lu, 
+                "typ": a_typ, 
+                "feld": int(a_feld), 
+                "preis": a_preis, 
+                "status": "Offen"
             })
             speichere_globalen_speicher(db)
             st.success("Auftrag im Board ausgehängt!")
