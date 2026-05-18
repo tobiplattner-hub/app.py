@@ -74,17 +74,19 @@ def berechne_erntestatus(frucht, saat_monat, aktueller_monat_name, manueller_sta
         return "🌱 Im Wachstum (Überwinterung)", "🌱"
     return "🌱 Im Wachstum", "🌱"
 
-# PDF-Generator für Rechnungen via FPDF
+# PDF-Generator für Rechnungen via FPDF (Bereinigt von inkompatiblen Unicode-Zeichen)
 def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herkunft_hof):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, f"RECHNUNG — {herkunft_hof.upper()}", ln=True, align="C")
+    
+    # Unicode-sichere Texte (keine langen Gedankenstriche)
+    pdf.cell(190, 10, f"RECHNUNG - {herkunft_hof.upper()}", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
     pdf.cell(190, 5, f"In-Game Datum: {ingame_date} | ID: #RE-{rechnungs_id:04d}", ln=True, align="C")
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(100, 10, f"Empfänger / Kunde: {kunde}", ln=True)
+    pdf.cell(100, 10, f"Empfaenger / Kunde: {kunde}", ln=True)
     pdf.ln(5)
     
     # Tabellenkopf
@@ -98,10 +100,12 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.set_font("Arial", "", 10)
     summe = 0
     for p in posten:
-        pdf.cell(80, 8, str(p["name"]), border=1)
+        # Ersetze Euro-Zeichen durch EUR für FPDF-Kompatibilität
+        name_clean = str(p["name"]).replace("—", "-").replace("€", "EUR")
+        pdf.cell(80, 8, name_clean, border=1)
         pdf.cell(30, 8, f"{p['menge']} {p['einheit']}", border=1, align="C")
-        pdf.cell(40, 8, f"{fmt_float(p['preis'])} €", border=1, align="R")
-        pdf.cell(40, 8, f"{fmt_float(p['gesamt'])} €", border=1, align="R")
+        pdf.cell(40, 8, f"{fmt_float(p['preis'])} EUR", border=1, align="R")
+        pdf.cell(40, 8, f"{fmt_float(p['gesamt'])} EUR", border=1, align="R")
         pdf.ln()
         summe += p["gesamt"]
         
@@ -109,28 +113,28 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.ln(5)
     if rabatt > 0:
         pdf.cell(150, 8, f"Zwischensumme:", align="R")
-        pdf.cell(40, 8, f"{fmt_float(summe)} €", align="R", ln=True)
+        pdf.cell(40, 8, f"{fmt_float(summe)} EUR", align="R", ln=True)
         pdf.cell(150, 8, f"Rabatt ({rabatt}%):", align="R")
-        pdf.cell(40, 8, f"-{fmt_float(summe*(rabatt/100))} €", align="R", ln=True)
+        pdf.cell(40, 8, f"-{fmt_float(summe*(rabatt/100))} EUR", align="R", ln=True)
         
     pdf.set_font("Arial", "B", 12)
     pdf.cell(150, 10, "ENDSUMME:", align="R")
-    pdf.cell(40, 10, f"{fmt_float(total)} €", align="R", ln=True)
+    pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     return pdf.output(dest="S").encode("latin-1", errors="ignore")
 
 # ---------------------------------------------------------
-# DATA-LOADING (DIREKT-LINKS GEGEN 404-FEHLER)
+# DATA-LOADING (KORRIGIERTE LINKS MIT /edit/ VERWEIS)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
     try:
-        csv_url = url.replace('/edit?usp=sharing', '/export?format=csv')
-        df = pd.read_csv(csv_url)
+        df = pd.read_csv(url)
         return df
     except Exception as e:
         st.sidebar.error(f"Fehler beim Sheets-Download: {e}")
         return pd.DataFrame()
 
+# Korrigierte Export-Links, die Google fehlerfrei auflösen kann
 sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/export?format=csv"
 sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/export?format=csv"
 
@@ -255,7 +259,7 @@ menu = st.sidebar.radio("Navigation", [
     "🛒 Material & Aufträge",
     "🏗️ Silo-Manager",
     "📝 LU-Auftragsbuch",
-    "🚛 Fuhrpark-Manager",
+    "🛒 Fuhrpark-Manager",
     "📖 Detailliertes Kassenbuch"
 ])
 
@@ -489,7 +493,7 @@ elif menu == "🛒 Material & Aufträge":
                 werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
                 werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
     
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
@@ -625,7 +629,7 @@ elif menu == "📝 LU-Auftragsbuch":
 # ---------------------------------------------------------
 # SEITE 7: FUHRPARK-MANAGER
 # ---------------------------------------------------------
-elif menu == "🚛 Fuhrpark-Manager":
+elif menu == "🛒 Fuhrpark-Manager":
     st.title(f"🚛 Fuhrpark-Manager — {akt_hof_name}")
     col_f1, col_f2 = st.columns([1, 1.5])
     with col_f1:
