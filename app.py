@@ -24,8 +24,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# LOGO-URL DEINES LOHNUNTERNEHMENS
-LOGO_URL = "https://i.ibb.co/680m6vF/ls25-logo.png"
+# LOKALE LOGO-DATEI NUR FÜR DIE RECHNUNGEN
+LOGO_DATEI = "logo.png"
 
 # ---------------------------------------------------------
 # GLOBALE KONSTANTEN & HILFSFUNKTIONEN
@@ -85,12 +85,15 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf = FPDF()
     pdf.add_page()
     
-    # Logo in PDF einfügen falls vorhanden
-    try:
-        pdf.image(LOGO_URL, x=10, y=8, w=33)
-        pdf.ln(15)
-    except:
-        pass
+    # Nutzt das lokale logo.png für die Rechnungen, falls vorhanden
+    if os.path.exists(LOGO_DATEI):
+        try:
+            pdf.image(LOGO_DATEI, x=10, y=8, w=33)
+            pdf.ln(15)
+        except Exception:
+            pdf.ln(5)
+    else:
+        pdf.ln(5)
         
     pdf.set_font("Arial", "B", 16)
     clean_hof = clean_str(herkunft_hof).upper()
@@ -235,11 +238,8 @@ HOF_MAPPING = {
 HOF_MAPPING_REVERSE = {v: k for k, v in HOF_MAPPING.items()}
 
 # ---------------------------------------------------------
-# SIDEBAR: MANAGEMENT & LOGO
+# SIDEBAR: MANAGEMENT (Logo hier komplett entfernt)
 # ---------------------------------------------------------
-try: st.sidebar.image(LOGO_URL, use_container_width=True)
-except: pass
-
 st.sidebar.title("🚜 LS25 Control Center")
 
 # Dropdown mit den schönen, editierten Namen anzeigen
@@ -278,7 +278,7 @@ menu = st.sidebar.radio("Navigation", [
     "📖 Detailliertes Kassenbuch"
 ])
 
-# ⚙️ WIEDER EINGEBAUT: MANUELLE HOFNAMEN-ÄNDERUNG IN SIDEBAR
+# ⚙️ MANUELLE HOFNAMEN-ÄNDERUNG IN SIDEBAR
 st.sidebar.write("---")
 with st.sidebar.expander("⚙️ Hofnamen anpassen"):
     h1_new = st.text_input("Name Hof 1:", value=st.session_state.hof1_name_custom)
@@ -435,7 +435,6 @@ elif menu == "📋 Rechnungen":
         rabatt = st.slider("Rabatt (%)", 0, 50, 0)
         full_ingame_date = f"J{st.session_state._global_ingame_jahr}-{st.session_state._global_ingame_monat}"
         
-        # Zeigt schöne Namen im Verbuchungs-Dropdown an
         ziel_schoener_name = st.selectbox("🎯 Geldeingang verbuchen auf:", liste_schoene_namen, index=liste_schoene_namen.index(akt_schoener_name))
         ziel_interner_schluessel = HOF_MAPPING_REVERSE[ziel_schoener_name]
         
@@ -479,7 +478,7 @@ elif menu == "🛒 Material & Aufträge":
         colx1, colx2 = st.columns(2)
         werte[f"v_{mat}"] = colx1.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
         werte[f"g_{mat}"] = colx2.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
-    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
@@ -592,7 +591,7 @@ elif menu == "🛒 Fuhrpark-Manager":
         for f_name, f_stunden in list(hof_daten["fuhrpark_store"].items()):
             with st.container(border=True):
                 c_fn, c_fh, c_fdel = st.columns([2.5, 1.5, 0.5])
-                c_fn.write(f"**{f_name}**  \n*Listenpreis: {preis_dict.get(f_name, 0.0)} €/h*")
+                c_fn.write(f"**{f_name}** \n*Listenpreis: {preis_dict.get(f_name, 0.0)} €/h*")
                 neue_stunden = c_fh.number_input("Stunden", min_value=0.0, value=float(f_stunden), key=f"f_h_{f_name}")
                 if neue_stunden != f_stunden: hof_daten["fuhrpark_store"][f_name] = neue_stunden; st.rerun()
                 if c_fdel.button("🗑️", key=f"del_m_{f_name}"): del hof_daten["fuhrpark_store"][f_name]; st.rerun()
