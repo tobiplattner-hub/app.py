@@ -533,7 +533,7 @@ elif bereich == "🗺️ Feldverwaltung":
         f_frucht_sel = st.selectbox("Fruchtart:", feld_frucht_optionen)
         
         if f_frucht_sel == "– Eigene Mod-Frucht eingeben –":
-            f_frucht = st.text_input("Name der Mod-Frucht eingeben (Feld):", placeholder="z.B. Klee, Luzerne, Vermehrungsgras")
+            f_frucht = st.text_input("Name der Mod-Frucht eingeben (Feld):", placeholder="z.b. Klee, Luzerne, Vermehrungsgras")
         else:
             f_frucht = f_frucht_sel
             
@@ -561,13 +561,20 @@ elif bereich == "🗺️ Feldverwaltung":
                 st.rerun()
 
 # ==============================================================================
-# BEREICH 7: NEUER SÄHE- & ERNTEKALENDER
+# BEREICH 7: SÄHE- & ERNTEKALENDER (FEHLERTOLERANTE LIVE-VERSION)
 # ==============================================================================
 elif bereich == "📅 Sähe- & Erntekalender":
     st.title("📅 Server Anbau- & Erntekalender (inkl. Mod-Früchte)")
     
+    # Validiere alte Datenbestände, damit nur saubere Wörterbücher gerendert werden
+    bereinigter_kalender = []
     if db.get("kalender"):
-        df_kalender = pd.DataFrame(db["kalender"])
+        for eintrag in db["kalender"]:
+            if isinstance(eintrag, dict) and "frucht" in eintrag:
+                bereinigter_kalender.append(eintrag)
+                
+    if bereinigter_kalender:
+        df_kalender = pd.DataFrame(bereinigter_kalender)
         df_kal_anzeige = df_kalender.rename(columns={
             "frucht": "Fruchtart / Kultur",
             "saat_von": "Säen ab",
@@ -577,7 +584,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         })
         st.dataframe(df_kal_anzeige, use_container_width=True, hide_index=True)
     else:
-        st.info("Bisher keine Einträge im Kalender vorhanden.")
+        st.info("Bisher keine gültigen Einträge im Kalender vorhanden.")
         
     st.write("---")
     col_k1, col_k2 = st.columns(2)
@@ -607,25 +614,28 @@ elif bereich == "📅 Sähe- & Erntekalender":
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
-                # Vorhandene Einträge für diese Frucht löschen (Überschreiben)
-                db["kalender"] = [x for x in db["kalender"] if x["frucht"].lower() != k_frucht.strip().lower()]
-                db["kalender"].append({
+                # Überschreiben alter, fehlerhafter und gleichnamiger Einträge
+                neuer_kalender = [x for x in bereinigter_kalender if x["frucht"].lower() != k_frucht.strip().lower()]
+                neuer_kalender.append({
                     "frucht": k_frucht.strip(),
                     "saat_von": k_saat_von,
                     "saat_bis": k_saat_bis,
                     "ernte_von": k_ernte_von,
                     "ernte_bis": k_ernte_bis
                 })
+                db["kalender"] = neuer_kalender
                 speichere_globalen_speicher(db)
                 st.success(f"Kalenderdaten für '{k_frucht}' live synchronisiert!")
                 st.rerun()
                 
     with col_k2:
         st.subheader("🗑️ Fruchttyp aus Kalender löschen")
-        if db.get("kalender"):
-            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["frucht"] for x in db["kalender"]])
+        if bereinigter_kalender:
+            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["frucht"] for x in bereinigter_kalender])
             if st.button("🔴 Aus Kalender löschen"):
-                db["kalender"] = [x for x in db["kalender"] if x["frucht"] != k_loesch_frucht]
+                db["kalender"] = [x for x in bereinigter_kalender if x["frucht"] != k_loesch_frucht]
                 speichere_globalen_speicher(db)
                 st.success(f"'{k_loesch_frucht}' wurde aus dem Kalender gelöscht.")
                 st.rerun()
+        else:
+            st.info("Keine löschbaren Einträge vorhanden.")
