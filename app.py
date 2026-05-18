@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# Helper-Funktion für PDF-Erstellung (Logo-Größe optimiert)
+# Helper-Funktion für PDF-Erstellung (Logo nochmals vergrößert)
 # ==============================================================================
 def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     buffer = io.BytesIO()
@@ -45,14 +45,14 @@ def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, leading=16)
     bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=11, leading=16, fontName='Helvetica-Bold')
 
-    # 1. Logo einbinden (Größe verdoppelt & proportional)
+    # 1. Logo einbinden (Extragroß für optimale Lesbarkeit)
     if os.path.exists("logo.png"):
         try:
-            # width=200, height=80 sorgt für eine schöne, ungedrückte Präsenz oben rechts
-            logo = Image("logo.png", width=200, height=80)
+            # Breite auf 280 und Höhe auf 110 erhöht, damit Details im Logo gut erkennbar sind
+            logo = Image("logo.png", width=280, height=110)
             logo.hAlign = 'RIGHT'
             story.append(logo)
-            story.append(Spacer(1, 10))
+            story.append(Spacer(1, 15))
         except:
             pass
 
@@ -448,7 +448,7 @@ elif bereich == "💼 LU-Auftragsbuch":
 # BEREICH 7: MOD-FRÜCHTE HINZUFÜGEN
 # ==============================================================================
 elif bereich == "🌱 Mod-Früchte hinzufügen":
-    st.title("🌱 Neue Mod-Früchte registerieren")
+    st.title("🌱 Neue Mod-Früchte registrieren")
     
     neue_frucht = st.text_input("Name der Frucht:").strip()
     neu_saat = st.multiselect("In welchen Monaten wird gesät?", LISTE_MONATE)
