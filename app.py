@@ -107,12 +107,17 @@ def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
 # ==============================================================================
 DB_DATEI = "ls25_multiplayer_live_data.json"
 
+# Standard-Finanzwerte für den Reset definieren
+START_KONTO_HOF1 = 500000.0
+START_KONTO_HOF2 = 350000.0
+START_KONTO_HOF3 = 200000.0
+
 def lade_globalen_speicher():
     default_daten = {
         "hoefe": {
-            "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": 500000.0},
-            "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": 350000.0},
-            "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": 200000.0}
+            "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": START_KONTO_HOF1},
+            "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": START_KONTO_HOF2},
+            "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": START_KONTO_HOF3}
         },
         "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln", "Zuckerrüben"],
         "preise": {
@@ -176,7 +181,7 @@ LISTE_MONATE = ["März", "April", "Mai", "Juni", "Juli", "August", "September", 
 LISTE_STATUS = ["Wachstum", "Erntebereit", "Gegrubbert", "Gepflügt", "Gekalkt", "Stoppel"]
 
 # ==============================================================================
-# 3. SIDEBAR (Mit neuer Reset-Funktion für das Auftragsbuch)
+# 3. SIDEBAR (Getrennte Reset-Optionen für Kassenbuch ODER Aufträge)
 # ==============================================================================
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
@@ -193,19 +198,33 @@ with st.sidebar.expander("📝 Hofnamen live ändern"):
         st.success("Erfolgreich gespeichert!")
         st.rerun()
 
-# NEU: Kassenbuch / Auftragsbuch zurücksetzen
+# GETRENNTER RESET: Kassenbuch ODER Auftragsbuch separat steuern
 with st.sidebar.expander("⚠️ Server-Daten zurücksetzen"):
-    st.write("Hier kannst du das komplette Auftragsbuch für eine neue Saison leeren.")
-    sicherheits_check = st.checkbox("Ja, ich will das Auftragsbuch unwiderruflich leeren", value=False)
+    st.markdown("### 💰 Kassenbuch (Finanzen)")
+    check_kasse = st.checkbox("Ja, Kontostände auf Startwert setzen", value=False, key="check_kasse")
+    if st.button("🚨 Nur Kassenbuch zurücksetzen"):
+        if check_kasse:
+            db["hoefe"]["Hof 1"]["konto"] = START_KONTO_HOF1
+            db["hoefe"]["Hof 2"]["konto"] = START_KONTO_HOF2
+            db["hoefe"]["Hof 3"]["konto"] = START_KONTO_HOF3
+            speichere_globalen_speicher(db)
+            st.sidebar.success("Kontostände erfolgreich zurückgesetzt!")
+            st.rerun()
+        else:
+            st.sidebar.error("Bitte Häkchen für Kassenbuch setzen!")
+
+    st.markdown("---")
     
-    if st.button("🚨 Auftragsbuch komplett zurücksetzen"):
-        if sicherheits_check:
-            db["auftraege"] = []  # Leert die Liste aller Lohnaufträge komplett
+    st.markdown("### 📋 Auftragsbuch")
+    check_auftraege = st.checkbox("Ja, alle Aufträge unwiderruflich löschen", value=False, key="check_auftraege")
+    if st.button("🗑️ Nur Auftragsbuch leeren"):
+        if check_auftraege:
+            db["auftraege"] = []  
             speichere_globalen_speicher(db)
             st.sidebar.success("Auftragsbuch erfolgreich geleert!")
             st.rerun()
         else:
-            st.sidebar.error("Bitte bestätige zuerst die Sicherheits-Checkbox!")
+            st.sidebar.error("Bitte Häkchen für Auftragsbuch setzen!")
 
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
