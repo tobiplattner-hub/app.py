@@ -32,16 +32,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# GOOGLE SHEETS LIVE-IMPORT (ANGEPASST AN DEINE STRUKTUR)
+# GOOGLE SHEETS LIVE-IMPORT (DEINE DEKLARIERTE TABELLEN-ID)
 # ==============================================================================
-# Ersetze diese ID mit der ID deiner echten Google Tabelle!
-SHEET_ID = "DEINE_GOOGLE_SHEET_ID_HIER_EINTRAGEN" 
+# Deine Live-ID ist hier fest hinterlegt:
+SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo" 
 
 def lade_maschinen_aus_sheets():
-    if SHEET_ID == "DEINE_GOOGLE_SHEET_ID_HIER_EINTRAGEN":
-        st.sidebar.warning("🔗 Bitte trage deine echte Google Sheet ID im Code ein!")
-        return None
-    
     try:
         # Lädt dein spezifisches Blatt "preisliste"
         url_maschinen = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=preisliste"
@@ -51,7 +47,7 @@ def lade_maschinen_aus_sheets():
         df_masch.columns = df_masch.columns.str.strip()
         return df_masch
     except Exception as e:
-        st.sidebar.error("Fehler beim Laden der 'preisliste' aus Google Sheets. Bitte Spaltennamen (geraet, Preis) und Freigabe prüfen.")
+        st.sidebar.error("Fehler beim Laden aus Google Sheets. Bitte prüfe, ob das Sheet auf 'Jeder, der den Link hat, kann ansehen' freigegeben ist und die Spalten exakt 'geraet' und 'Preis' heißen.")
         return None
 
 # ==============================================================================
@@ -154,7 +150,7 @@ def speichere_globalen_speicher(daten):
 
 db = lade_globalen_speicher()
 
-# Live-Abruf der Fahrzeuge aus deiner Google Sheets "preisliste"
+# Live-Abruf der Fahrzeuge aus deiner echten Google Sheets "preisliste"
 df_sheet_masch = lade_maschinen_aus_sheets()
 
 HOF_MAPPING = {
@@ -197,7 +193,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.metric(label=v["name"], value=f"{v['konto']:,.2f} €")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH (ABRECHNUNG BEZOGEN AUF DEINE SHEET-STRUKTUR)
+# BEREICH 2: LU-AUFTRAGSBUCH
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -211,7 +207,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         a_typ = st.selectbox("Arbeitsart:", ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen"])
         
     with col_b:
-        # Filtert die Liste der Geräte aus der Spalte 'geraet' deines Google Sheets
+        # Filtert die Liste der Geräte aus deiner Spalte 'geraet' aus Google Sheets
         if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
             verfuegbare_maschinen = df_sheet_masch['geraet'].dropna().unique().tolist()
         else:
@@ -223,8 +219,8 @@ elif bereich == "💼 LU-Auftragsbuch":
     if st.button("Auftrag live ausschreiben"):
         neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
         
-        # Holt den Stundensatz aus deiner Spalte 'Preis'
-        stundensatz_aus_sheet = 150.0  # Fallback falls nichts gefunden wird
+        # Holt den Stundensatz aus deiner Google-Spalte 'Preis'
+        stundensatz_aus_sheet = 150.0  # Fallback
         if df_sheet_masch is not None and a_maschine in df_sheet_masch['geraet'].values:
             stundensatz_aus_sheet = float(df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values[0])
             
@@ -233,7 +229,7 @@ elif bereich == "💼 LU-Auftragsbuch":
             "feld": int(a_feld), "maschine": a_maschine, "stundensatz": stundensatz_aus_sheet, "status": "Offen"
         })
         speichere_globalen_speicher(db)
-        st.success(f"Auftrag mit ID #{neuer_id} registriert. Preis laut Sheet: {stundensatz_aus_sheet} €/h.")
+        st.success(f"Auftrag mit ID #{neuer_id} registriert. Preis laut Google Sheet: {stundensatz_aus_sheet} €/h.")
         st.rerun()
 
     st.write("---")
@@ -257,7 +253,7 @@ elif bereich == "💼 LU-Auftragsbuch":
             stunden_gefahren = std_ende - std_start
             auftrag = next(x for x in db["auftraege"] if x["id"] == auf_id)
             
-            # Preisberechnung (Stunden * Preis-Zelle aus dem Sheet)
+            # Preisberechnung (Stunden * Google Sheet Preis)
             end_preis = stunden_gefahren * auftrag["stundensatz"]
             
             # 50% Rabatt-Automatik falls das Zielfeld auf Silage steht
@@ -269,7 +265,7 @@ elif bereich == "💼 LU-Auftragsbuch":
             auftrag["stunden_gefahren"] = stunden_gefahren
             auftrag["status"] = "Abgerechnet"
             
-            # Transaktion auf dem Server durchführen
+            # Geldtransfer durchführen
             db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
             db["hoefe"][auftrag["auftragnehmer"]]["konto"] += end_preis
             speichere_globalen_speicher(db)
