@@ -22,7 +22,7 @@ st.markdown("""
     }
     div.stButton > button:first-child:hover { background-color: #3b632b; transform: scale(1.02); }
 </style>
-""", unsafe_index=True)
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # GLOBALE KONSTANTEN & HILFSFUNKTIONEN
