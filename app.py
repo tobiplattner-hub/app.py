@@ -4,6 +4,13 @@ import json
 import os
 from datetime import datetime
 
+# Für die PDF-Generierung
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+import io
+
 # ==============================================================================
 # 1. SEITEN-KONFIGURATION & STYLING
 # ==============================================================================
@@ -24,6 +31,77 @@ st.markdown("""
     .stButton>button:hover { background-color: #1b5e20; color: white; }
 </style>
 """, unsafe_allow_html=True)
+
+# ==============================================================================
+# Helper-Funktion für PDF-Erstellung
+# ==============================================================================
+def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=24, leading=28, textColor=colors.HexColor('#1b5e20'))
+    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, leading=16)
+    bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=11, leading=16, fontName='Helvetica-Bold')
+
+    # 1. Logo einbinden falls vorhanden
+    if os.path.exists("logo.png"):
+        try:
+            logo = Image("logo.png", width=120, height=50)
+            logo.hAlign = 'RIGHT'
+            story.append(logo)
+            story.append(Spacer(1, -20)) # Leicht ausgleichen
+        except:
+            pass
+
+    # 2. Titel & Metadaten
+    story.append(Paragraph("<b>LOHNUNTERNEHMEN RECHNUNG</b>", title_style))
+    story.append(Spacer(1, 20))
+    
+    # Infoblöcke (Sender / Empfänger)
+    aktuelles_datum = datetime.now().strftime("%d.%m.%Y - %H:%M")
+    metadaten_text = f"""
+    <b>Dienstleister (LU):</b> {lu_name}<br/>
+    <b>Kunde (Hof):</b> {kunde_name}<br/>
+    <b>Datum:</b> {aktuelles_datum}<br/>
+    <b>Rechnungsnummer:</b> #RE-{auftrag['id']}{datetime.now().strftime('%y%m%d')}
+    """
+    story.append(Paragraph(metadaten_text, normal_style))
+    story.append(Spacer(1, 25))
+
+    # 3. Tabelle mit den Rechnungsposten
+    data = [
+        [Paragraph('<b>Beschreibung / Dienstleistung</b>', normal_style), Paragraph('<b>Feld</b>', normal_style), Paragraph('<b>Betrag</b>', normal_style)],
+        [Paragraph(f"{auftrag['typ']}", normal_style), Paragraph(f"Feld {auftrag['feld']}", normal_style), Paragraph(f"{auftrag['preis']:,.2f} €", normal_style)],
+        ['', Paragraph('<b>Gesamtsumme:</b>', bold_style), Paragraph(f"<b>{auftrag['preis']:,.2f} €</b>", bold_style)]
+    ]
+    
+    t = Table(data, colWidths=[300, 100, 130])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2e7d32')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+        ('TOPPADDING', (0,0), (-1,0), 8),
+        ('GRID', (0,0), (-1,1), 0.5, colors.grey),
+        ('LINEBELOW', (0,-1), (-1,-1), 1.5, colors.HexColor('#1b5e20')),
+        ('TOPPADDING', (1,-1), (-1,-1), 10),
+    ]))
+    
+    # Textfarbe für den Tabellenheader fixen (auf Weiss stellen)
+    for i in range(3):
+        data[0][i].style.textColor = colors.whitesmoke
+
+    story.append(t)
+    story.append(Spacer(1, 40))
+    
+    # 4. Schlusssatz
+    story.append(Paragraph("<i>Der Betrag wurde automatisch über das zentrale LS25-Bankensystem live verbucht und ausgeglichen. Vielen Dank für den Auftrag!</i>", normal_style))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 # ==============================================================================
 # 2. INTERNE LIVE-DATENBANK (ZENTRALER CLOUD-SPEICHER)
@@ -71,33 +149,23 @@ def lade_globalen_speicher():
     try:
         with open(DB_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
-            
-            # 🛠️ RADIKALER DATEN-CLEANER: Repariert kaputte alte JSON-Dateien live beim Laden!
             if "auftraege" in daten and isinstance(daten["auftraege"], list):
                 bereinigte_auftraege = []
                 for auf in daten["auftraege"]:
-                    # Falls der Eintrag komplett leer oder zerschossen ist, überspringen
                     if not isinstance(auf, dict):
                         continue
-                        
-                    # Fix für Tippfehler in bestehenden JSON-Daten
                     if "auftragsnehmer" in auf:
                         auf["auftragnehmer"] = auf.pop("auftragsnehmer")
-                        
-                    # Sicherheitsnetz: Falls BEIDE Keys fehlen, weise Standard zu
                     if "auftragnehmer" not in auf:
                         auf["auftragnehmer"] = "Hof 1"
                     if "kunde" not in auf:
                         auf["kunde"] = "Hof 2"
-                        
                     bereinigte_auftraege.append(auf)
                 daten["auftraege"] = bereinigte_auftraege
             else:
                 daten["auftraege"] = default_daten["auftraege"]
-                
             return daten
     except Exception as e:
-        # Falls die JSON-Datei komplett korrupt ist, lade Defaults um Absturz zu verhindern
         return default_daten
 
 def speichere_globalen_speicher(daten):
@@ -283,7 +351,7 @@ elif bereich == "🚜 Maschinenpool":
             st.rerun()
 
 # ==============================================================================
-# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION (KRISENSICHER)
+# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION + PDF (NEU HINZUGEFÜGT)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Auftragsbuch & Rechnungszentrum")
@@ -292,7 +360,6 @@ elif bereich == "💼 LU-Auftragsbuch":
         df_auf = pd.DataFrame(db["auftraege"])
         df_auf_anzeige = df_auf.copy()
         
-        # Mappings werden nun absolut fehlerfrei ausgeführt, da unvollständige Keys oben abgefangen wurden
         df_auf_anzeige["kunde"] = df_auf_anzeige["kunde"].map(HOF_MAPPING)
         df_auf_anzeige["auftragnehmer"] = df_auf_anzeige["auftragnehmer"].map(HOF_MAPPING)
         st.dataframe(df_auf_anzeige, use_container_width=True, hide_index=True)
@@ -315,6 +382,7 @@ elif bereich == "💼 LU-Auftragsbuch":
             )
             
             if st.button("💰 Erledigt & Live Abrechnen"):
+                letzter_abgerechneter_auftrag = None
                 for auf in db["auftraege"]:
                     if auf["id"] == auswahl_auftrag_id:
                         kunde = auf["kunde"]
@@ -324,14 +392,34 @@ elif bereich == "💼 LU-Auftragsbuch":
                         # Live-Überweisung durchführen!
                         db["hoefe"][kunde]["konto"] -= preis  
                         db["hoefe"][lu]["konto"] += preis     
-                        auf["status"] = "Abgerechnet"         
+                        auf["status"] = "Abgerechnet"
+                        letzter_abgerechneter_auftrag = auf
                         break
                         
                 speichere_globalen_speicher(db)
                 st.success(f"Rechnung beglichen! Das Honorar wurde live verbucht.")
+                
+                # Session-State nutzen, um das PDF temporär zum Download bereitzustellen
+                st.session_state["pdf_bereit"] = letzter_abgerechneter_auftrag
                 st.rerun()
         else:
             st.success("Alle Aufträge wurden bereits bezahlt und abgerechnet! 🎉")
+
+        # Wenn gerade eben eine Buchung stattfand, den PDF-Download-Button direkt einblenden
+        if "pdf_bereit" in st.session_state and st.session_state["pdf_bereit"] is not None:
+            auf_daten = st.session_state["pdf_bereit"]
+            k_name = HOF_MAPPING.get(auf_daten["kunde"], auf_daten["kunde"])
+            l_name = HOF_MAPPING.get(auf_daten["auftragnehmer"], auf_daten["auftragnehmer"])
+            
+            pdf_datei = erstelle_rechnung_pdf(auf_daten, k_name, l_name)
+            
+            st.write("---")
+            st.download_button(
+                label="📄 PDF-Rechnung herunterladen",
+                data=pdf_datei,
+                file_name=f"Rechnung_LU_ID_{auf_daten['id']}.pdf",
+                mime="application/pdf"
+            )
             
     # NEUEN AUFTRAG ERSTELLEN
     with col_neu_auf:
