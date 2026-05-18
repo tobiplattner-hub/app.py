@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# Helper-Funktion für PDF-Erstellung
+# Helper-Funktion für PDF-Erstellung (Logo-Größe optimiert)
 # ==============================================================================
 def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     buffer = io.BytesIO()
@@ -45,13 +45,14 @@ def erstelle_rechnung_pdf(auftrag, kunde_name, lu_name):
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=11, leading=16)
     bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=11, leading=16, fontName='Helvetica-Bold')
 
-    # 1. Logo einbinden falls vorhanden
+    # 1. Logo einbinden (Größe verdoppelt & proportional)
     if os.path.exists("logo.png"):
         try:
-            logo = Image("logo.png", width=120, height=50)
+            # width=200, height=80 sorgt für eine schöne, ungedrückte Präsenz oben rechts
+            logo = Image("logo.png", width=200, height=80)
             logo.hAlign = 'RIGHT'
             story.append(logo)
-            story.append(Spacer(1, -20)) # Leicht ausgleichen
+            story.append(Spacer(1, 10))
         except:
             pass
 
@@ -351,7 +352,7 @@ elif bereich == "🚜 Maschinenpool":
             st.rerun()
 
 # ==============================================================================
-# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION + PDF (NEU HINZUGEFÜGT)
+# BEREICH 6: LU-AUFTRAGSBUCH & RECHNUNGSFUNKTION + PDF
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Auftragsbuch & Rechnungszentrum")
@@ -399,13 +400,11 @@ elif bereich == "💼 LU-Auftragsbuch":
                 speichere_globalen_speicher(db)
                 st.success(f"Rechnung beglichen! Das Honorar wurde live verbucht.")
                 
-                # Session-State nutzen, um das PDF temporär zum Download bereitzustellen
                 st.session_state["pdf_bereit"] = letzter_abgerechneter_auftrag
                 st.rerun()
         else:
             st.success("Alle Aufträge wurden bereits bezahlt und abgerechnet! 🎉")
 
-        # Wenn gerade eben eine Buchung stattfand, den PDF-Download-Button direkt einblenden
         if "pdf_bereit" in st.session_state and st.session_state["pdf_bereit"] is not None:
             auf_daten = st.session_state["pdf_bereit"]
             k_name = HOF_MAPPING.get(auf_daten["kunde"], auf_daten["kunde"])
@@ -449,7 +448,7 @@ elif bereich == "💼 LU-Auftragsbuch":
 # BEREICH 7: MOD-FRÜCHTE HINZUFÜGEN
 # ==============================================================================
 elif bereich == "🌱 Mod-Früchte hinzufügen":
-    st.title("🌱 Neue Mod-Früchte registrieren")
+    st.title("🌱 Neue Mod-Früchte registerieren")
     
     neue_frucht = st.text_input("Name der Frucht:").strip()
     neu_saat = st.multiselect("In welchen Monaten wird gesät?", LISTE_MONATE)
