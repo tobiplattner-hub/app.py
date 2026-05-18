@@ -176,7 +176,7 @@ LISTE_MONATE = ["März", "April", "Mai", "Juni", "Juli", "August", "September", 
 LISTE_STATUS = ["Wachstum", "Erntebereit", "Gegrubbert", "Gepflügt", "Gekalkt", "Stoppel"]
 
 # ==============================================================================
-# 3. SIDEBAR
+# 3. SIDEBAR (Mit neuer Reset-Funktion für das Auftragsbuch)
 # ==============================================================================
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
@@ -192,6 +192,20 @@ with st.sidebar.expander("📝 Hofnamen live ändern"):
         speichere_globalen_speicher(db)
         st.success("Erfolgreich gespeichert!")
         st.rerun()
+
+# NEU: Kassenbuch / Auftragsbuch zurücksetzen
+with st.sidebar.expander("⚠️ Server-Daten zurücksetzen"):
+    st.write("Hier kannst du das komplette Auftragsbuch für eine neue Saison leeren.")
+    sicherheits_check = st.checkbox("Ja, ich will das Auftragsbuch unwiderruflich leeren", value=False)
+    
+    if st.button("🚨 Auftragsbuch komplett zurücksetzen"):
+        if sicherheits_check:
+            db["auftraege"] = []  # Leert die Liste aller Lohnaufträge komplett
+            speichere_globalen_speicher(db)
+            st.sidebar.success("Auftragsbuch erfolgreich geleert!")
+            st.rerun()
+        else:
+            st.sidebar.error("Bitte bestätige zuerst die Sicherheits-Checkbox!")
 
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
@@ -270,7 +284,7 @@ elif bereich == "📅 Saatenkalender":
             st.write("---")
 
 # ==============================================================================
-# BEREICH 4: FELDVERWALTUNG (Mit neuer Lösch-Option)
+# BEREICH 4: FELDVERWALTUNG
 # ==============================================================================
 elif bereich == "🗺️ Feldverwaltung":
     st.title("🗺️ Globale Feldverwaltung")
@@ -326,10 +340,8 @@ elif bereich == "🗺️ Feldverwaltung":
         if db["felder"]:
             f_id_loeschen = st.selectbox("Welches Feld soll gelöscht werden?", [x["id"] for x in db["felder"]], key="del_select")
             
-            # Warnhinweis zur Sicherheit
             st.warning(f"Achtung: Feld {f_id_loeschen} wird permanent vom Server gelöscht!")
             if st.button("🗑️ Feld unwiderruflich entfernen"):
-                # Filtert das ausgewählte Feld aus der Liste heraus
                 db["felder"] = [x for x in db["felder"] if x["id"] != f_id_loeschen]
                 speichere_globalen_speicher(db)
                 st.success(f"Feld {f_id_loeschen} erfolgreich entfernt!")
