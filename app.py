@@ -73,7 +73,6 @@ def berechne_erntestatus(frucht, saat_monat, aktueller_monat_name, manueller_sta
         return "🌱 Im Wachstum (Überwinterung)", "🌱"
     return "🌱 Im Wachstum", "🌱"
 
-# PDF-Generator: Version-safe für alte und neue FPDF2-Bibliotheken
 def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herkunft_hof):
     def clean_str(s):
         if not s: return ""
@@ -96,7 +95,6 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.cell(100, 10, f"Empfaenger / Kunde: {clean_kunde}", ln=True)
     pdf.ln(5)
     
-    # Tabellenkopf
     pdf.set_font("Arial", "B", 10)
     pdf.cell(80, 8, "Posten / Dienstleistung", border=1)
     pdf.cell(30, 8, "Menge", border=1, align="C")
@@ -127,17 +125,14 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.cell(150, 10, "ENDSUMME:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     
-    try:
-        pdf_out = pdf.output(dest="S")
-    except:
-        pdf_out = pdf.output()
+    try: pdf_out = pdf.output(dest="S")
+    except: pdf_out = pdf.output()
         
-    if isinstance(pdf_out, str):
-        return pdf_out.encode("latin-1", errors="ignore")
+    if isinstance(pdf_out, str): return pdf_out.encode("latin-1", errors="ignore")
     return bytes(pdf_out)
 
 # ---------------------------------------------------------
-# DATA-LOADING (GOOGLE SHEETS MIT DEINEN EIGENEN SPALTEN)
+# DATA-LOADING (LIVE AUS DEINER GOOGLE SHEET)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
@@ -150,21 +145,23 @@ def load_data(url):
         st.sidebar.error(f"Sheets-Verbindung fehlgeschlagen: {e}")
         return pd.DataFrame()
 
-# ⚠️ PASSE DIESE BEIDEN LINKS GEMÄSS DER ANLEITUNG UNTEN AN!
-sheet_url_preise = "https://docs.google.com/spreadsheets/d/1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo/edit?gid=0#gid=0"
-sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo/edit?gid=568043650#gid=568043650"
+TABELLEN_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo"
+
+# Import-Links für die jeweiligen Datenblätter generieren
+sheet_url_preise = f"https://docs.google.com/spreadsheets/d/{TABELLEN_ID}/export?format=csv&gid=0"
+sheet_url_kunden = f"https://docs.google.com/spreadsheets/d/{TABELLEN_ID}/export?format=csv&gid=568043650"
 
 df_preise = load_data(sheet_url_preise)
 df_kunden = load_data(sheet_url_kunden)
 
+# Verarbeiten der Preisliste
 preis_dict = {}
-# Abfrage angepasst auf: 'geraet' und 'preis'
 if not df_preise.empty and "geraet" in df_preise.columns and "preis" in df_preise.columns:
     for _, row in df_preise.dropna(subset=["geraet"]).iterrows():
         preis_dict[str(row["geraet"]).strip()] = float(row["preis"])
 
+# Verarbeiten der Kundenliste
 aktuelle_kunden = ["Hof 1", "Hof 2", "Hof 3 Extern", "Landi AG", "Zuckerfabrik"]
-# Abfrage angepasst auf: 'name'
 if not df_kunden.empty and "name" in df_kunden.columns:
     aktuelle_kunden = df_kunden["name"].dropna().astype(str).tolist()
 
@@ -510,7 +507,7 @@ elif menu == "🛒 Material & Aufträge":
                 werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
                 werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
     
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
@@ -549,13 +546,11 @@ elif menu == "🏗️ Silo-Manager":
                 })
                 st.success("Silo erfolgreich verdichtet!")
                 st.rerun()
-            else:
-                st.error("Nicht genug Frischgut im Lager!")
+            else: st.error("Nicht genug Frischgut im Lager!")
 
     with col_s2:
         st.markdown("### 📐 Laufende Gärprozesse")
-        if not hof_daten["silos"]:
-            st.info("Aktuell keine aktiven Silos vorhanden.")
+        if not hof_daten["silos"]: st.info("Aktuell keine aktiven Silos vorhanden.")
         else:
             current_month_idx = LISTE_MONATE.index(st.session_state._global_ingame_monat)
             current_year = int(st.session_state._global_ingame_jahr)
@@ -654,7 +649,7 @@ elif menu == "🛒 Fuhrpark-Manager":
             if st.button("💾 Hinzufügen", use_container_width=True, type="primary"):
                 hof_daten["fuhrpark_store"][m_waehlen] = m_h
                 st.rerun()
-        else: st.info("Keine Maschinen im Google-Sheet gefunden.")
+        else: st.info("Keine Maschinen im Google-Sheet gefunden. Bitte Spaltenüberschriften prüfen.")
         
     with col_f2:
         for f_name, f_stunden in list(hof_daten["fuhrpark_store"].items()):
