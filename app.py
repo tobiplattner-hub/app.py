@@ -134,6 +134,8 @@ START_KONTO_HOF1 = 500000.0
 START_KONTO_HOF2 = 350000.0
 START_KONTO_HOF3 = 200000.0
 
+MONATE_LISTE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
+
 def generiere_standard_daten():
     return {
         "hoefe": {
@@ -151,7 +153,11 @@ def generiere_standard_daten():
         ],
         "auftraege": [],
         "verkaeufe": [],
-        "manuelle_buchungen": []
+        "manuelle_buchungen": [],
+        "kalender": [
+            {"frucht": "Weizen", "saat_von": "September", "saat_bis": "Oktober", "ernte_von": "Juli", "ernte_bis": "August"},
+            {"frucht": "Mais", "saat_von": "April", "saat_bis": "Mai", "ernte_von": "Oktober", "ernte_bis": "November"}
+        ]
     }
 
 def lade_globalen_speicher():
@@ -162,7 +168,7 @@ def lade_globalen_speicher():
     try:
         with open(DB_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
-            for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten"]:
+            for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten", "kalender"]:
                 if key not in daten:
                     daten[key] = default_daten[key] if key in default_daten else []
             return daten
@@ -224,7 +230,7 @@ with st.sidebar.expander("⚠️ Danger Zone (Reset)"):
 
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
-    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "🚜 Fuhrpark & Geräte", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung"]
+    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "🚜 Fuhrpark & Geräte", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung", "📅 Sähe- & Erntekalender"]
 )
 
 # ==============================================================================
@@ -415,7 +421,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         st.info("Hervorragend! Keine offenen Aufträge im System.")
 
 # ==============================================================================
-# BEREICH 3: WARENVERKAUF & RECHNUNGEN (KUNDE NUN AUS GOOGLE SHEETS)
+# BEREICH 3: WARENVERKAUF & RECHNUNGEN
 # ==============================================================================
 elif bereich == "🌾 Warenverkauf & Rechnungen":
     st.title("🌾 Verkaufsrechnungen (Getreide- & Ernte-Verkauf)")
@@ -423,8 +429,6 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         v_verkaeufer = st.selectbox("Verkaufender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-        
-        # Käufer-Auswahl nutzt nun die dynamische Liste aus Google Sheets
         v_kaeufer = st.selectbox("Empfänger / Käufer (aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         
         frucht_optionen = db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"]
@@ -554,4 +558,74 @@ elif bereich == "🗺️ Feldverwaltung":
                 db["felder"] = [x for x in db["felder"] if x["id"] != f_loesch_id]
                 speichere_globalen_speicher(db)
                 st.success("Feld gelöscht!")
+                st.rerun()
+
+# ==============================================================================
+# BEREICH 7: NEUER SÄHE- & ERNTEKALENDER
+# ==============================================================================
+elif bereich == "📅 Sähe- & Erntekalender":
+    st.title("📅 Server Anbau- & Erntekalender (inkl. Mod-Früchte)")
+    
+    if db.get("kalender"):
+        df_kalender = pd.DataFrame(db["kalender"])
+        df_kal_anzeige = df_kalender.rename(columns={
+            "frucht": "Fruchtart / Kultur",
+            "saat_von": "Säen ab",
+            "saat_bis": "Säen bis",
+            "ernte_von": "Ernten ab",
+            "ernte_bis": "Ernten bis"
+        })
+        st.dataframe(df_kal_anzeige, use_container_width=True, hide_index=True)
+    else:
+        st.info("Bisher keine Einträge im Kalender vorhanden.")
+        
+    st.write("---")
+    col_k1, col_k2 = st.columns(2)
+    
+    with col_k1:
+        st.subheader("➕ Eintrag hinzufügen oder überschreiben")
+        k_frucht_sel = st.selectbox("Fruchtart wählen:", db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"], key="k_frucht_sel")
+        
+        if k_frucht_sel == "– Eigene Mod-Frucht eingeben –":
+            k_frucht = st.text_input("Name der Mod-Frucht:", placeholder="z. B. Vermehrungsgras, Klee, Dinkel")
+        else:
+            k_frucht = k_frucht_sel
+            
+        col_ks1, col_ks2 = st.columns(2)
+        with col_ks1:
+            k_saat_von = st.selectbox("Aussaat Start-Monat:", MONATE_LISTE, index=2)
+        with col_ks2:
+            k_saat_bis = st.selectbox("Aussaat End-Monat:", MONATE_LISTE, index=4)
+            
+        col_ke1, col_ke2 = st.columns(2)
+        with col_ke1:
+            k_ernte_von = st.selectbox("Ernte Start-Monat:", MONATE_LISTE, index=6)
+        with col_ke2:
+            k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
+            
+        if st.button("📅 Kalendereintrag speichern"):
+            if k_frucht.strip() == "":
+                st.error("Bitte gib einen Namen für die Frucht ein!")
+            else:
+                # Vorhandene Einträge für diese Frucht löschen (Überschreiben)
+                db["kalender"] = [x for x in db["kalender"] if x["frucht"].lower() != k_frucht.strip().lower()]
+                db["kalender"].append({
+                    "frucht": k_frucht.strip(),
+                    "saat_von": k_saat_von,
+                    "saat_bis": k_saat_bis,
+                    "ernte_von": k_ernte_von,
+                    "ernte_bis": k_ernte_bis
+                })
+                speichere_globalen_speicher(db)
+                st.success(f"Kalenderdaten für '{k_frucht}' live synchronisiert!")
+                st.rerun()
+                
+    with col_k2:
+        st.subheader("🗑️ Fruchttyp aus Kalender löschen")
+        if db.get("kalender"):
+            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["frucht"] for x in db["kalender"]])
+            if st.button("🔴 Aus Kalender löschen"):
+                db["kalender"] = [x for x in db["kalender"] if x["frucht"] != k_loesch_frucht]
+                speichere_globalen_speicher(db)
+                st.success(f"'{k_loesch_frucht}' wurde aus dem Kalender gelöscht.")
                 st.rerun()
