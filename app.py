@@ -326,7 +326,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH
+# BEREICH 2: LU-AUFTRAGSBUCH (FEHLERSICHERE PREIS-ABFRAGE)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -360,9 +360,13 @@ elif bereich == "💼 LU-Auftragsbuch":
             st.error("Bitte gib einen Namen für die Mod-Arbeitsart ein!")
         else:
             neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-            stundensatz_aus_sheet = 150.0
-            if df_sheet_masch is not None and a_maschine in df_sheet_masch['geraet'].values:
-                stundensatz_aus_sheet = float(df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values[0])
+            stundensatz_aus_sheet = 150.0 # Standard-Fallback
+            
+            # Fehlerkorrektur: Sicherstellen, dass die Maschine wirklich im Dataframe existiert
+            if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns and a_maschine in df_sheet_masch['geraet'].values:
+                treffer = df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values
+                if len(treffer) > 0:
+                    stundensatz_aus_sheet = float(treffer[0])
                 
             db["auftraege"].append({
                 "id": neuer_id, "kunde": a_kunde, "auftragnehmer": a_lu, "typ": a_typ,
@@ -435,7 +439,7 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
         v_frucht_sel = st.selectbox("Verkaufte Fruchtart:", frucht_optionen)
         
         if v_frucht_sel == "– Eigene Mod-Frucht eingeben –":
-            v_frucht = st.text_input("Name der Mod-Frucht eingeben:", placeholder="z.B. Klee, Alfalfa, Dinkel")
+            v_frucht = st.text_input("Name der Mod-Frucht eingeben:", placeholder="z.b. Klee, Alfalfa, Dinkel")
             preis_pro_1k = st.number_input("Manueller Preis (€ pro 1.000L):", min_value=0.0, value=500.0, step=50.0)
         else:
             v_frucht = v_frucht_sel
@@ -449,7 +453,6 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
         if v_frucht.strip() == "":
             st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
         else:
-            # Falls es eine neue Mod-Frucht war, direkt global registrieren
             if v_frucht.strip() not in db["fruchtarten"]:
                 db["fruchtarten"].append(v_frucht.strip())
                 db["preise"][v_frucht.strip()] = preis_pro_1k
@@ -496,12 +499,11 @@ elif bereich == "🚜 Fuhrpark & Geräte":
         st.error("Preisliste konnte nicht aus Google Sheets geladen werden. Bitte Freigabe prüfen.")
 
 # ==============================================================================
-# BEREICH 5: MANUELLE FRUCHTPREISE (JETZT MIT MOD-FRUCHT OPTION)
+# BEREICH 5: MANUELLE FRUCHTPREISE
 # ==============================================================================
 elif bereich == "📈 Fruchtpreise (Manuell)":
     st.title("🌾 Fruchtpreis-Zentrale für den Server")
     
-    # Tabelle mit aktuellen Preisen anzeigen
     df_preise = pd.DataFrame(list(db["preise"].items()), columns=["Fruchtart", "Preis pro 1.000L (€)"])
     st.dataframe(df_preise, use_container_width=True, hide_index=True)
     
@@ -531,7 +533,6 @@ elif bereich == "📈 Fruchtpreise (Manuell)":
             elif frucht_name_clean in db["preise"]:
                 st.error("Diese Frucht existiert bereits im Preissystem!")
             else:
-                # Frucht global in beide Listen eintragen
                 if frucht_name_clean not in db["fruchtarten"]:
                     db["fruchtarten"].append(frucht_name_clean)
                 db["preise"][frucht_name_clean] = mod_start_preis
@@ -597,12 +598,11 @@ elif bereich == "🗺️ Feldverwaltung":
                 st.rerun()
 
 # ==============================================================================
-# BEREICH 7: SÄHE- & ERNTEKALENDER (FEHLERTOLERANTE LIVE-VERSION)
+# BEREICH 7: SÄHE- & ERNTEKALENDER
 # ==============================================================================
 elif bereich == "📅 Sähe- & Erntekalender":
     st.title("📅 Server Anbau- & Erntekalender (inkl. Mod-Früchte)")
     
-    # Validiere alte Datenbestände, damit nur saubere Wörterbücher gerendert werden
     bereinigter_kalender = []
     if db.get("kalender"):
         for eintrag in db["kalender"]:
@@ -655,7 +655,6 @@ elif bereich == "📅 Sähe- & Erntekalender":
                     if k_frucht.strip() not in db["preise"]:
                         db["preise"][k_frucht.strip()] = 500.0
 
-                # Überschreiben aller gleichnamigen Einträge
                 neuer_kalender = [x for x in bereinigter_kalender if x["frucht"].lower() != k_frucht.strip().lower()]
                 neuer_kalender.append({
                     "frucht": k_frucht.strip(),
