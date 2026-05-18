@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import datetime
+import json
 import os
 
 # ---------------------------------------------------------
@@ -9,47 +9,57 @@ import os
 st.set_page_config(page_title="LS25 LU- & Hof-Manager LIVE", layout="wide")
 
 # ---------------------------------------------------------
-# DIE EINFACHE CLOUD-DATENBANK INITIALISIEREN
+# DIE EINFACHE DATEI-DATENBANK (DOKUMENTEN-SPEICHER)
 # ---------------------------------------------------------
-# Hier aktivieren wir einen internen Cloud-Speicher, der für alle Spieler synchron ist
-db = st.connection("kv_storage", type="dict")
+# Diese Datei wird direkt auf dem Server erstellt und speichert alles dauerhaft ab
+DB_DATEI = "multiplayer_live_speicher.json"
+
+def lade_globalen_speicher():
+    """Lädt die Spieldaten für alle Spieler aus der gemeinsamen Datei"""
+    if not os.path.exists(DB_DATEI):
+        # Standard-Daten erstellen, falls die Datei noch nicht existiert
+        default_daten = {
+            "hoefe": {
+                "Hof 1": {"name": "Hof 1 - Hauptbetrieb", "konto": 500000.0},
+                "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": 350000.0},
+                "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": 200000.0}
+            },
+            "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln"],
+            "kalender": {
+                "Weizen": {"sa": [1, 2], "er": [5, 6]},
+                "Gerste": {"sa": [1, 2], "er": [5]},
+                "Raps": {"sa": [6, 7], "er": [5]},
+                "Gras": {"sa": [1, 2, 3, 4], "er": [2, 3, 4, 5]}
+            }
+        }
+        speichere_globalen_speicher(default_daten)
+        return default_daten
+    
+    with open(DB_DATEI, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def speichere_globalen_speicher(daten):
+    """Schreibt die Änderungen sofort in die Datei, damit alle Spieler es sehen"""
+    with open(DB_DATEI, "w", encoding="utf-8") as f:
+        json.dump(daten, f, ensure_ascii=False, indent=4)
+
+# ---------------------------------------------------------
+# DATEN LADEN
+# ---------------------------------------------------------
+# Bei jedem Laden/Klick ziehen wir uns den echten Server-Stand
+global_db = lade_globalen_speicher()
+
+hoefe_daten = global_db["hoefe"]
+frucht_liste = global_db["fruchtarten"]
+kalender_daten = global_db["kalender"]
 
 LISTE_MONATE = ["März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember", "Januar", "Februar"]
-
-# ---------------------------------------------------------
-# STANDARD-DATEN (Falls die Datenbank ganz frisch und leer ist)
-# ---------------------------------------------------------
-if "hoefe" not in db:
-    db["hoefe"] = {
-        "Hof 1": {"name": "Hof 1 - Hauptbetrieb", "konto": 500000.0},
-        "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": 350000.0},
-        "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": 200000.0}
-    }
-
-if "fruchtarten" not in db:
-    db["fruchtarten"] = ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln"]
-
-if "kalender" not in db:
-    db["kalender"] = {
-        "Weizen": {"sa": [1, 2], "er": [5, 6]},
-        "Gerste": {"sa": [1, 2], "er": [5]},
-        "Raps": {"sa": [6, 7], "er": [5]},
-        "Gras": {"sa": [1, 2, 3, 4], "er": [2, 3, 4, 5]}
-    }
-
-# ---------------------------------------------------------
-# LIVE-DATEN AUS DER CLOUD HOLEN
-# ---------------------------------------------------------
-# Jedes Mal wenn ein Spieler klickt, laden wir den aktuellen Cloud-Stand
-hoefe_daten = db["hoefe"]
-frucht_liste = db["fruchtarten"]
-kalender_daten = db["kalender"]
 
 # ---------------------------------------------------------
 # HAUPTANZEIGE
 # ---------------------------------------------------------
 st.title("🚜 LS25 Live-Multiplayer Hof-Manager")
-st.info("Dieses Tool ist jetzt live! Jede Änderung wird sofort für alle Spieler auf dem Server gespeichert.")
+st.info("Dieses Tool läuft jetzt über eine serverbasierte Live-Synchronisation! Jede Änderung ist sofort für alle sichtbar.")
 
 # Kontostände anzeigen
 st.subheader("Aktuelle Höfe & Finanzen")
@@ -64,7 +74,7 @@ with col3:
 st.write("---")
 
 # ---------------------------------------------------------
-# SIDEBAR: MANAGEMENT (Änderungen gehen direkt in die Cloud)
+# SIDEBAR: MANAGEMENT (Änderungen gehen direkt in die Datei)
 # ---------------------------------------------------------
 st.sidebar.title("⚙️ Server-Einstellungen")
 
@@ -75,11 +85,12 @@ with st.sidebar.expander("📝 Hofnamen live ändern"):
     h3_new = st.text_input("Name Hof 3:", value=hoefe_daten["Hof 3"]["name"])
     
     if st.button("Namen für ALLE speichern"):
-        hoefe_daten["Hof 1"]["name"] = h1_new
-        hoefe_daten["Hof 2"]["name"] = h2_new
-        hoefe_daten["Hof 3"]["name"] = h3_new
-        # Direkt zurück in die Cloud schreiben
-        db["hoefe"] = hoefe_daten
+        global_db["hoefe"]["Hof 1"]["name"] = h1_new
+        global_db["hoefe"]["Hof 2"]["name"] = h2_new
+        global_db["hoefe"]["Hof 3"]["name"] = h3_new
+        
+        # In die Datei auf dem Server wegspeichern
+        speichere_globalen_speicher(global_db)
         st.success("Hofnamen global aktualisiert!")
         st.rerun()
 
@@ -93,14 +104,15 @@ with st.sidebar.expander("🌱 Mod-Früchte & Kalender"):
     if st.button("➕ Frucht global hinzufügen"):
         if neue_frucht and neue_frucht not in frucht_liste:
             # Fruchtliste erweitern
-            frucht_liste.append(neue_frucht)
-            db["fruchtarten"] = frucht_liste
+            global_db["fruchtarten"].append(neue_frucht)
             
-            # Kalendermonate (als Zahlen 1-12) speichern
+            # Kalendermonate (als Zahlen 1-12) berechnen
             saat_indices = [LISTE_MONATE.index(m) + 1 for m in neu_saat]
             ernte_indices = [LISTE_MONATE.index(m) + 1 for m in neu_ernte]
-            kalender_daten[neue_frucht] = {"sa": saat_indices, "er": ernte_indices}
-            db["kalender"] = kalender_daten
+            global_db["kalender"][neue_frucht] = {"sa": saat_indices, "er": ernte_indices}
+            
+            # Speicher updaten
+            speichere_globalen_speicher(global_db)
             
             st.success(f"{neue_frucht} ist jetzt für alle verfügbar!")
             st.rerun()
