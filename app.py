@@ -28,7 +28,6 @@ st.markdown("""
     h1, h2, h3 { color: #1b5e20; font-family: 'Segoe UI', sans-serif; }
     .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; }
     .stButton>button:hover { background-color: #1b5e20; color: white; }
-    /* Fix für Tabellen-Sichtbarkeit */
     .stDataFrame { background-color: #ffffff; border-radius: 8px; padding: 5px; }
 </style>
 """, unsafe_allow_html=True)
@@ -45,7 +44,19 @@ def lade_maschinen_aus_sheets():
         df_masch.columns = df_masch.columns.str.strip()
         return df_masch
     except Exception as e:
-        st.sidebar.error("Fehler beim Laden aus Google Sheets. Bitte Freigabe und Spaltennamen ('geraet', 'Preis') prüfen.")
+        st.sidebar.error("Fehler beim Laden der Preisliste aus Google Sheets.")
+        return None
+
+def lade_kunden_aus_sheets():
+    try:
+        url_kunden = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=kunden"
+        df_kunden = pd.read_csv(url_kunden)
+        df_kunden.columns = df_kunden.columns.str.strip()
+        if 'name' in df_kunden.columns:
+            return df_kunden['name'].dropna().unique().tolist()
+        return None
+    except Exception as e:
+        # Wenn kein Tab "kunden" existiert, geben wir None zurück für den Fallback
         return None
 
 # ==============================================================================
@@ -140,16 +151,9 @@ def lade_globalen_speicher():
     try:
         with open(DB_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
-            if "preise" not in daten:
-                daten["preise"] = default_daten["preise"]
-            if "verkaeufe" not in daten:
-                daten["verkaeufe"] = []
-            if "manuelle_buchungen" not in daten:
-                daten["manuelle_buchungen"] = []
-            if "auftraege" not in daten:
-                daten["auftraege"] = []
-            if "felder" not in daten:
-                daten["felder"] = default_daten["felder"]
+            for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten"]:
+                if key not in daten:
+                    daten[key] = default_daten[key] if key in default_daten else []
             return daten
     except:
         return default_daten
@@ -160,12 +164,24 @@ def speichere_globalen_speicher(daten):
 
 db = lade_globalen_speicher()
 df_sheet_masch = lade_maschinen_aus_sheets()
+sheet_kunden_liste = lade_kunden_aus_sheets()
 
 HOF_MAPPING = {
     "Hof 1": db["hoefe"]["Hof 1"]["name"],
     "Hof 2": db["hoefe"]["Hof 2"]["name"],
     "Hof 3": db["hoefe"]["Hof 3"]["name"]
 }
+
+# Kundenliste festlegen (entweder aus Google Sheets oder Fallback auf Höfe)
+if sheet_kunden_liste:
+    KUNDEN_AUSWAHL = sheet_kunden_liste
+    KUNDEN_MAPPING = {k: k for k in sheet_kunden_liste}
+    # Höfe hinzufügen, falls nicht vorhanden
+    for k, v in HOF_MAPPING.items():
+        KUNDEN_MAPPING[k] = v
+else:
+    KUNDEN_AUSWAHL = ["Hof 1", "Hof 2", "Hof 3"]
+    KUNDEN_MAPPING = HOF_MAPPING
 
 # ==============================================================================
 # SIDEBAR & SERVER-ZENTRALE
@@ -197,7 +213,7 @@ with st.sidebar.expander("⚠️ Danger Zone (Reset)"):
 
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
-    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung"]
+    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "🚜 Fuhrpark & Geräte", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung"]
 )
 
 # ==============================================================================
@@ -254,7 +270,7 @@ if bereich == "📊 Dashboard & Finanzen":
             for col in ["id", "kunde", "auftragnehmer", "typ", "maschine", "stunden_gefahren", "preis"]:
                 if col not in df_erledigt.columns:
                     df_erledigt[col] = 0 if col in ["stunden_gefahren", "preis", "id"] else "Unbekannt"
-            df_erledigt["Kunde"] = df_erledigt["kunde"].map(HOF_MAPPING)
+            df_erledigt["Kunde"] = df_erledigt["kunde"].map(lambda x: KUNDEN_MAPPING.get(x, x))
             df_erledigt["Lohnunternehmen"] = df_erledigt["auftragnehmer"].map(HOF_MAPPING)
             st.dataframe(
                 df_erledigt[["id", "Kunde", "Lohnunternehmen", "typ", "maschine", "stunden_gefahren", "preis"]].rename(
@@ -293,7 +309,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH
+# BEREICH 2: LU-AUFTRAGSBUCH (KUNDEN AUS GOOGLE SHEETS)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -302,7 +318,8 @@ elif bereich == "💼 LU-Auftragsbuch":
     col_a, col_b = st.columns(2)
     
     with col_a:
-        a_kunde = st.selectbox("Auftraggeber (Kunde):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        # Hier werden die Kunden nun dynamisch aus dem Sheet gezogen
+        a_kunde = st.selectbox("Auftraggeber (Kunde aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         a_lu = st.selectbox("Auftragnehmer (Lohnunternehmen):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         a_typ = st.selectbox("Arbeitsart:", ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen"])
         
@@ -335,7 +352,7 @@ elif bereich == "💼 LU-Auftragsbuch":
     
     if offene:
         df_offene = pd.DataFrame(offene)
-        df_offene["Kunde"] = df_offene["kunde"].map(HOF_MAPPING)
+        df_offene["Kunde"] = df_offene["kunde"].map(lambda x: KUNDEN_MAPPING.get(x, x))
         df_offene["Lohnunternehmen"] = df_offene["auftragnehmer"].map(HOF_MAPPING)
         st.dataframe(df_offene[["id", "Kunde", "Lohnunternehmen", "typ", "maschine", "stundensatz"]], use_container_width=True, hide_index=True)
         
@@ -359,11 +376,14 @@ elif bereich == "💼 LU-Auftragsbuch":
             auftrag["stunden_gefahren"] = stunden_gefahren
             auftrag["status"] = "Abgerechnet"
             
-            db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
+            # Nur vom Hof-Konto abbuchen, wenn der Kunde ein registrierter Ingame-Hof ist
+            if auftrag["kunde"] in db["hoefe"]:
+                db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
             db["hoefe"][auftrag["auftragnehmer"]]["konto"] += end_preis
             speichere_globalen_speicher(db)
             
-            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {HOF_MAPPING[auftrag['kunde']]}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
+            k_name = KUNDEN_MAPPING.get(auftrag['kunde'], auftrag['kunde'])
+            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
             posten = [[f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", f"{stunden_gefahren:.1f} Betriebsstunden auf {auftrag['maschine']} ({auftrag['stundensatz']} €/h)", f"{end_preis:,.2f} €"]]
             
             st.session_state["pdf_temp"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN RECHNUNG", meta, posten, end_preis, "Automatisch erfasst und über das Server-Kassenbuch beglichen.")
@@ -376,7 +396,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         st.info("Hervorragend! Keine offenen Aufträge im System.")
 
 # ==============================================================================
-# BEREICH 3: WARENVERKAUF MIT RECHNUNGSZENTRUM
+# BEREICH 3: WARENVERKAUF MIT FREIER MOD-FRUCHT-EINGABE
 # ==============================================================================
 elif bereich == "🌾 Warenverkauf & Rechnungen":
     st.title("🌾 Verkaufsrechnungen (Getreide- & Ernte-Verkauf)")
@@ -386,42 +406,77 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
         v_verkaeufer = st.selectbox("Verkaufender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         v_kaeufer = st.selectbox("Empfänger / Käufer:", ["Zentrale Verkaufsstelle (Server-Bank)", "Hof 1", "Hof 2", "Hof 3"], 
                                  format_func=lambda x: HOF_MAPPING[x] if x in HOF_MAPPING else x)
-        v_frucht = st.selectbox("Verkaufte Fruchtart:", db["fruchtarten"])
+        
+        # Fruchtarten-Auswahl vorbereiten mit Option für manuelle Eingabe
+        frucht_optionen = db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"]
+        v_frucht_sel = st.selectbox("Verkaufte Fruchtart:", frucht_optionen)
+        
+        # Wenn Mod-Frucht gewählt wurde, Freitextfeld einblenden
+        if v_frucht_sel == "– Eigene Mod-Frucht eingeben –":
+            v_frucht = st.text_input("Name der Mod-Frucht eingeben:", placeholder="z.B. Klee, Alfalfa, Dinkel, Karotten")
+            preis_pro_1k = st.number_input("Manueller Preis für diese Mod-Frucht (€ pro 1.000L):", min_value=0.0, value=500.0, step=50.0)
+        else:
+            v_frucht = v_frucht_sel
+            preis_pro_1k = float(db["preise"].get(v_frucht, 500.0))
         
     with col_v2:
         v_menge = st.number_input("Menge in Liter (L):", min_value=0, step=1000, value=10000)
-        preis_pro_1k = float(db["preise"].get(v_frucht, 500.0))
-        st.info(f"💵 Aktueller App-Livepreis: **{preis_pro_1k:,.2f} €** pro 1.000 Liter")
+        st.info(f"💵 Abrechnungskurs: **{preis_pro_1k:,.2f} €** pro 1.000 Liter")
         
     if st.button("🚀 Verkauf abrechnen & Gutschrift erstellen"):
-        gesamt_erloes = (v_menge / 1000) * preis_pro_1k
-        db["hoefe"][v_verkaeufer]["konto"] += gesamt_erloes
-        if v_kaeufer in db["hoefe"]:
-            db["hoefe"][v_kaeufer]["konto"] -= gesamt_erloes
+        if v_frucht.strip() == "":
+            st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
+        else:
+            gesamt_erloes = (v_menge / 1000) * preis_pro_1k
+            db["hoefe"][v_verkaeufer]["konto"] += gesamt_erloes
+            if v_kaeufer in db["hoefe"]:
+                db["hoefe"][v_kaeufer]["konto"] -= gesamt_erloes
+                
+            db["verkaeufe"].append({
+                "id": max([x.get("id", 0) for x in db["verkaeufe"]], default=0) + 1,
+                "verkaeufer": v_verkaeufer, "kaeufer": v_kaeufer, "frucht": v_frucht, "menge": v_menge, "erloes": gesamt_erloes
+            })
+            speichere_globalen_speicher(db)
             
-        db["verkaeufe"].append({
-            "id": max([x.get("id", 0) for x in db["verkaeufe"]], default=0) + 1,
-            "verkaeufer": v_verkaeufer, "kaeufer": v_kaeufer, "frucht": v_frucht, "menge": v_menge, "erloes": gesamt_erloes
-        })
-        speichere_globalen_speicher(db)
-        
-        kaeufer_name = HOF_MAPPING[v_kaeufer] if v_kaeufer in HOF_MAPPING else v_kaeufer
-        meta_v = f"<b>Verkäufer:</b> {HOF_MAPPING[v_verkaeufer]}<br/><b>Käufer:</b> {kaeufer_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y - %H:%M')}"
-        posten_v = [[f"Lieferung von {v_frucht}", f"{v_menge:,} Liter (Satz: {preis_pro_1k} € / 1.000L)", f"{gesamt_erloes:,.2f} €"]]
-        
-        st.session_state["pdf_verkauf"] = erstelle_universal_pdf("OFFIZIELLER WAREN-VERKAUFSBELEG", meta_v, posten_v, gesamt_erloes, "Die Ware wurde geliefert und die Gutschrift auf dem Konto registriert.")
-        st.success(f"Erfolgreich! {gesamt_erloes:,.2f} € wurden gebucht.")
-        st.rerun()
+            kaeufer_name = HOF_MAPPING[v_kaeufer] if v_kaeufer in HOF_MAPPING else v_kaeufer
+            meta_v = f"<b>Verkäufer:</b> {HOF_MAPPING[v_verkaeufer]}<br/><b>Käufer:</b> {kaeufer_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y - %H:%M')}"
+            posten_v = [[f"Lieferung von {v_frucht}", f"{v_menge:,} Liter (Satz: {preis_pro_1k} € / 1.000L)", f"{gesamt_erloes:,.2f} €"]]
+            
+            st.session_state["pdf_verkauf"] = erstelle_universal_pdf("OFFIZIELLER WAREN-VERKAUFSBELEG", meta_v, posten_v, gesamt_erloes, "Die Ware wurde geliefert und die Gutschrift auf dem Konto registriert.")
+            st.success(f"Erfolgreich! {gesamt_erloes:,.2f} € wurden gebucht.")
+            st.rerun()
 
     if "pdf_verkauf" in st.session_state:
         st.download_button("📄 Verkaufs-PDF herunterladen", data=st.session_state["pdf_verkauf"], file_name="Verkaufsabrechnung.pdf", mime="application/pdf")
 
 # ==============================================================================
-# BEREICH 4: MANUELLE FRUCHTPREISE
+# BEREICH 4: FUHRPARK & GERÄTE (PREISLISTE AUS GOOGLE SHEETS)
+# ==============================================================================
+elif bereich == "🚜 Fuhrpark & Geräte":
+    st.title("🚜 Globaler Maschinen-Fuhrpark & Stundensätze")
+    st.write("Diese Liste spiegelt die aktuellen Live-Mietpreise und Lohnsätze direkt aus dem Google Sheet wider.")
+    
+    if df_sheet_masch is not None:
+        # Suchfunktion für Maschinen
+        suche = st.text_input("🔍 Fahrzeug oder Gerät suchen:", placeholder="z. B. Fendt, Claas, Drescher...")
+        
+        df_fuhrpark = df_sheet_masch.copy()
+        if suche:
+            df_fuhrpark = df_fuhrpark[df_fuhrpark['geraet'].str.contains(suche, case=False, na=False)]
+            
+        st.dataframe(
+            df_fuhrpark.rename(columns={"geraet": "Fahrzeug / Maschine", "Preis": "Stundensatz (€ / h)"}),
+            use_container_width=True, hide_index=True
+        )
+    else:
+        st.error("Preisliste konnte nicht aus Google Sheets geladen werden. Bitte überprüfe die Internetverbindung oder das Tabellenblatt.")
+
+# ==============================================================================
+# BEREICH 5: MANUELLE FRUCHTPREISE
 # ==============================================================================
 elif bereich == "📈 Fruchtpreise (Manuell)":
     st.title("🌾 Fruchtpreis-Zentrale für den Server")
-    st.write("Ändere hier die Kurse manuell. Die Werte gelten sofort für alle Berechnungen im Warenverkauf.")
+    st.write("Ändere hier die Standard-Kurse manuell. Die Werte gelten sofort für alle Berechnungen im Warenverkauf.")
     
     df_preise = pd.DataFrame(list(db["preise"].items()), columns=["Fruchtart", "Preis pro 1.000L (€)"])
     st.dataframe(df_preise, use_container_width=True, hide_index=True)
@@ -438,58 +493,17 @@ elif bereich == "📈 Fruchtpreise (Manuell)":
         st.rerun()
 
 # ==============================================================================
-# BEREICH 5: FELDVERWALTUNG (NEU & INTERAKTIV GEGEN WHITE-SCREEN)
+# BEREICH 6: FELDVERWALTUNG
 # ==============================================================================
 elif bereich == "🗺️ Feldverwaltung":
     st.title("🗺️ Globale Feldverwaltung")
     st.write("Hier kannst du alle Felder des Servers einsehen, anpassen oder neue hinzufügen.")
     
-    # 1. Felder auflisten
     if db.get("felder"):
         df_felder = pd.DataFrame(db["felder"])
         df_felder["Besitzer Hof"] = df_felder["besitzer"].map(HOF_MAPPING)
         
-        # Spalten leserlich umbenennen
         df_anzeige = df_felder[["id", "Besitzer Hof", "groesse", "frucht", "status", "ernte_typ"]].rename(
             columns={"id": "Feld-Nr.", "groesse": "Größe (ha)", "frucht": "Aktuelle Frucht", "status": "Status", "ernte_typ": "Ernte-Art"}
         )
         st.dataframe(df_anzeige, use_container_width=True, hide_index=True)
-    else:
-        st.info("Aktuell sind keine Felder registriert.")
-        
-    st.write("---")
-    
-    # 2. Neues Feld hinzufügen oder bestehendes löschen
-    col_f1, col_f2 = st.columns(2)
-    
-    with col_f1:
-        st.subheader("➕ Neues Feld registrieren")
-        f_id = st.number_input("Feld-Nummer:", min_value=1, step=1, value=3)
-        f_besitzer = st.selectbox("Besitzer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="f_bes")
-        f_groesse = st.number_input("Größe in Hektar (ha):", min_value=0.1, step=0.1, value=2.0)
-        f_frucht = st.selectbox("Fruchtart auf dem Feld:", db["fruchtarten"], key="f_fru")
-        f_status = st.selectbox("Feld-Status:", ["Gepflügt", "Gesät", "Wachstum", "Erntebereit", "Abgeerntet"])
-        f_typ = st.selectbox("Ernte-Abrechnungstyp:", ["Normale Ernte", "Silage (50% LU-Rabatt)"])
-        
-        if st.button("Feld speichern"):
-            # Prüfen ob ID existiert, falls ja überschreiben, sonst neu anhängen
-            db["felder"] = [x for x in db["felder"] if x["id"] != f_id]
-            db["felder"].append({
-                "id": int(f_id), "besitzer": f_besitzer, "groesse": float(f_groesse),
-                "frucht": f_frucht, "status": f_status, "ernte_typ": f_typ
-            })
-            speichere_globalen_speicher(db)
-            st.success(f"Feld Nummer {f_id} wurde erfolgreich gespeichert!")
-            st.rerun()
-            
-    with col_f2:
-        st.subheader("🗑️ Feld löschen / entfernen")
-        if db.get("felder"):
-            f_loesch_id = st.selectbox("Welches Feld entfernen?", [x["id"] for x in db["felder"]])
-            if st.button("🔴 Feld unwiderruflich löschen"):
-                db["felder"] = [x for x in db["felder"] if x["id"] != f_loesch_id]
-                speichere_globalen_speicher(db)
-                st.success(f"Feld {f_loesch_id} gelöscht!")
-                st.rerun()
-        else:
-            st.write("Keine Felder zum Löschen vorhanden.")
