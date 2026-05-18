@@ -127,7 +127,6 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
     pdf.cell(150, 10, "ENDSUMME:", align="R")
     pdf.cell(40, 10, f"{fmt_float(total)} EUR", align="R", ln=True)
     
-    # Output-Sicherheitsnetz gegen fpdf / fpdf2 Versionsunterschiede
     try:
         pdf_out = pdf.output(dest="S")
     except:
@@ -135,15 +134,14 @@ def generate_invoice_pdf(kunde, posten, rabatt, rechnungs_id, ingame_date, herku
         
     if isinstance(pdf_out, str):
         return pdf_out.encode("latin-1", errors="ignore")
-    return pdf_out
+    return bytes(pdf_out)
 
 # ---------------------------------------------------------
-# DATA-LOADING (GOOGLE SHEETS MIT USER-AGENT FALLBACK)
+# DATA-LOADING (GOOGLE SHEETS MIT DEINEN EIGENEN SPALTEN)
 # ---------------------------------------------------------
 @st.cache_data(ttl=5)
 def load_data(url):
     try:
-        # Fallback über urllib, falls pandas direkt blockiert wird
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response:
             df = pd.read_csv(response)
@@ -152,6 +150,7 @@ def load_data(url):
         st.sidebar.error(f"Sheets-Verbindung fehlgeschlagen: {e}")
         return pd.DataFrame()
 
+# ⚠️ PASSE DIESE BEIDEN LINKS GEMÄSS DER ANLEITUNG UNTEN AN!
 sheet_url_preise = "https://docs.google.com/spreadsheets/d/1O0K5Y73b5qY8-C2V-N0DIsyRzWkZAnRjF7K4e2OAnWc/export?format=csv"
 sheet_url_kunden = "https://docs.google.com/spreadsheets/d/1fSbyAInq9A37g5D4w3T0M57K9_3xK3D9uC8C380K2M4/export?format=csv"
 
@@ -159,13 +158,15 @@ df_preise = load_data(sheet_url_preise)
 df_kunden = load_data(sheet_url_kunden)
 
 preis_dict = {}
-if not df_preise.empty and "Maschine" in df_preise.columns and "Preis_pro_Stunde" in df_preise.columns:
-    for _, row in df_preise.dropna(subset=["Maschine"]).iterrows():
-        preis_dict[str(row["Maschine"]).strip()] = float(row["Preis_pro_Stunde"])
+# Abfrage angepasst auf: 'geraet' und 'preis'
+if not df_preise.empty and "geraet" in df_preise.columns and "preis" in df_preise.columns:
+    for _, row in df_preise.dropna(subset=["geraet"]).iterrows():
+        preis_dict[str(row["geraet"]).strip()] = float(row["preis"])
 
 aktuelle_kunden = ["Hof 1", "Hof 2", "Hof 3 Extern", "Landi AG", "Zuckerfabrik"]
-if not df_kunden.empty and "Kundenname" in df_kunden.columns:
-    aktuelle_kunden = df_kunden["Kundenname"].dropna().astype(str).tolist()
+# Abfrage angepasst auf: 'name'
+if not df_kunden.empty and "name" in df_kunden.columns:
+    aktuelle_kunden = df_kunden["name"].dropna().astype(str).tolist()
 
 # ---------------------------------------------------------
 # INITIALISIERUNG DES SESSION STATES
@@ -509,7 +510,7 @@ elif menu == "🛒 Material & Aufträge":
                 werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
                 werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
     
-    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
