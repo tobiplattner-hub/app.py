@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# GOOGLE SHEETS LIVE-IMPORT (JETZT EXTRA TOLERANT)
+# GOOGLE SHEETS LIVE-IMPORT
 # ==============================================================================
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo" 
 
@@ -41,14 +41,12 @@ def lade_maschinen_aus_sheets():
     try:
         url_maschinen = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=preisliste"
         df_masch = pd.read_csv(url_maschinen)
-        df_masch.columns = df_masch.columns.str.strip().str.lower() # Macht alles kleingeschrieben für die Suche
+        df_masch.columns = df_masch.columns.str.strip().str.lower()
         
-        # Spalten wieder lesbar umbenennen für die App-Logik
         if 'geraet' in df_masch.columns and 'preis' in df_masch.columns:
             df_masch = df_masch.rename(columns={'geraet': 'geraet', 'preis': 'Preis'})
             return df_masch
         elif len(df_masch.columns) >= 2:
-            # Fallback: Wenn die Spalten anders heißen, nimm die ersten beiden
             df_masch.columns = ['geraet', 'Preis']
             return df_masch
         return None
@@ -64,7 +62,6 @@ def lade_kunden_aus_sheets():
         if 'name' in df_kunden.columns:
             return df_kunden['name'].dropna().unique().tolist()
         elif len(df_kunden.columns) > 0:
-            # Fallback: Nimm einfach die erste Spalte, egal wie sie heißt
             return df_kunden.iloc[:, 0].dropna().unique().tolist()
         return None
     except Exception as e:
@@ -189,7 +186,6 @@ HOF_MAPPING = {
     "Hof 3": db["hoefe"]["Hof 3"]["name"]
 }
 
-# Kundenliste dynamisch setzen
 if sheet_kunden_liste:
     KUNDEN_AUSWAHL = sheet_kunden_liste
     KUNDEN_MAPPING = {k: k for k in sheet_kunden_liste}
@@ -218,7 +214,6 @@ with st.sidebar.expander("📝 Hofnamen live ändern"):
         st.success("Namen global aktualisiert!")
         st.rerun()
 
-# --- DANGER ZONE / RESET ---
 st.sidebar.write("---")
 with st.sidebar.expander("⚠️ Danger Zone (Reset)"):
     st.warning("Das setzt alle Finanzen und Listen komplett auf Null zurück!")
@@ -259,7 +254,7 @@ if bereich == "📊 Dashboard & Finanzen":
             
         if st.button("⚡ Buchung jetzt live erzwingen"):
             if m_zweck.strip() == "":
-                st.error("Bitte gib einen Verwendungszweck an!")
+                st.error("Bitte gib einen Vermwendungszweck an!")
             else:
                 effektiver_betrag = m_betrag if "Guts" in m_art else -m_betrag
                 db["hoefe"][m_hof]["konto"] += effektiver_betrag
@@ -326,7 +321,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH (FEHLERSICHERE PREIS-ABFRAGE)
+# BEREICH 2: LU-AUFTRAGSBUCH (JETZT MIT LIVE-PDF BELEG GENERATOR)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -360,9 +355,8 @@ elif bereich == "💼 LU-Auftragsbuch":
             st.error("Bitte gib einen Namen für die Mod-Arbeitsart ein!")
         else:
             neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-            stundensatz_aus_sheet = 150.0 # Standard-Fallback
+            stundensatz_aus_sheet = 150.0
             
-            # Fehlerkorrektur: Sicherstellen, dass die Maschine wirklich im Dataframe existiert
             if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns and a_maschine in df_sheet_masch['geraet'].values:
                 treffer = df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values
                 if len(treffer) > 0:
@@ -388,7 +382,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         
         col_c, col_d = st.columns(2)
         with col_c:
-            auf_id = st.selectbox("Welchen Auftrag jetzt abrechnen?", [x["id"] for x in offene])
+            auf_id = st.selectbox("Welchen Auftrag jetzt abrechnen?", [x["id"] for x in offene], key="select_auf_id")
             std_start = st.number_input("Betriebsstunden START:", min_value=0.0, step=0.1, key="start")
         with col_d:
             std_ende = st.number_input("Betriebsstunden ENDE:", min_value=std_start, step=0.1, key="ende")
@@ -406,23 +400,40 @@ elif bereich == "💼 LU-Auftragsbuch":
             auftrag["stunden_gefahren"] = stunden_gefahren
             auftrag["status"] = "Abgerechnet"
             
+            # Geldtransfer buchen
             if auftrag["kunde"] in db["hoefe"]:
                 db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
             db["hoefe"][auftrag["auftragnehmer"]]["konto"] += end_preis
             speichere_globalen_speicher(db)
             
+            # PDF jetzt direkt generieren und im Session State parken
             k_name = KUNDEN_MAPPING.get(auftrag['kunde'], auftrag['kunde'])
-            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
-            posten = [[f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", f"{stunden_gefahren:.1f} Betriebsstunden auf {auftrag['maschine']} ({auftrag['stundensatz']} €/h)", f"{end_preis:,.2f} €"]]
+            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}<br/><b>Auftrags-ID:</b> #{auftrag['id']}"
+            posten = [[
+                f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", 
+                f"{stunden_gefahren:.1f} Betriebsstunden auf {auftrag['maschine']}<br/>(Basis: {auftrag['stundensatz']} €/h)", 
+                f"{end_preis:,.2f} €"
+            ]]
             
-            st.session_state["pdf_temp"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN RECHNUNG", meta, posten, end_preis, "Automatisch erfasst und über das Server-Kassenbuch beglichen.")
-            st.success("Erfolgreich abgerechnet!")
-            st.rerun()
+            # PDF-Generierung für den Download-Button vorbereiten
+            st.session_state["lu_pdf_ready"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN ABRECHNUNG", meta, posten, end_preis, "Buchung wurde dem Server-Kassenbuch automatisch belastet/gutgeschrieben.")
+            st.session_state["lu_erfolg_msg"] = f"Erfolgreich abgerechnet! {stunden_gefahren:.1f} Std. ergeben einen Betrag von {end_preis:,.2f} €."
             
-        if "pdf_temp" in st.session_state:
-            st.download_button("📄 PDF-Abrechnungsbeleg herunterladen", data=st.session_state["pdf_temp"], file_name="LU_Abrechnung_Stunden.pdf", mime="application/pdf")
+        # Wenn eine PDF-Abrechnung bereitliegt, zeige sie an (ohne Refresh-Verlust)
+        if "lu_pdf_ready" in st.session_state:
+            st.success(st.session_state["lu_erfolg_msg"])
+            st.download_button(
+                label="📄 PDF-Abrechnungsbeleg herunterladen", 
+                data=st.session_state["lu_pdf_ready"], 
+                file_name=f"LU_Abrechnung_ID_{auf_id}.pdf", 
+                mime="application/pdf"
+            )
+            if st.button("🔄 Seite aktualisieren (Nächster Auftrag)"):
+                if "lu_pdf_ready" in st.session_state: del st.session_state["lu_pdf_ready"]
+                if "lu_erfolg_msg" in st.session_state: del st.session_state["lu_erfolg_msg"]
+                st.rerun()
     else:
-        st.info("Hervorragend! Keine offenen Aufträge im System.")
+        st.info("Hervorragend! Keine offenen LU-Aufträge im System.")
 
 # ==============================================================================
 # BEREICH 3: WARENVERKAUF & RECHNUNGEN
@@ -646,7 +657,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         with col_ke2:
             k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
             
-        if st.button("📅 Kalendereintrag speichern"):
+        if st.button("📅 Kalendereintrag保存"):
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
