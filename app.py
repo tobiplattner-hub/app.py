@@ -35,10 +35,6 @@ LISTE_MONATE = ["März", "April", "Mai", "Juni", "Juli", "August", "September", 
 def fmt_float(val): return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 def fmt_int(val): return f"{int(val):,}".replace(",", ".")
 
-def extrahiere_monat_int(m_name):
-    try: return LISTE_MONATE.index(m_name) + 1
-    except: return 1
-
 KALENDER_STANDARD = {
     "Weizen": {"sa": [1, 2], "er": [5, 6]},
     "Gerste": {"sa": [1, 2], "er": [5]},
@@ -58,12 +54,18 @@ def berechne_erntestatus(frucht, saat_monat, aktueller_monat_name, manueller_sta
     if saat_monat == "Nicht gesät":
         return "⏳ Brachland / Bereit", "⏳"
         
+    # Lade angepassten oder Standard-Kalender
     cust_k = st.session_state.get("_global_custom_kalender", {})
-    if frucht in cust_k: k_daten = cust_k[frucht]
-    else: k_daten = KALENDER_STANDARD.get(frucht, {"sa": [], "er": []})
+    if frucht in cust_k: 
+        k_daten = cust_k[frucht]
+    else: 
+        k_daten = KALENDER_STANDARD.get(frucht, {"sa": [], "er": []})
     
-    idx_saat = LISTE_MONATE.index(saat_monat) + 1
-    idx_jetzt = LISTE_MONATE.index(aktueller_monat_name) + 1
+    try:
+        idx_saat = LISTE_MONATE.index(saat_monat) + 1
+        idx_jetzt = LISTE_MONATE.index(aktueller_monat_name) + 1
+    except ValueError:
+        return "⏳ Status unklar", "⏳"
     
     if idx_jetzt in k_daten["er"]: return "🟢 REIF ZUR ERNTE!", "🟢"
     if idx_jetzt in k_daten["sa"]: return "🌱 Frisch gesät / Keimung", "🌱"
@@ -198,8 +200,10 @@ if "hof1_name_custom" not in st.session_state: st.session_state.hof1_name_custom
 if "hof2_name_custom" not in st.session_state: st.session_state.hof2_name_custom = "Hof 2 - Bio-Betrieb"
 if "hof3_name_custom" not in st.session_state: st.session_state.hof3_name_custom = "Hof 3 - Freier Verbund"
 
+# Fruchtarten-System initialisieren
 if "_global_custom_kalender" not in st.session_state: st.session_state._global_custom_kalender = {}
 if "_global_fruchtarten" not in st.session_state: st.session_state._global_fruchtarten = sorted(list(KALENDER_STANDARD.keys()))
+
 if "_global_ingame_monat" not in st.session_state: st.session_state._global_ingame_monat = "März"
 if "_global_ingame_jahr" not in st.session_state: st.session_state._global_ingame_jahr = 1
 if "rechnungs_posten" not in st.session_state: st.session_state.rechnungs_posten = []
@@ -235,7 +239,7 @@ HOF_MAPPING = {
 HOF_MAPPING_REVERSE = {v: k for k, v in HOF_MAPPING.items()}
 
 # ---------------------------------------------------------
-# SIDEBAR: MANAGEMENT
+# SIDEBAR: MANAGEMENT & SETTINGS
 # ---------------------------------------------------------
 st.sidebar.title("🚜 LS25 Control Center")
 
@@ -274,6 +278,42 @@ menu = st.sidebar.radio("Navigation", [
 ])
 
 st.sidebar.write("---")
+
+# NEU: HIER KÖNNEN MOD-FRÜCHTE UND FREIE KALENDER EINGEGEBEN WERDEN
+with st.sidebar.expander("⚙️ Mod-Früchte & Kalender verwalten"):
+    st.subheader("Frucht hinzufügen")
+    neue_frucht = st.text_input("Name der Mod-Frucht:", placeholder="z.B. Dinkel").strip()
+    if st.button("➕ Frucht registrieren"):
+        if neue_frucht and neue_frucht not in st.session_state._global_fruchtarten:
+            st.session_state._global_fruchtarten.append(neue_frucht)
+            st.session_state._global_fruchtarten.sort()
+            st.success(f"{neue_frucht} hinzugefügt!")
+            st.rerun()
+            
+    st.write("---")
+    st.subheader("Kalender manuell anpassen")
+    f_edit = st.selectbox("Frucht zum Bearbeiten:", st.session_state._global_fruchtarten)
+    
+    # Standard-Werte für die Vorauswahl ermitteln
+    if f_edit in st.session_state._global_custom_kalender:
+        alt_saat = [LISTE_MONATE[i-1] for i in st.session_state._global_custom_kalender[f_edit]["sa"]]
+        alt_ernte = [LISTE_MONATE[i-1] for i in st.session_state._global_custom_kalender[f_edit]["er"]]
+    else:
+        s_idx = KALENDER_STANDARD.get(f_edit, {"sa":[]})["sa"]
+        e_idx = KALENDER_STANDARD.get(f_edit, {"er":[]})["er"]
+        alt_saat = [LISTE_MONATE[i-1] for i in s_idx]
+        alt_ernte = [LISTE_MONATE[i-1] for i in e_idx]
+        
+    neu_saat_monate = st.multiselect("Säen-Monate:", LISTE_MONATE, default=alt_saat)
+    neu_ernte_monate = st.multiselect("Ernte-Monate:", LISTE_MONATE, default=alt_ernte)
+    
+    if st.button("💾 Kalenderzeiten speichern"):
+        saat_indices = [LISTE_MONATE.index(m) + 1 for m in neu_saat_monate]
+        ernte_indices = [LISTE_MONATE.index(m) + 1 for m in neu_ernte_monate]
+        st.session_state._global_custom_kalender[f_edit] = {"sa": saat_indices, "er": ernte_indices}
+        st.toast(f"Kalender für {f_edit} erfolgreich aktualisiert!", icon="📆")
+        st.rerun()
+
 with st.sidebar.expander("⚙️ Hofnamen anpassen"):
     h1_new = st.text_input("Name Hof 1:", value=st.session_state.hof1_name_custom)
     h2_new = st.text_input("Name Hof 2:", value=st.session_state.hof2_name_custom)
@@ -319,8 +359,8 @@ if menu == "💰 Ernte & Verbrauchsraten":
             e_idx = KALENDER_STANDARD.get(f_auswahl, {"er":[]})["er"]
             saat_monate = [LISTE_MONATE[i-1] for i in s_idx]
             ernte_monate = [LISTE_MONATE[i-1] for i in e_idx]
-        st.markdown(f"**Optimaler Aussaatzeitraum:** {', '.join(saat_monate) if saat_monate else 'Keine Angabe'}")
-        st.markdown(f"**Optimaler Erntezeitraum:** {', '.join(ernte_monate) if ernte_monate else 'Keine Angabe'}")
+        st.markdown(f"**Optimaler Aussaatzeitraum:** {', '.join(saat_monate) if saat_monate else 'Keine Angabe (Bitte in Sidebar eintragen)'}")
+        st.markdown(f"**Optimaler Erntezeitraum:** {', '.join(ernte_monate) if ernte_monate else 'Keine Angabe (Bitte in Sidebar eintragen)'}")
         
     with col_rechts:
         st.subheader("💵 Waren-Verkaufsrechner & Kassenbuchung")
@@ -390,7 +430,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                 if c_del.button("🗑️", key=f"d_{idx}"): hof_daten["felder_store"].pop(idx); st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN
+# DIE RESTLICHEN SEITEN (UNVERÄNDERT)
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title(f"📋 Rechnungs-Zentrale - Erstellt von: {akt_schoener_name}")
@@ -459,9 +499,6 @@ elif menu == "📋 Rechnungen":
             st.session_state.rechnungs_posten = []
             st.rerun()
 
-# ---------------------------------------------------------
-# SEITE 4: MATERIAL & AUFTRÄGE
-# ---------------------------------------------------------
 elif menu == "🛒 Material & Aufträge":
     st.title(f"🛒 Material-Lagerbestand - {akt_schoener_name}")
     materialien = ["saat", "kalk", "dueng", "herbi", "diesel", "frischgut", "silage"]
@@ -477,9 +514,6 @@ elif menu == "🛒 Material & Aufträge":
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
         st.rerun()
 
-# ---------------------------------------------------------
-# SEITE 5: SILO-MANAGER
-# ---------------------------------------------------------
 elif menu == "🏗️ Silo-Manager":
     st.title(f"🏗️ Fahrsilo-Zentrale (Gärprozess) - {akt_schoener_name}")
     if "silos" not in hof_daten: hof_daten["silos"] = []
@@ -502,9 +536,6 @@ elif menu == "🏗️ Silo-Manager":
                     if st.button("🗑️ Silo verwerfen/löschen", key=f"del_s_{idx}"):
                         hof_daten["silos"].pop(idx); st.rerun()
 
-# ---------------------------------------------------------
-# SEITE 6: LU-AUFTAGSBUCH
-# ---------------------------------------------------------
 elif menu == "📝 LU-Auftragsbuch":
     st.title(f"📝 LU-Auftragsbuch - {akt_schoener_name}")
     col_a, col_b = st.columns([1.1, 1.4])
@@ -527,7 +558,7 @@ elif menu == "📝 LU-Auftragsbuch":
             a_menge = st.number_input("Menge:", min_value=0.1, value=1.0)
             a_preis = st.number_input("Preis/Einheit (€):", value=100.0)
             
-        if st.button("💾 Auftrag speichern", type="primary", use_container_width=True):
+        if st.button("💾 Auftrag保存", type="primary", use_container_width=True):
             if v_einheit == "h" and st.session_state.temp_lu_maschinen:
                 hof_daten["auftrags_store"].append({"kunde": a_kunde, "ort": a_feld, "einheit": "h", "status": "⏳ Ausstehend", "monat": st.session_state._global_ingame_monat, "jahr": st.session_state._global_ingame_jahr, "maschinen": st.session_state.temp_lu_maschinen.copy(), "arbeit": "Maschinenverleih"})
                 st.session_state.temp_lu_maschinen = []; st.rerun()
@@ -561,9 +592,6 @@ elif menu == "📝 LU-Auftragsbuch":
                     st.session_state._global_hoefe[lu_ziel_intern]["finanzen"]["historie"].append({"In-Game Datum": f"{aut['monat']}", "Sort_Jahr": aut['jahr'], "Sort_Monat": aut['monat'], "Typ": "Einnahme", "Nummer": f"#LU-{os.urandom(2).hex().upper()}", "Details": f"LU Job abgeschlossen ({akt_schoener_name})", "Betrag (EUR)": total_wert})
                     hof_daten["auftrags_store"].pop(idx); st.rerun()
 
-# ---------------------------------------------------------
-# SEITE 7: FUHRPARK-MANAGER
-# ---------------------------------------------------------
 elif menu == "🛒 Fuhrpark-Manager":
     st.title(f"🚛 Fuhrpark-Manager - {akt_schoener_name}")
     col_f1, col_f2 = st.columns([1, 1.5])
@@ -589,9 +617,6 @@ elif menu == "🛒 Fuhrpark-Manager":
                 if neue_stunden != f_stunden: hof_daten["fuhrpark_store"][f_name] = neue_stunden; st.rerun()
                 if c_fdel.button("🗑️", key=f"del_m_{f_name}"): del hof_daten["fuhrpark_store"][f_name]; st.rerun()
 
-# ---------------------------------------------------------
-# SEITE 8: KASSENBUCH
-# ---------------------------------------------------------
 elif menu == "📖 Detailliertes Kassenbuch":
     st.title(f"📖 Kassenbuch & Finanzzentrale - {akt_schoener_name}")
     with st.expander("➕ Manuelle Buchung durchführen"):
@@ -615,7 +640,6 @@ elif menu == "📖 Detailliertes Kassenbuch":
     else:
         st.info("Dieses Kassenbuch ist aktuell leer (Kontostand startet bei 0 €).")
         
-    # HIER NEU EINGEBAUT: DIE FUNKTION ZUM ZURÜCKSETZEN
     st.write("---")
     with st.expander("🚨 Gefahrenzone: Finanzen zurücksetzen"):
         st.warning(f"Achtung: Dies löscht unwiderruflich die gesamte Historie und setzt das Konto von **{akt_schoener_name}** auf 0 €.")
