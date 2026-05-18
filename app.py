@@ -298,7 +298,7 @@ if bereich == "📊 Dashboard & Finanzen":
                 if col not in df_v.columns:
                     df_v[col] = 0 if col in ["id", "menge", "erloes"] else "Unbekannt"
             df_v["Verkäufer"] = df_v["verkaeufer"].map(HOF_MAPPING)
-            df_v["Käufer"] = df_v["kaeufer"].map(lambda x: HOF_MAPPING[x] if x in HOF_MAPPING else x)
+            df_v["Käufer"] = df_v["kaeufer"].map(lambda x: KUNDEN_MAPPING.get(x, x))
             st.dataframe(
                 df_v[["id", "Verkäufer", "Käufer", "frucht", "menge", "erloes"]].rename(
                     columns={"frucht": "Ware", "menge": "Menge (L)", "erloes": "Umsatz (€)"}
@@ -342,11 +342,11 @@ elif bereich == "💼 LU-Auftragsbuch":
         
     with col_b:
         if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
-            verfuegbare_maschinen = df_sheet_masch['geraet'].dropna().unique().tolist()
+            verfuegbare_machines = df_sheet_masch['geraet'].dropna().unique().tolist()
         else:
-            verfuegbare_maschinen = ["Standard Schlepper (Kein Sheet geladen)"]
+            verfuegbare_machines = ["Standard Schlepper (Kein Sheet geladen)"]
             
-        a_maschine = st.selectbox("Genutztes Fahrzeug (aus Google Sheet 'preisliste'):", verfuegbare_maschinen)
+        a_maschine = st.selectbox("Genutztes Fahrzeug (aus Google Sheet 'preisliste'):", verfuegbare_machines)
         a_feld = st.number_input("Auf Feld Nummer:", min_value=1, step=1)
         
     if st.button("Auftrag live ausschreiben"):
@@ -415,7 +415,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         st.info("Hervorragend! Keine offenen Aufträge im System.")
 
 # ==============================================================================
-# BEREICH 3: WARENVERKAUF & RECHNUNGEN
+# BEREICH 3: WARENVERKAUF & RECHNUNGEN (KUNDE NUN AUS GOOGLE SHEETS)
 # ==============================================================================
 elif bereich == "🌾 Warenverkauf & Rechnungen":
     st.title("🌾 Verkaufsrechnungen (Getreide- & Ernte-Verkauf)")
@@ -423,8 +423,9 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         v_verkaeufer = st.selectbox("Verkaufender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-        v_kaeufer = st.selectbox("Empfänger / Käufer:", ["Zentrale Verkaufsstelle (Server-Bank)", "Hof 1", "Hof 2", "Hof 3"], 
-                                 format_func=lambda x: HOF_MAPPING[x] if x in HOF_MAPPING else x)
+        
+        # Käufer-Auswahl nutzt nun die dynamische Liste aus Google Sheets
+        v_kaeufer = st.selectbox("Empfänger / Käufer (aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         
         frucht_optionen = db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"]
         v_frucht_sel = st.selectbox("Verkaufte Fruchtart:", frucht_optionen)
@@ -455,7 +456,7 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
             })
             speichere_globalen_speicher(db)
             
-            kaeufer_name = HOF_MAPPING[v_kaeufer] if v_kaeufer in HOF_MAPPING else v_kaeufer
+            kaeufer_name = KUNDEN_MAPPING.get(v_kaeufer, v_kaeufer)
             meta_v = f"<b>Verkäufer:</b> {HOF_MAPPING[v_verkaeufer]}<br/><b>Käufer:</b> {kaeufer_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y - %H:%M')}"
             posten_v = [[f"Lieferung von {v_frucht}", f"{v_menge:,} Liter ({preis_pro_1k} € / 1.000L)", f"{gesamt_erloes:,.2f} €"]]
             
@@ -504,7 +505,7 @@ elif bereich == "📈 Fruchtpreise (Manuell)":
         st.rerun()
 
 # ==============================================================================
-# BEREICH 6: FELDVERWALTUNG (JETZT MIT MOD-FRUCHT OPTION)
+# BEREICH 6: FELDVERWALTUNG
 # ==============================================================================
 elif bereich == "🗺️ Feldverwaltung":
     st.title("🗺️ Globale Feldverwaltung")
@@ -524,7 +525,6 @@ elif bereich == "🗺️ Feldverwaltung":
         f_besitzer = st.selectbox("Besitzer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         f_groesse = st.number_input("Größe in Hektar (ha):", min_value=0.1, step=0.1, value=2.0)
         
-        # Fruchtarten-Auswahl für Felder erweitert um Mod-Eingabe
         feld_frucht_optionen = db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"]
         f_frucht_sel = st.selectbox("Fruchtart:", feld_frucht_optionen)
         
