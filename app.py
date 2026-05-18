@@ -144,6 +144,8 @@ def lade_globalen_speicher():
                 daten["verkaeufe"] = []
             if "manuelle_buchungen" not in daten:
                 daten["manuelle_buchungen"] = []
+            if "auftraege" not in daten:
+                daten["auftraege"] = []
             return daten
     except:
         return default_daten
@@ -195,7 +197,7 @@ bereich = st.sidebar.radio(
 )
 
 # ==============================================================================
-# BEREICH 1: DASHBOARD & FINANZEN (INKLUSIVE MANUELLEN BUCHUNGEN & HISTORIE)
+# BEREICH 1: DASHBOARD & FINANZEN
 # ==============================================================================
 if bereich == "📊 Dashboard & Finanzen":
     st.title("🚜 LS25 Server-Dashboard")
@@ -227,7 +229,6 @@ if bereich == "📊 Dashboard & Finanzen":
                 effektiver_betrag = m_betrag if "Guts" in m_art else -m_betrag
                 db["hoefe"][m_hof]["konto"] += effektiver_betrag
                 
-                # In den Verlauf loggen
                 db["manuelle_buchungen"].append({
                     "datum": datetime.now().strftime('%d.%m.%Y - %H:%M'),
                     "hof": m_hof,
@@ -250,8 +251,15 @@ if bereich == "📊 Dashboard & Finanzen":
         erledigte_auftraege = [x for x in db["auftraege"] if x.get("status") == "Abgerechnet"]
         if erledigte_auftraege:
             df_erledigt = pd.DataFrame(erledigte_auftraege)
+            
+            # ABSICHERUNG gegen KeyError: Fehlende Spalten auffüllen, falls sie nicht im Datensatz existieren
+            for col in ["id", "kunde", "auftragnehmer", "typ", "maschine", "stunden_gefahren", "preis"]:
+                if col not in df_erledigt.columns:
+                    df_erledigt[col] = 0 if col in ["stunden_gefahren", "preis", "id"] else "Unbekannt"
+            
             df_erledigt["Kunde"] = df_erledigt["kunde"].map(HOF_MAPPING)
             df_erledigt["Lohnunternehmen"] = df_erledigt["auftragnehmer"].map(HOF_MAPPING)
+            
             st.dataframe(
                 df_erledigt[["id", "Kunde", "Lohnunternehmen", "typ", "maschine", "stunden_gefahren", "preis"]].rename(
                     columns={"typ": "Arbeit", "maschine": "Fahrzeug", "stunden_gefahren": "Betriebsstunden", "preis": "Erlös (€)"}
@@ -263,6 +271,11 @@ if bereich == "📊 Dashboard & Finanzen":
     with tab2:
         if db["verkaeufe"]:
             df_v = pd.DataFrame(db["verkaeufe"])
+            
+            for col in ["id", "verkaeufer", "kaeufer", "frucht", "menge", "erloes"]:
+                if col not in df_v.columns:
+                    df_v[col] = 0 if col in ["id", "menge", "erloes"] else "Unbekannt"
+                    
             df_v["Verkäufer"] = df_v["verkaeufer"].map(HOF_MAPPING)
             df_v["Käufer"] = df_v["kaeufer"].map(lambda x: HOF_MAPPING[x] if x in HOF_MAPPING else x)
             st.dataframe(
