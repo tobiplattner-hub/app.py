@@ -32,22 +32,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# GOOGLE SHEETS LIVE-IMPORT (DEINE DEKLARIERTE TABELLEN-ID)
+# GOOGLE SHEETS LIVE-IMPORT
 # ==============================================================================
-# Deine Live-ID ist hier fest hinterlegt:
 SHEET_ID = "1nRViE_WnhMnAIJuYsYvZ3KaxAR43DnpDcHmtoA0qzPo" 
 
 def lade_maschinen_aus_sheets():
     try:
-        # Lädt dein spezifisches Blatt "preisliste"
         url_maschinen = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=preisliste"
         df_masch = pd.read_csv(url_maschinen)
-        
-        # Bereinigung: Spaltennamen von eventuellen Leerzeichen befreien
         df_masch.columns = df_masch.columns.str.strip()
         return df_masch
     except Exception as e:
-        st.sidebar.error("Fehler beim Laden aus Google Sheets. Bitte prüfe, ob das Sheet auf 'Jeder, der den Link hat, kann ansehen' freigegeben ist und die Spalten exakt 'geraet' und 'Preis' heißen.")
+        st.sidebar.error("Fehler beim Laden aus Google Sheets. Bitte Freigabe und Spaltennamen ('geraet', 'Preis') prüfen.")
         return None
 
 # ==============================================================================
@@ -114,8 +110,8 @@ START_KONTO_HOF1 = 500000.0
 START_KONTO_HOF2 = 350000.0
 START_KONTO_HOF3 = 200000.0
 
-def lade_globalen_speicher():
-    default_daten = {
+def generiere_standard_daten():
+    return {
         "hoefe": {
             "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": START_KONTO_HOF1},
             "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": START_KONTO_HOF2},
@@ -130,8 +126,12 @@ def lade_globalen_speicher():
             {"id": 2, "besitzer": "Hof 2", "groesse": 2.1, "frucht": "Mais", "status": "Erntebereit", "ernte_typ": "Silage"}
         ],
         "auftraege": [],
-        "verkaeufe": []
+        "verkaeufe": [],
+        "manuelle_buchungen": []
     }
+
+def lade_globalen_speicher():
+    default_daten = generiere_standard_daten()
     if not os.path.exists(DB_DATEI):
         speichere_globalen_speicher(default_daten)
         return default_daten
@@ -140,6 +140,10 @@ def lade_globalen_speicher():
             daten = json.load(f)
             if "preise" not in daten:
                 daten["preise"] = default_daten["preise"]
+            if "verkaeufe" not in daten:
+                daten["verkaeufe"] = []
+            if "manuelle_buchungen" not in daten:
+                daten["manuelle_buchungen"] = []
             return daten
     except:
         return default_daten
@@ -149,8 +153,6 @@ def speichere_globalen_speicher(daten):
         json.dump(daten, f, ensure_ascii=False, indent=4)
 
 db = lade_globalen_speicher()
-
-# Live-Abruf der Fahrzeuge aus deiner echten Google Sheets "preisliste"
 df_sheet_masch = lade_maschinen_aus_sheets()
 
 HOF_MAPPING = {
@@ -177,20 +179,111 @@ with st.sidebar.expander("📝 Hofnamen live ändern"):
         st.success("Namen global aktualisiert!")
         st.rerun()
 
+# --- DANGER ZONE / RESET ---
+st.sidebar.write("---")
+with st.sidebar.expander("⚠️ Danger Zone (Reset)"):
+    st.warning("Das setzt alle Finanzen und Listen komplett auf Null zurück!")
+    if st.button("🚨 GANZEN SERVER ZURÜCKSETZEN"):
+        neubeginn = generiere_standard_daten()
+        speichere_globalen_speicher(neubeginn)
+        st.success("Erfolgreich zurückgesetzt! Lade neu...")
+        st.rerun()
+
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
     ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung"]
 )
 
 # ==============================================================================
-# BEREICH 1: DASHBOARD & FINANZEN
+# BEREICH 1: DASHBOARD & FINANZEN (INKLUSIVE MANUELLEN BUCHUNGEN & HISTORIE)
 # ==============================================================================
 if bereich == "📊 Dashboard & Finanzen":
     st.title("🚜 LS25 Server-Dashboard")
+    
+    # 1. Kontostände anzeigen
     col1, col2, col3 = st.columns(3)
     for i, (k, v) in enumerate(db["hoefe"].items()):
         with [col1, col2, col3][i]:
             st.metric(label=v["name"], value=f"{v['konto']:,.2f} €")
+            
+    st.write("---")
+    
+    # 2. MANUELLES EINNAHMEN & ABBUCHEN (KORREKTUREN)
+    st.subheader("💰 Manuelle Buchung durchführen (Kassierer-Zentrale)")
+    with st.expander("🛠️ Gelder direkt einbuchen oder abbuchen", expanded=False):
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            m_hof = st.selectbox("Betroffener Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="m_hof")
+            m_art = st.radio("Buchungsart:", ["➕ Gutschrift (Einnahme)", "➖ Abbuchung (Kosten)"])
+        with col_m2:
+            m_betrag = st.number_input("Betrag (€):", min_value=0.0, step=100.0, value=1000.0)
+        with col_m3:
+            m_zweck = st.text_input("Verwendungszweck / Grund:", placeholder="z. B. Kredit, Strafe, Bonus, Tierhandel")
+            
+        if st.button("⚡ Buchung jetzt live erzwingen"):
+            if m_zweck.strip() == "":
+                st.error("Bitte gib einen Verwendungszweck an!")
+            else:
+                effektiver_betrag = m_betrag if "Guts" in m_art else -m_betrag
+                db["hoefe"][m_hof]["konto"] += effektiver_betrag
+                
+                # In den Verlauf loggen
+                db["manuelle_buchungen"].append({
+                    "datum": datetime.now().strftime('%d.%m.%Y - %H:%M'),
+                    "hof": m_hof,
+                    "typ": "Guts" if "Guts" in m_art else "Abbuchung",
+                    "betrag": m_betrag,
+                    "zweck": m_zweck
+                })
+                speichere_globalen_speicher(db)
+                st.success(f"Erfolgreich verbucht! {m_art} über {m_betrag:,.2f} € für {HOF_MAPPING[m_hof]}.")
+                st.rerun()
+
+    st.write("---")
+    
+    # 3. Das zentrale Kassenbuch (Transaktionshistorie)
+    st.subheader("📖 Zentrales Server-Kassenbuch")
+    
+    tab1, tab2, tab3 = st.tabs(["💼 Abgerechnete LU-Aufträge", "🌾 Getätigte Warenverkäufe", "🛠️ Manuelle Buchungen & Korrekturen"])
+    
+    with tab1:
+        erledigte_auftraege = [x for x in db["auftraege"] if x.get("status") == "Abgerechnet"]
+        if erledigte_auftraege:
+            df_erledigt = pd.DataFrame(erledigte_auftraege)
+            df_erledigt["Kunde"] = df_erledigt["kunde"].map(HOF_MAPPING)
+            df_erledigt["Lohnunternehmen"] = df_erledigt["auftragnehmer"].map(HOF_MAPPING)
+            st.dataframe(
+                df_erledigt[["id", "Kunde", "Lohnunternehmen", "typ", "maschine", "stunden_gefahren", "preis"]].rename(
+                    columns={"typ": "Arbeit", "maschine": "Fahrzeug", "stunden_gefahren": "Betriebsstunden", "preis": "Erlös (€)"}
+                ), use_container_width=True, hide_index=True
+            )
+        else:
+            st.info("Es wurden noch keine Lohnaufträge über Betriebsstunden abgerechnet.")
+            
+    with tab2:
+        if db["verkaeufe"]:
+            df_v = pd.DataFrame(db["verkaeufe"])
+            df_v["Verkäufer"] = df_v["verkaeufer"].map(HOF_MAPPING)
+            df_v["Käufer"] = df_v["kaeufer"].map(lambda x: HOF_MAPPING[x] if x in HOF_MAPPING else x)
+            st.dataframe(
+                df_v[["id", "Verkäufer", "Käufer", "frucht", "menge", "erloes"]].rename(
+                    columns={"frucht": "Ware", "menge": "Menge (L)", "erloes": "Umsatz (€)"}
+                ), use_container_width=True, hide_index=True
+            )
+        else:
+            st.info("Es wurden noch keine Warenverkäufe verbucht.")
+
+    with tab3:
+        if db.get("manuelle_buchungen"):
+            df_m = pd.DataFrame(db["manuelle_buchungen"])
+            df_m["Hof"] = df_m["hof"].map(HOF_MAPPING)
+            st.dataframe(
+                df_m[["datum", "Hof", "typ", "betrag", "zweck"]].rename(
+                    columns={"datum": "Zeitpunkt", "typ": "Art", "betrag": "Betrag (€)", "zweck": "Grund"}
+                ), use_container_width=True, hide_index=True
+            )
+        else:
+            st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
 # BEREICH 2: LU-AUFTRAGSBUCH
@@ -207,7 +300,6 @@ elif bereich == "💼 LU-Auftragsbuch":
         a_typ = st.selectbox("Arbeitsart:", ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen"])
         
     with col_b:
-        # Filtert die Liste der Geräte aus deiner Spalte 'geraet' aus Google Sheets
         if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
             verfuegbare_maschinen = df_sheet_masch['geraet'].dropna().unique().tolist()
         else:
@@ -219,8 +311,7 @@ elif bereich == "💼 LU-Auftragsbuch":
     if st.button("Auftrag live ausschreiben"):
         neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
         
-        # Holt den Stundensatz aus deiner Google-Spalte 'Preis'
-        stundensatz_aus_sheet = 150.0  # Fallback
+        stundensatz_aus_sheet = 150.0
         if df_sheet_masch is not None and a_maschine in df_sheet_masch['geraet'].values:
             stundensatz_aus_sheet = float(df_sheet_masch[df_sheet_masch['geraet'] == a_maschine]['Preis'].values[0])
             
@@ -253,10 +344,8 @@ elif bereich == "💼 LU-Auftragsbuch":
             stunden_gefahren = std_ende - std_start
             auftrag = next(x for x in db["auftraege"] if x["id"] == auf_id)
             
-            # Preisberechnung (Stunden * Google Sheet Preis)
             end_preis = stunden_gefahren * auftrag["stundensatz"]
             
-            # 50% Rabatt-Automatik falls das Zielfeld auf Silage steht
             feld_treffer = next((f for f in db["felder"] if f["id"] == auftrag["feld"]), None)
             if feld_treffer and feld_treffer.get("ernte_typ") == "Silage":
                 end_preis *= 0.5
@@ -265,17 +354,15 @@ elif bereich == "💼 LU-Auftragsbuch":
             auftrag["stunden_gefahren"] = stunden_gefahren
             auftrag["status"] = "Abgerechnet"
             
-            # Geldtransfer durchführen
             db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
             db["hoefe"][auftrag["auftragnehmer"]]["konto"] += end_preis
             speichere_globalen_speicher(db)
             
-            # PDF-Inhalt generieren
             meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {HOF_MAPPING[auftrag['kunde']]}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
             posten = [[f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", f"{stunden_gefahren:.1f} Betriebsstunden auf {auftrag['maschine']} ({auftrag['stundensatz']} €/h)", f"{end_preis:,.2f} €"]]
             
             st.session_state["pdf_temp"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN RECHNUNG", meta, posten, end_preis, "Automatisch erfasst und über das Server-Kassenbuch beglichen.")
-            st.success("Erfolgreich abgerechnet!")
+            st.success("Erfolgreich abgerechnet und ins Kassenbuch übertragen!")
             st.rerun()
             
         if "pdf_temp" in st.session_state:
