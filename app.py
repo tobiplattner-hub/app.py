@@ -90,6 +90,7 @@ def erstelle_leeren_hof():
 def lade_gesamte_daten():
     standard_daten = {
         "aktiver_hof_auswahl": "Plattner & Auer Agrar",
+        "hof_3_custom_name": "Hof 3 (Separat)",
         "hoefe": {
             "Plattner & Auer Agrar": erstelle_leeren_hof(),
             "Hof 3 (Separat)": erstelle_leeren_hof(),
@@ -107,13 +108,21 @@ def lade_gesamte_daten():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 geladene_daten = json.load(f)
                 
-                # Sicherstellen, dass die 3 gewünschten Konten existieren
+                # Sicherstellen, dass die Grundstrukturen existieren
                 if "hoefe" not in geladene_daten:
                     geladene_daten["hoefe"] = standard_daten["hoefe"]
-                else:
-                    for h_name in standard_daten["hoefe"].keys():
-                        if h_name not in geladene_daten["hoefe"]:
-                            geladene_daten["hoefe"][h_name] = erstelle_leeren_hof()
+                
+                if "hof_3_custom_name" not in geladene_daten:
+                    geladene_daten["hof_3_custom_name"] = "Hof 3 (Separat)"
+
+                # Falls der Name von Hof 3 geändert wurde, Schlüssel im Wörterbuch anpassen
+                aktueller_hof3_schluessel = geladene_daten["hof_3_custom_name"]
+                if aktueller_hof3_schluessel not in geladene_daten["hoefe"]:
+                    # Versuche alten Standardnamen zu finden und zu migrieren
+                    if "Hof 3 (Separat)" in geladene_daten["hoefe"]:
+                        geladene_daten["hoefe"][aktueller_hof3_schluessel] = geladene_daten["hoefe"].pop("Hof 3 (Separat)")
+                    else:
+                        geladene_daten["hoefe"][aktueller_hof3_schluessel] = erstelle_leeren_hof()
 
                 for k, v in standard_daten.items():
                     if k not in geladene_daten: geladene_daten[k] = v
@@ -124,6 +133,7 @@ def lade_gesamte_daten():
 if "_global_daten_geladen" not in st.session_state:
     gespeicherte_daten = lade_gesamte_daten()
     st.session_state._global_hoefe = gespeicherte_daten.get("hoefe", {})
+    st.session_state._global_hof_3_name = gespeicherte_daten.get("hof_3_custom_name", "Hof 3 (Separat)")
     st.session_state._global_aktiver_hof = gespeicherte_daten.get("aktiver_hof_auswahl", "Plattner & Auer Agrar")
     
     st.session_state._global_bestell_store = gespeicherte_daten.get("bestell_store", [])
@@ -137,6 +147,7 @@ if "_global_daten_geladen" not in st.session_state:
 def speichere_gesamte_daten():
     daten_zum_speichern = {
         "aktiver_hof_auswahl": st.session_state._global_aktiver_hof,
+        "hof_3_custom_name": st.session_state._global_hof_3_name,
         "hoefe": st.session_state._global_hoefe,
         "bestell_store": st.session_state._global_bestell_store,
         "fruchtarten": st.session_state._global_fruchtarten,
@@ -149,7 +160,12 @@ def speichere_gesamte_daten():
             json.dump(daten_zum_speichern, f, ensure_ascii=False, indent=4)
     except Exception as e: st.error(f"Fehler beim Sichern: {e}")
 
+# Aktiver Name sichern
 akt_hof_name = st.session_state._global_aktiver_hof
+if akt_hof_name not in st.session_state._global_hoefe:
+    akt_hof_name = "Plattner & Auer Agrar"
+    st.session_state._global_aktiver_hof = "Plattner & Auer Agrar"
+
 hof_daten = st.session_state._global_hoefe[akt_hof_name]
 
 def fmt_int(wert): return f"{wert:,.0f}".replace(",", ".")
@@ -224,6 +240,25 @@ if "temp_lu_maschinen" not in st.session_state: st.session_state.temp_lu_maschin
 # SIDEBAR LIVE-ANZEIGE & MULTI-HOF SWITCHER
 # ---------------------------------------------------------
 st.sidebar.title("🏢 Struktur & Hof-Auswahl")
+
+# NEU: Feld zur Benennung von Hof 3 direkt in der Sidebar
+alter_hof3_name = st.session_state._global_hof_3_name
+neuer_hof3_name = st.sidebar.text_input("📝 Name für Hof 3 festlegen:", value=alter_hof3_name)
+
+if neuer_hof3_name.strip() and neuer_hof3_name != alter_hof3_name:
+    h3_name_neu = neuer_hof3_name.strip()
+    # Daten im Speicher umschreiben auf den neuen Namen
+    if alter_hof3_name in st.session_state._global_hoefe:
+        st.session_state._global_hoefe[h3_name_neu] = st.session_state._global_hoefe.pop(alter_hof3_name)
+    else:
+        st.session_state._global_hoefe[h3_name_neu] = erstelle_leeren_hof()
+        
+    st.session_state._global_hof_3_name = h3_name_neu
+    if st.session_state._global_aktiver_hof == alter_hof3_name:
+        st.session_state._global_aktiver_hof = h3_name_neu
+    speichere_gesamte_daten()
+    st.rerun()
+
 liste_hoefe = list(st.session_state._global_hoefe.keys())
 try: h_idx = liste_hoefe.index(st.session_state._global_aktiver_hof)
 except: h_idx = 0
@@ -300,7 +335,6 @@ if menu == "💰 Ernte & Verbrauchsraten":
     erloes = (vk_menge / 1000.0) * vk_preis
     st.markdown(f"### 📈 Berechneter Erlös: **{fmt_float(erloes)} €**")
     
-    # NEU: Hier kann man auch beim Ernteverkauf das Zielkonto wählen!
     ziel_konto_vk = st.selectbox("Erlös gutschreiben auf Konto:", liste_hoefe, index=liste_hoefe.index(akt_hof_name), key="ziel_vk_k")
     
     if st.button("💾 Erlös verbuchen & Kassenbuch eintragen", type="primary"):
@@ -408,7 +442,7 @@ elif menu == "🚜 Meine Felder & Anbau":
                 if c_del.button("🗑️", key=f"d_{idx}", use_container_width=True): hof_daten["felder_store"].pop(idx); speichere_gesamte_daten(); st.rerun()
 
 # ---------------------------------------------------------
-# SEITE 3: RECHNUNGEN (MIT KONTO-AUSWAHL FÜR DIE GMBH)
+# SEITE 3: RECHNUNGEN
 # ---------------------------------------------------------
 elif menu == "📋 Rechnungen":
     st.title(f"📋 Rechnungs-Zentrale — Erstellt von: {akt_hof_name}")
@@ -441,7 +475,6 @@ elif menu == "📋 Rechnungen":
         rabatt = st.slider("Rabatt (%)", 0, 50, 0)
         full_ingame_date = f"J{st.session_state._global_ingame_jahr}-{st.session_state._global_ingame_monat}"
         
-        # WICHTIG: Hier entscheidet ihr, auf welches Konto diese Rechnung gebucht wird!
         ziel_konto = st.selectbox("🎯 Geldeingang verbuchen auf Konto:", liste_hoefe, index=liste_hoefe.index(akt_hof_name))
         
         if st.session_state.rechnungs_posten:
@@ -485,7 +518,7 @@ elif menu == "🛒 Material & Aufträge":
             st.markdown(f"### {mat.upper()}")
             werte[f"v_{mat}"] = st.number_input("Bestand (L):", min_value=0, value=int(hof_daten["lager_store"].get(mat, 0)), key=f"i_v_{mat}")
             werte[f"g_{mat}"] = st.number_input("Grenzwert (L):", min_value=0, value=int(hof_daten["lager_grenzwerte"].get(mat, 1000)), key=f"i_g_{mat}")
-    if st.button("💾 Lagerkonfiguration speichern", use_container_width=True, type="primary"):
+    if st.button("💾 Lagerkonfiguration保存", use_container_width=True, type="primary"):
         for mat in materialien:
             hof_daten["lager_store"][mat] = werte[f"v_{mat}"]
             hof_daten["lager_grenzwerte"][mat] = werte[f"g_{mat}"]
@@ -513,7 +546,7 @@ elif menu == "📝 LU-Auftragsbuch":
             a_arbeit = st.text_input("Arbeitsschritt:")
             a_menge = st.number_input("Menge:", min_value=0.1, value=1.0)
             a_preis = st.number_input("Preis/Einheit (€):", value=100.0)
-        if st.button("💾 Auftrag speichern", type="primary", use_container_width=True):
+        if st.button("💾 Auftrag保存", type="primary", use_container_width=True):
             if v_einheit == "h" and st.session_state.temp_lu_maschinen:
                 hof_daten["auftrags_store"].append({"kunde": a_kunde, "ort": a_feld, "einheit": "h", "status": "⏳ Ausstehend", "monat": st.session_state._global_ingame_monat, "jahr": st.session_state._global_ingame_jahr, "maschinen": st.session_state.temp_lu_maschinen.copy(), "arbeit": "Maschinenverleih"})
                 st.session_state.temp_lu_maschinen = []; speichere_gesamte_daten(); st.rerun()
@@ -538,7 +571,6 @@ elif menu == "📝 LU-Auftragsbuch":
                 else: total_wert = aut['menge'] * aut['preis_einheit']
                 st.write(f"Wert: **{fmt_float(total_wert)} €**")
                 
-                # Auch hier beim Verbuchen wählbar, wer die Kohle kriegt!
                 lu_ziel = st.selectbox("Einnahme buchen auf:", liste_hoefe, index=liste_hoefe.index(akt_hof_name), key=f"lu_tgt_{idx}")
                 
                 if st.button("💾 Erledigt & Buchen", key=f"f_j_{idx}", type="primary"):
