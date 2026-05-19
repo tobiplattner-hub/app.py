@@ -875,32 +875,31 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
         
 # ==============================================================================
-# BEREICH: TIER- & FUTTERMANAGEMENT
+# BEREICH: TIER- & FUTTERMANAGEMENT (VOLLSTÄNDIG)
 # ==============================================================================
 elif bereich == "🐄 Tier- & Futtermanagement":
-    st.title("🐄 Tier- & Futtermanagement")
+    st.title("🐄 Tier- & Futtermanagement (PAMM)")
     
-    # LS25 Futter-Profile
+    # 1. Datenbasis gemäß Kalkulation
     tier_profile = {
-        "Milchkühe": {"verbrauch": 350, "heu": 0.5, "silage": 0.4, "stroh": 0.1, "typ": "TMR"},
-        "Wasserbüffel": {"verbrauch": 380, "heu": 0.5, "silage": 0.4, "stroh": 0.1, "typ": "TMR"},
+        "Milchkühe (18M)": {"verbrauch": 350, "heu": 0.5, "silage": 0.4, "stroh": 0.1, "typ": "TMR"},
+        "Fleischrinder (18M)": {"verbrauch": 550, "heu": 0.5, "silage": 0.4, "stroh": 0.1, "typ": "TMR"},
         "Ziegen": {"verbrauch": 200, "gras_heu": 0.8, "mineral": 0.2, "typ": "GRAS"},
         "Schweine": {"verbrauch": 250, "mais": 0.5, "weizen": 0.3, "raps": 0.2, "typ": "Mix"},
         "Hühner": {"verbrauch": 80, "weizen": 1.0, "typ": "Getreide"}
     }
 
-    # 1. Tierbestand pro Hof
-    st.subheader("🏠 Tierbestand pro Hof")
-    cols = st.columns(3)
-    hof_tiere = {}
-    
+    # 2. Tierbestand pro Hof
+    st.subheader("🏠 Tierbestand (Stall-Management)")
     if "tierbestand" not in db: 
         db["tierbestand"] = {"Hof 1": 0, "Hof 2": 0, "Hof 3": 0}
 
+    cols = st.columns(3)
+    hof_tiere = {}
     for i, h_id in enumerate(["Hof 1", "Hof 2", "Hof 3"]):
         with cols[i]:
-            st.markdown(f"**{HOF_MAPPING.get(h_id, h_id)}**")
-            hof_tiere[h_id] = st.number_input(f"Anzahl Tiere:", min_value=0, value=db["tierbestand"].get(h_id, 0), key=f"tiere_{h_id}")
+            label = HOF_MAPPING.get(h_id, h_id)
+            hof_tiere[h_id] = st.number_input(f"Anzahl Tiere ({label}):", min_value=0, value=db["tierbestand"].get(h_id, 0), key=f"tiere_{h_id}")
 
     if st.button("Tierbestand auf Server speichern"):
         db["tierbestand"] = hof_tiere
@@ -909,73 +908,50 @@ elif bereich == "🐄 Tier- & Futtermanagement":
 
     st.write("---")
     
-    # 2. Futter-Konfiguration & Rechner
+    # 3. Futterbedarfs-Rechner
     st.subheader("📊 Futterbedarfs-Rechner")
-    
     col_cfg1, col_cfg2 = st.columns([2, 1])
     
     with col_cfg1:
         tier_typ = st.selectbox("Tierart wählen:", list(tier_profile.keys()))
-        monate = st.slider("Planungszeitraum (Monate):", 1, 12, 1)
-
+        monate = st.slider("Planungszeitraum (Monate):", 1, 37, 12)
     with col_cfg2:
-        manuell_aktiv = st.checkbox("Manuell anpassen")
-        if manuell_aktiv:
-            verbrauch_pro_tier = st.number_input("Liter pro Tier/Monat:", min_value=1, value=tier_profile[tier_typ]["verbrauch"])
-        else:
-            verbrauch_pro_tier = tier_profile[tier_typ]["verbrauch"]
-            st.write(f"Standard: {verbrauch_pro_tier} L")
+        reserve = st.slider("Reserve-Puffer (%)", 0, 20, 5) / 100
 
     # Berechnung
     p = tier_profile[tier_typ]
     gesamt_tiere = sum(hof_tiere.values())
+    verbrauch_pro_tier = p["verbrauch"]
+    
     bedarf_total = gesamt_tiere * verbrauch_pro_tier * monate
+    bedarf_mit_reserve = bedarf_total * (1 + reserve)
     
-    st.info(f"### Gesamtbedarf für {gesamt_tiere} Tiere ({monate} Monate): {bedarf_total:,.0f} Liter")
+    st.info(f"### Gesamtbedarf ({gesamt_tiere} Tiere, {monate} Mon.): {bedarf_mit_reserve:,.0f} L (inkl. {reserve*100:.0f}% Reserve)")
     
-    # Dynamische Anzeige der Futterkomponenten
+    # Anzeige der Komponenten (TMR/Mix spezifisch)
     if p["typ"] == "TMR":
-        st.subheader("🌾 Zusammensetzung: Totalmischration (TMR)")
+        st.subheader("🌾 TMR-Zusammensetzung (50/40/10)")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Heu (50%)", f"{bedarf_total * p['heu']:,.0f} L")
-        c2.metric("Silage (40%)", f"{bedarf_total * p['silage']:,.0f} L")
-        c3.metric("Stroh (10%)", f"{bedarf_total * p['stroh']:,.0f} L")
-        
-    elif p["typ"] == "GRAS":
-        c1, c2 = st.columns(2)
-        c1.metric("Gras/Heu (80%)", f"{bedarf_total * p['gras_heu']:,.0f} L")
-        c2.metric("Mineralfutter (20%)", f"{bedarf_total * p['mineral']:,.0f} L")
-        
+        c1.metric("Heu (50%)", f"{bedarf_mit_reserve * p['heu']:,.0f} L")
+        c2.metric("Silage (40%)", f"{bedarf_mit_reserve * p['silage']:,.0f} L")
+        c3.metric("Stroh (10%)", f"{bedarf_mit_reserve * p['stroh']:,.0f} L")
     elif p["typ"] == "Mix":
+        st.subheader("🌾 Mix-Zusammensetzung")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Mais (50%)", f"{bedarf_total * p['mais']:,.0f} L")
-        c2.metric("Weizen (30%)", f"{bedarf_total * p['weizen']:,.0f} L")
-        c3.metric("Raps (20%)", f"{bedarf_total * p['raps']:,.0f} L")
-        
-    elif p["typ"] == "Getreide":
-        st.metric("Getreide (100%)", f"{bedarf_total:,.0f} L")
+        c1.metric("Mais (50%)", f"{bedarf_mit_reserve * p['mais']:,.0f} L")
+        c2.metric("Weizen (30%)", f"{bedarf_mit_reserve * p['weizen']:,.0f} L")
+        c3.metric("Raps (20%)", f"{bedarf_mit_reserve * p['raps']:,.0f} L")
 
-    st.write("---")
-    
-    # 3. Chart mit dynamischer Aufschlüsselung
+    # 4. Chart Bedarfsentwicklung
     st.markdown("📈 **Bedarfsentwicklung (Gesamt & Komponenten)**")
     monats_daten = []
-    for m in range(1, 13):
-        m_bedarf = gesamt_tiere * verbrauch_pro_tier * m
+    for m in range(1, monate + 1):
+        m_bedarf = gesamt_tiere * verbrauch_pro_tier * m * (1 + reserve)
         data = {"Monat": m, "Gesamt": m_bedarf}
-        
-        # Komponenten-Logik für Chart
         if p["typ"] == "TMR":
-            data.update({
-                "TMR-Heu": m_bedarf * p['heu'], 
-                "TMR-Silage": m_bedarf * p['silage'], 
-                "TMR-Stroh": m_bedarf * p['stroh']
-            })
+            data.update({"Heu": m_bedarf * p['heu'], "Silage": m_bedarf * p['silage'], "Stroh": m_bedarf * p['stroh']})
         elif p["typ"] == "Mix":
             data.update({"Mais": m_bedarf * p['mais'], "Weizen": m_bedarf * p['weizen'], "Raps": m_bedarf * p['raps']})
-        elif p["typ"] == "GRAS":
-            data.update({"Gras/Heu": m_bedarf * p['gras_heu'], "Mineral": m_bedarf * p['mineral']})
-            
         monats_daten.append(data)
 
     st.line_chart(pd.DataFrame(monats_daten).set_index("Monat"))
