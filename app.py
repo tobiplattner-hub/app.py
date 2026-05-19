@@ -894,7 +894,8 @@ elif bereich == "🐄 Tier- & Futtermanagement":
     cols = st.columns(3)
     hof_tiere = {}
     
-    if "tierbestand" not in db: db["tierbestand"] = {"Hof 1": 0, "Hof 2": 0, "Hof 3": 0}
+    if "tierbestand" not in db: 
+        db["tierbestand"] = {"Hof 1": 0, "Hof 2": 0, "Hof 3": 0}
 
     for i, h_id in enumerate(["Hof 1", "Hof 2", "Hof 3"]):
         with cols[i]:
@@ -934,6 +935,7 @@ elif bereich == "🐄 Tier- & Futtermanagement":
     
     # Dynamische Anzeige der Futterkomponenten
     if p["typ"] == "TMR":
+        st.subheader("🌾 Zusammensetzung: Totalmischration (TMR)")
         c1, c2, c3 = st.columns(3)
         c1.metric("Heu (50%)", f"{bedarf_total * p['heu']:,.0f} L")
         c2.metric("Silage (40%)", f"{bedarf_total * p['silage']:,.0f} L")
@@ -964,7 +966,11 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         
         # Komponenten-Logik für Chart
         if p["typ"] == "TMR":
-            data.update({"Heu": m_bedarf * p['heu'], "Silage": m_bedarf * p['silage'], "Stroh": m_bedarf * p['stroh']})
+            data.update({
+                "TMR-Heu": m_bedarf * p['heu'], 
+                "TMR-Silage": m_bedarf * p['silage'], 
+                "TMR-Stroh": m_bedarf * p['stroh']
+            })
         elif p["typ"] == "Mix":
             data.update({"Mais": m_bedarf * p['mais'], "Weizen": m_bedarf * p['weizen'], "Raps": m_bedarf * p['raps']})
         elif p["typ"] == "GRAS":
