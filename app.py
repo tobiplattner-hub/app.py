@@ -915,13 +915,21 @@ elif bereich == "🐄 Tier- & Futtermanagement":
     with col_cfg1:
         tier_typ = st.selectbox("Tierart wählen:", list(tier_profile.keys()))
         monate = st.slider("Planungszeitraum (Monate):", 1, 37, 12)
+        
+        # Manuelle Bedarfsanpassung
+        manuell_aktiv = st.checkbox("Bedarf pro Tier/Monat manuell anpassen")
+        if manuell_aktiv:
+            verbrauch_pro_tier = st.number_input("Liter pro Tier/Monat (Manuell):", min_value=1.0, value=float(tier_profile[tier_typ]["verbrauch"]))
+        else:
+            verbrauch_pro_tier = tier_profile[tier_typ]["verbrauch"]
+            
     with col_cfg2:
         reserve = st.slider("Reserve-Puffer (%)", 0, 20, 5) / 100
+        st.write(f"Aktueller Wert: **{verbrauch_pro_tier} L** pro Tier/Monat")
 
     # Berechnung
     p = tier_profile[tier_typ]
     gesamt_tiere = sum(hof_tiere.values())
-    verbrauch_pro_tier = p["verbrauch"]
     
     bedarf_total = gesamt_tiere * verbrauch_pro_tier * monate
     bedarf_mit_reserve = bedarf_total * (1 + reserve)
