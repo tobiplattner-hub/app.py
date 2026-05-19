@@ -3,13 +3,13 @@ import pandas as pd
 import json
 import os
 from datetime import datetime
+import io
 
 # Für die PDF-Generierung
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-import io
 
 # ==============================================================================
 # 1. SEITEN-KONFIGURATION & STYLING
@@ -321,7 +321,7 @@ if bereich == "📊 Dashboard & Finanzen":
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
 
 # ==============================================================================
-# BEREICH 2: LU-AUFTRAGSBUCH (JETZT MIT LIVE-PDF BELEG GENERATOR)
+# BEREICH 2: LU-AUFTRAGSBUCH
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Betriebsstunden-Abrechnung")
@@ -419,7 +419,7 @@ elif bereich == "💼 LU-Auftragsbuch":
             st.session_state["lu_pdf_ready"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN ABRECHNUNG", meta, posten, end_preis, "Buchung wurde dem Server-Kassenbuch automatisch belastet/gutgeschrieben.")
             st.session_state["lu_erfolg_msg"] = f"Erfolgreich abgerechnet! {stunden_gefahren:.1f} Std. ergeben einen Betrag von {end_preis:,.2f} €."
             
-        # Wenn eine PDF-Abrechnung bereitliegt, zeige sie an (ohne Refresh-Verlust)
+        # Wenn eine PDF-Abrechnung bereitliegt, zeige sie an
         if "lu_pdf_ready" in st.session_state:
             st.success(st.session_state["lu_erfolg_msg"])
             st.download_button(
@@ -657,7 +657,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         with col_ke2:
             k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
             
-        if st.button("📅 Kalendereintrag保存"):
+        if st.button("📅 Kalendereintrag speichern"):
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
