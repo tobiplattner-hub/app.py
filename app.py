@@ -894,7 +894,6 @@ elif bereich == "🐄 Tier- & Futtermanagement":
     cols = st.columns(3)
     hof_tiere = {}
     
-    # Sicherstellen, dass tierbestand in db existiert
     if "tierbestand" not in db: db["tierbestand"] = {"Hof 1": 0, "Hof 2": 0, "Hof 3": 0}
 
     for i, h_id in enumerate(["Hof 1", "Hof 2", "Hof 3"]):
@@ -919,7 +918,6 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         monate = st.slider("Planungszeitraum (Monate):", 1, 12, 1)
 
     with col_cfg2:
-        # Manuelle Übersteuerung
         manuell_aktiv = st.checkbox("Manuell anpassen")
         if manuell_aktiv:
             verbrauch_pro_tier = st.number_input("Liter pro Tier/Monat:", min_value=1, value=tier_profile[tier_typ]["verbrauch"])
@@ -956,8 +954,25 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         st.metric("Getreide (100%)", f"{bedarf_total:,.0f} L")
 
     st.write("---")
-    st.markdown("📈 **Bedarfsentwicklung über 12 Monate**")
-    st.line_chart(pd.DataFrame({"Bedarf (Liter)": [gesamt_tiere * verbrauch_pro_tier * m for m in range(1, 14)]}))
+    
+    # 3. Chart mit dynamischer Aufschlüsselung
+    st.markdown("📈 **Bedarfsentwicklung (Gesamt & Komponenten)**")
+    monats_daten = []
+    for m in range(1, 13):
+        m_bedarf = gesamt_tiere * verbrauch_pro_tier * m
+        data = {"Monat": m, "Gesamt": m_bedarf}
+        
+        # Komponenten-Logik für Chart
+        if p["typ"] == "TMR":
+            data.update({"Heu": m_bedarf * p['heu'], "Silage": m_bedarf * p['silage'], "Stroh": m_bedarf * p['stroh']})
+        elif p["typ"] == "Mix":
+            data.update({"Mais": m_bedarf * p['mais'], "Weizen": m_bedarf * p['weizen'], "Raps": m_bedarf * p['raps']})
+        elif p["typ"] == "GRAS":
+            data.update({"Gras/Heu": m_bedarf * p['gras_heu'], "Mineral": m_bedarf * p['mineral']})
+            
+        monats_daten.append(data)
+
+    st.line_chart(pd.DataFrame(monats_daten).set_index("Monat"))
     # --------------------------------------------------------------------------
     # 2. Gärungsprozesse Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
