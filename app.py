@@ -128,8 +128,8 @@ def erstelle_universal_pdf(titel, metadaten_text, posten_daten, gesamt_summe, zu
 # ==============================================================================
 DB_DATEI = "ls25_multiplayer_live_data.json"
 START_KONTO_HOF1 = 0
-START_KONTO_HOF2 = 350000.0
-START_KONTO_HOF3 = 200000.0
+START_KONTO_HOF2 = 0
+START_KONTO_HOF3 = 0
 
 MONATE_LISTE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 
