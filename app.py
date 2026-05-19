@@ -865,7 +865,7 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
         
 # ==============================================================================
-# BEREICH 9: TIER- & FUTTERMANAGEMENT (LS25)
+# BEREICH: TIER- & FUTTERMANAGEMENT
 # ==============================================================================
 elif bereich == "🐄 Tier- & Futtermanagement":
     st.title("🐄 Tier- & Futtermanagement")
@@ -879,34 +879,52 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         "Hühner": {"verbrauch": 80, "weizen": 1.0, "typ": "Getreide"}
     }
 
+    # 1. Tierbestand pro Hof
     st.subheader("🏠 Tierbestand pro Hof")
     cols = st.columns(3)
     hof_tiere = {}
     
-    # Aufbau der Auswahl pro Hof
+    # Sicherstellen, dass tierbestand in db existiert
+    if "tierbestand" not in db: db["tierbestand"] = {"Hof 1": 0, "Hof 2": 0, "Hof 3": 0}
+
     for i, h_id in enumerate(["Hof 1", "Hof 2", "Hof 3"]):
         with cols[i]:
-            st.markdown(f"**{HOF_MAPPING[h_id]}**")
-            hof_tiere[h_id] = st.number_input(f"Tiere:", min_value=0, value=db.get("tierbestand", {}).get(h_id, 50), key=f"tiere_{h_id}")
+            st.markdown(f"**{HOF_MAPPING.get(h_id, h_id)}**")
+            hof_tiere[h_id] = st.number_input(f"Anzahl Tiere:", min_value=0, value=db["tierbestand"].get(h_id, 0), key=f"tiere_{h_id}")
 
-    if st.button("Tierbestand speichern"):
+    if st.button("Tierbestand auf Server speichern"):
         db["tierbestand"] = hof_tiere
         speichere_globalen_speicher(db)
-        st.success("Bestände aktualisiert!")
+        st.success("Bestände global aktualisiert!")
 
     st.write("---")
-    st.subheader("📊 Futterbedarfs-Rechner")
-    tier_typ = st.selectbox("Tierart für Berechnung wählen:", list(tier_profile.keys()))
-    monate = st.slider("Planungszeitraum (Monate):", 1, 12, 1)
     
+    # 2. Futter-Konfiguration & Rechner
+    st.subheader("📊 Futterbedarfs-Rechner")
+    
+    col_cfg1, col_cfg2 = st.columns([2, 1])
+    
+    with col_cfg1:
+        tier_typ = st.selectbox("Tierart wählen:", list(tier_profile.keys()))
+        monate = st.slider("Planungszeitraum (Monate):", 1, 12, 1)
+
+    with col_cfg2:
+        # Manuelle Übersteuerung
+        manuell_aktiv = st.checkbox("Manuell anpassen")
+        if manuell_aktiv:
+            verbrauch_pro_tier = st.number_input("Liter pro Tier/Monat:", min_value=1, value=tier_profile[tier_typ]["verbrauch"])
+        else:
+            verbrauch_pro_tier = tier_profile[tier_typ]["verbrauch"]
+            st.write(f"Standard: {verbrauch_pro_tier} L")
+
     # Berechnung
     p = tier_profile[tier_typ]
     gesamt_tiere = sum(hof_tiere.values())
-    bedarf_total = gesamt_tiere * p["verbrauch"] * monate
+    bedarf_total = gesamt_tiere * verbrauch_pro_tier * monate
     
     st.info(f"### Gesamtbedarf für {gesamt_tiere} Tiere ({monate} Monate): {bedarf_total:,.0f} Liter")
     
-    # Dynamische Anzeige je nach Typ
+    # Dynamische Anzeige der Futterkomponenten
     if p["typ"] == "TMR":
         c1, c2, c3 = st.columns(3)
         c1.metric("Heu (50%)", f"{bedarf_total * p['heu']:,.0f} L")
@@ -919,7 +937,6 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         c2.metric("Mineralfutter (20%)", f"{bedarf_total * p['mineral']:,.0f} L")
         
     elif p["typ"] == "Mix":
-        st.write("Mischverhältnis: 50% Mais, 30% Weizen, 20% Raps")
         c1, c2, c3 = st.columns(3)
         c1.metric("Mais (50%)", f"{bedarf_total * p['mais']:,.0f} L")
         c2.metric("Weizen (30%)", f"{bedarf_total * p['weizen']:,.0f} L")
@@ -929,7 +946,8 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         st.metric("Getreide (100%)", f"{bedarf_total:,.0f} L")
 
     st.write("---")
-    st.line_chart(pd.DataFrame({"Bedarf": [gesamt_tiere * p['verbrauch'] * m for m in range(1, 13)]}))
+    st.markdown("📈 **Bedarfsentwicklung über 12 Monate**")
+    st.line_chart(pd.DataFrame({"Bedarf (Liter)": [gesamt_tiere * verbrauch_pro_tier * m for m in range(1, 14)]}))
     # --------------------------------------------------------------------------
     # 2. Gärungsprozesse Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
