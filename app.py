@@ -151,6 +151,7 @@ def generiere_standard_daten():
             "Hof 3": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0}
         },
         "silage_gärung": [],
+        "hof_nachrichten": [],
         "felder": [
             {"id": 1, "besitzer": "Hof 1", "groesse": 4.5, "frucht": "Weizen", "status": "Wachstum", "ernte_typ": "Normale Ernte"},
             {"id": 2, "besitzer": "Hof 2", "groesse": 2.1, "frucht": "Mais", "status": "Erntebereit", "ernte_typ": "Silage"}
@@ -176,6 +177,8 @@ def lade_globalen_speicher():
                 daten["aktueller_monat"] = "Januar"
             if "silage_gärung" not in daten:
                 daten["silage_gärung"] = []
+            if "hof_nachrichten" not in daten:
+                daten["hof_nachrichten"] = []
             for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten", "kalender", "lager"]:
                 if key not in daten:
                     daten[key] = default_daten[key] if key in default_daten else ([] if key != "lager" else default_daten["lager"])
@@ -261,6 +264,43 @@ if bereich == "📊 Dashboard & Finanzen":
         with [col1, col2, col3][i]:
             st.metric(label=v["name"], value=f"{v['konto']:,.2f} €")
             
+    st.write("---")
+    
+    # NEU: Digitales Hof-Schwarzes Brett für den Informationsaustausch
+    st.subheader("📌 Digitales Hof-Schwarzes Brett (Informationsaustausch)")
+    col_msg1, col_msg2 = st.columns([1, 2])
+    
+    with col_msg1:
+        st.markdown("##### 📝 Neue Nachricht posten")
+        msg_von = st.selectbox("Von Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="msg_von")
+        msg_text = st.text_area("Nachricht / Info:", placeholder="Schreibe hier wichtige Infos für die anderen Höfe rein...", key="msg_text")
+        if st.button("📢 Nachricht aushängen", use_container_width=True):
+            if msg_text.strip() == "":
+                st.error("Bitte gib einen Nachrichtentext ein!")
+            else:
+                db["hof_nachrichten"].insert(0, {
+                    "zeit": datetime.now().strftime('%d.%m. - %H:%M'),
+                    "monat": db.get("aktueller_monat", "Januar"),
+                    "hof": msg_von,
+                    "text": msg_text.strip()
+                })
+                speichere_globalen_speicher(db)
+                st.success("Nachricht gepostet!")
+                st.rerun()
+                
+    with col_msg2:
+        st.markdown("##### 📥 Aktuelle Server-Mitteilungen")
+        if db.get("hof_nachrichten"):
+            for i, n in enumerate(db["hof_nachrichten"][:6]): # Zeige die neuesten 6 Nachrichten
+                st.info(f"**[{n['zeit']} / In-Game: {n['monat']}] {HOF_MAPPING.get(n['hof'], n['hof'])}** schreibt:\n\n{n['text']}")
+            if st.button("🗑️ Alle Nachrichten löschen"):
+                db["hof_nachrichten"] = []
+                speichere_globalen_speicher(db)
+                st.success("Schwarzes Brett geleert!")
+                st.rerun()
+        else:
+            st.info("Keine aktuellen Nachrichten vorhanden. Tauscht euch aus!")
+
     st.write("---")
     
     st.subheader("💰 Manuelle Buchung durchführen (Kassierer-Zentrale)")
