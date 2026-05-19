@@ -8,6 +8,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import io
 
 # ==============================================================================
@@ -766,7 +767,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         with col_ke2:
             k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
             
-        if st.button("📅 Kalendereintrag保存"):
+        if st.button("📅 Kalendereintrag speichern"):
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
@@ -801,7 +802,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
             st.info("Keine löschbaren Einträge vorhanden.")
 
 # ==============================================================================
-# BEREICH 8: HOF-LAGERVERWALTUNG (ÜBERARBEITET)
+# BEREICH 8: HOF-LAGERVERWALTUNG (FEHLERBEHOBEN & ÜBERARBEITET)
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
     st.title("📦 Hof-Lagerverwaltung & Silomanagement")
@@ -881,7 +882,6 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             l_typ = st.radio("Aktionsart:", ["➕ Einlagern (Bestand erhöhen)", "➖ Auslagern (Bestand reduzieren)"], horizontal=True)
             l_kat = st.selectbox("Kategorie / Zustand:", ["Loses Material / Frucht", "Paletten-Ware", "Ballen-Ware", "Silo-Silage (mit Gärung)"])
             
-            # Dynamischer Namens-Platzhalter je nach Zustand
             platzhalter_text = "z. B. Getreide, Trauben, Kalk, Diesel, Häckselgut"
             if "Paletten" in l_kat:
                 platzhalter_text = "z. B. Tomaten-Paletten, Saatgut-Paletten, Salat-Paletten"
@@ -898,11 +898,13 @@ elif bereich == "📦 Hof-Lagerverwaltung":
                 if l_modus == "Stückzahl (Paletten)":
                     anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
                     l_menge = anzahl_paletten * 1000
-                    st.info(f"Calculated Volume (1.000L pro Palette): **{l_menge:,} Liter**")
+                    st.info(f"Berechnetes Volumen (1.000L pro Palette): **{l_menge:,} Liter**")
                 else:
-                    l_menge = st.number_input("Volumen in Liter (L):", min_value=1, step=100, value=1.000)
+                    # Einheitliche Ganzzahlen (Integers) zur Vermeidung von Typenfehlern
+                    l_menge = st.number_input("Volumen in Liter (L):", min_value=1, step=100, value=1000)
             else:
-                l_menge = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5.000)
+                # Reiner Integer-Wert (5000 statt 5.000) verhindert Streamlit-Absturz
+                l_menge = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
                 
             dauer_gärung = 2
             if "Silo" in l_kat and "Einlagern" in l_typ:
