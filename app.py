@@ -465,7 +465,7 @@ elif bereich == "🌾 Warenverkauf & Rechnungen":
     
     col_v1, col_v2 = st.columns(2)
     with col_v1:
-        v_verkaeufer = st.selectbox("Verkaufender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        v_verkaeufer = st.selectbox("Verkaufenden Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         v_kaeufer = st.selectbox("Empfänger / Käufer (aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
         
         frucht_optionen = db["fruchtarten"] + ["– Eigene Mod-Frucht eingeben –"]
@@ -752,7 +752,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
     with col_k2:
         st.subheader("🗑️ Fruchttyp aus Kalender löschen")
         if bereinigter_kalender:
-            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["float"] for x in bereinigter_kalender if "frucht" in x])
+            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["frucht"] for x in bereinigter_kalender if "frucht" in x])
             if st.button("🔴 Aus Kalender löschen"):
                 db["kalender"] = [x for x in bereinigter_kalender if x["frucht"] != k_loesch_frucht]
                 speichere_globalen_speicher(db)
@@ -793,10 +793,10 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             
             # Status ermitteln
             idx_akt = MONATE_LISTE.index(aktueller_m)
-            # Einfache relative Distanzberechnung
             schon_fertig = False
             if idx_start <= idx_bereit:
-                if idx_akt >= idx_bereit or idx_akt < idx_start: schon_fertig = True
+                if idx_start <= idx_akt < idx_bereit: schon_fertig = False
+                elif idx_akt >= idx_bereit or idx_akt < idx_start: schon_fertig = True
             else:
                 if idx_bereit <= idx_akt < idx_start: schon_fertig = True
                 
@@ -822,7 +822,6 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     with col_l2:
         l_gut = st.selectbox("Lager-Objekt:", ["Silage (Silo)", "Silage (Ballen)", "Paletten", "Ballen (Allg.)"])
     with col_l3:
-        # Bedingte Logik je nach ausgewähltem Gut
         if l_gut == "Paletten":
             anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
             l_menge = anzahl_paletten * 1000
@@ -831,10 +830,8 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             st.info("💡 Ballen haben unterschiedliche Größen! Bitte gib das Gesamtvolumen in Litern an.")
             l_menge = st.number_input("Gesamtvolumen der Ballen (Liter):", min_value=1, step=100, value=2000)
         else:
-            # Normales Silo
             l_menge = st.number_input("Menge in Liter (L):", min_value=1, step=1000, value=5000)
             
-        # Wenn Silo zugedeckt wird -> Fermentationszeit abfragen
         dauer_gärung = 1
         if l_gut == "Silage (Silo)" and "Einlagern" in l_typ:
             dauer_gärung = st.number_input("Gärungszeit / Dauer (in In-Game Monaten):", min_value=1, max_value=12, value=2, step=1)
@@ -848,7 +845,6 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             diff = l_menge if "Einlagern" in l_typ else -l_menge
             db["lager"][l_hof][l_gut] = aktueller_bestand + diff
             
-            # Bei Einlagerung von Silo einen Tracker für die Gärung hinterlegen
             if l_gut == "Silage (Silo)" and "Einlagern" in l_typ:
                 db["silage_gärung"].append({
                     "hof": l_hof,
