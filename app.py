@@ -146,9 +146,9 @@ def generiere_standard_daten():
             "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0, "Silage (Silo)": 410.0, "Silage (Ballen)": 460.0
         },
         "lager": {
-            "Hof 1": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0},
-            "Hof 2": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0},
-            "Hof 3": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0}
+            "Hof 1": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten (Allg.)": 0, "Ballen (Allg.)": 0, "Kalk": 0, "Saatgut": 0, "Diesel": 0, "Düngemittel": 0, "Herbizid": 0},
+            "Hof 2": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten (Allg.)": 0, "Ballen (Allg.)": 0, "Kalk": 0, "Saatgut": 0, "Diesel": 0, "Düngemittel": 0, "Herbizid": 0},
+            "Hof 3": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten (Allg.)": 0, "Ballen (Allg.)": 0, "Kalk": 0, "Saatgut": 0, "Diesel": 0, "Düngemittel": 0, "Herbizid": 0}
         },
         "silage_gärung": [],
         "hof_nachrichten": [],
@@ -266,7 +266,7 @@ if bereich == "📊 Dashboard & Finanzen":
             
     st.write("---")
     
-    # NEU: Digitales Hof-Schwarzes Brett für den Informationsaustausch
+    # Digitales Hof-Schwarzes Brett für den Informationsaustausch
     st.subheader("📌 Digitales Hof-Schwarzes Brett (Informationsaustausch)")
     col_msg1, col_msg2 = st.columns([1, 2])
     
@@ -291,7 +291,7 @@ if bereich == "📊 Dashboard & Finanzen":
     with col_msg2:
         st.markdown("##### 📥 Aktuelle Server-Mitteilungen")
         if db.get("hof_nachrichten"):
-            for i, n in enumerate(db["hof_nachrichten"][:6]): # Zeige die neuesten 6 Nachrichten
+            for i, n in enumerate(db["hof_nachrichten"][:6]):
                 st.info(f"**[{n['zeit']} / In-Game: {n['monat']}] {HOF_MAPPING.get(n['hof'], n['hof'])}** schreibt:\n\n{n['text']}")
             if st.button("🗑️ Alle Nachrichten löschen"):
                 db["hof_nachrichten"] = []
@@ -588,7 +588,7 @@ elif bereich == "📈 Fruchtpreise (Manuell)":
         f_auswahl = st.selectbox("Fruchtart auswählen:", db["fruchtarten"])
         neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500.0)), step=10.0, key="edit_price")
         
-        if st.button("Kurs live aktualisieren"):
+        if st.button("Kurs live astrophysikalisch aktualisieren"):
             db["preise"][f_auswahl] = neuer_preis
             speichere_globalen_speicher(db)
             st.success(f"Preis für {f_auswahl} aktualisiert!")
@@ -695,7 +695,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
                 
                 if idx_start_s <= idx_end_s:
                     if idx_start_s <= idx_akt <= idx_end_s: sähen_erlaubt.append(eintrag["frucht"])
-                else: # Jahresübergreifend
+                else:
                     if idx_akt >= idx_start_s or idx_akt <= idx_end_s: sähen_erlaubt.append(eintrag["frucht"])
             except: pass
             
@@ -706,7 +706,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
                 
                 if idx_start_e <= idx_end_e:
                     if idx_start_e <= idx_akt <= idx_end_e: ernten_erlaubt.append(eintrag["frucht"])
-                else: # Jahresübergreifend
+                else:
                     if idx_akt >= idx_start_e or idx_akt <= idx_end_e: ernten_erlaubt.append(eintrag["frucht"])
             except: pass
 
@@ -767,7 +767,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         with col_ke2:
             k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
             
-        if st.button("📅 Kalendereintrag speichern"):
+        if st.button("📅 Kalendereintrag保存"):
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
@@ -805,7 +805,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
 # BEREICH 8: HOF-LAGERVERWALTUNG
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
-    st.title("📦 Allgemeine Hof-Lagerbestände (Volumen-Abrechnung)")
+    st.title("📦 Allgemeine Hof-Lagerbestände (Volumen- & Verbrauchsgüter-Abrechnung)")
     
     aktueller_m = db.get("aktueller_monat", "Januar")
     st.info(f"📅 **Aktueller In-Game Monat auf dem Server:** {aktueller_m}")
@@ -817,8 +817,13 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             "Hof": HOF_MAPPING[h_id],
             "Silage (Silo in L)": f"{h_lager.get('Silage (Silo)', 0):,}",
             "Silage (Ballen in L)": f"{h_lager.get('Silage (Ballen)', 0):,}",
-            "Paletten (Gesamtvolumen in L)": f"{h_lager.get('Paletten', 0):,}",
-            "Ballen Allg. (Gesamtvolumen in L)": f"{h_lager.get('Ballen (Allg.)', 0):,}"
+            "Paletten (Gesamt in L)": f"{h_lager.get('Paletten (Allg.)', h_lager.get('Paletten', 0)):,}",
+            "Ballen Allg. (Gesamt in L)": f"{h_lager.get('Ballen (Allg.)', 0):,}",
+            "Kalk (L)": f"{h_lager.get('Kalk', 0):,}",
+            "Saatgut (L)": f"{h_lager.get('Saatgut', 0):,}",
+            "Diesel (L)": f"{h_lager.get('Diesel', 0):,}",
+            "Düngemittel (L)": f"{h_lager.get('Düngemittel', 0):,}",
+            "Herbizid (L)": f"{h_lager.get('Herbizid', 0):,}"
         })
     st.dataframe(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True)
     
@@ -860,9 +865,12 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         l_hof = st.selectbox("Welcher Hof?", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
         l_typ = st.radio("Aktion:", ["➕ Einlagern", "➖ Auslagern"])
     with col_l2:
-        l_gut = st.selectbox("Lager-Objekt:", ["Silage (Silo)", "Silage (Ballen)", "Paletten", "Ballen (Allg.)"])
+        l_gut = st.selectbox("Lager-Objekt / Ware:", [
+            "Silage (Silo)", "Silage (Ballen)", "Paletten (Allg.)", "Ballen (Allg.)",
+            "Kalk", "Saatgut", "Diesel", "Düngemittel", "Herbizid"
+        ])
     with col_l3:
-        if l_gut == "Paletten":
+        if l_gut == "Paletten (Allg.)":
             anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
             l_menge = anzahl_paletten * 1000
             st.caption(f"ℹ️ Entspricht bei 1.000L pro Palette: **{l_menge:,} Litern**")
@@ -877,13 +885,19 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             dauer_gärung = st.number_input("Gärungszeit / Dauer (in In-Game Monaten):", min_value=1, max_value=12, value=2, step=1)
         
     if st.button("💾 Lagerbestand aktualisieren"):
-        aktueller_bestand = db["lager"][l_hof].get(l_gut, 0)
+        # Mappe alten Key falls vorhanden auf den neuen Paletten-Key ab
+        key_name = "Paletten (Allg.)" if l_gut == "Paletten (Allg.)" else l_gut
+        aktueller_bestand = db["lager"][l_hof].get(key_name, db["lager"][l_hof].get("Paletten", 0) if key_name == "Paletten (Allg.)" else 0)
         
         if "Auslagern" in l_typ and l_menge > aktueller_bestand:
             st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend {l_gut} auf Lager! (Bestand: {aktueller_bestand:,} L)")
         else:
             diff = l_menge if "Einlagern" in l_typ else -l_menge
-            db["lager"][l_hof][l_gut] = aktueller_bestand + diff
+            db["lager"][l_hof][key_name] = aktueller_bestand + diff
+            
+            # Falls noch alte Altlast-Keys existieren, säubern
+            if key_name == "Paletten (Allg.)" and "Paletten" in db["lager"][l_hof]:
+                del db["lager"][l_hof]["Paletten"]
             
             if l_gut == "Silage (Silo)" and "Einlagern" in l_typ:
                 db["silage_gärung"].append({
