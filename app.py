@@ -3,13 +3,13 @@ import pandas as pd
 import json
 import os
 from datetime import datetime
-import io
 
 # Für die PDF-Generierung
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+import io
 
 # ==============================================================================
 # 1. SEITEN-KONFIGURATION & STYLING
@@ -140,9 +140,14 @@ def generiere_standard_daten():
             "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": START_KONTO_HOF2},
             "Hof 3": {"name": "Hof 3 - Freier Verbund", "konto": START_KONTO_HOF3}
         },
-        "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln", "Zuckerrüben", "Silage"],
+        "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln", "Zuckerrüben", "Silage (Silo)", "Silage (Ballen)"],
         "preise": {
-            "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0, "Silage": 410.0
+            "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0, "Silage (Silo)": 410.0, "Silage (Ballen)": 460.0
+        },
+        "lager": {
+            "Hof 1": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0},
+            "Hof 2": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0},
+            "Hof 3": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0}
         },
         "felder": [
             {"id": 1, "besitzer": "Hof 1", "groesse": 4.5, "frucht": "Weizen", "status": "Wachstum", "ernte_typ": "Normale Ernte"},
@@ -165,9 +170,9 @@ def lade_globalen_speicher():
     try:
         with open(DB_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
-            for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten", "kalender"]:
+            for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten", "kalender", "lager"]:
                 if key not in daten:
-                    daten[key] = default_daten[key] if key in default_daten else []
+                    daten[key] = default_daten[key] if key in default_daten else ([] if key != "lager" else default_daten["lager"])
             return daten
     except:
         return default_daten
@@ -225,7 +230,7 @@ with st.sidebar.expander("⚠️ Danger Zone (Reset)"):
 
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
-    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "🚜 Fuhrpark & Geräte", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung", "📅 Sähe- & Erntekalender"]
+    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "🚜 Fuhrpark & Geräte", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung", "📅 Sähe- & Erntekalender", "📦 Hof-Lagerverwaltung"]
 )
 
 # ==============================================================================
@@ -690,3 +695,46 @@ elif bereich == "📅 Sähe- & Erntekalender":
                 st.rerun()
         else:
             st.info("Keine löschbaren Einträge vorhanden.")
+
+# ==============================================================================
+# BEREICH 8: HOF-LAGERVERWALTUNG
+# ==============================================================================
+elif bereich == "📦 Hof-Lagerverwaltung":
+    st.title("📦 Allgemeine Hof-Lagerbestände")
+    
+    # Live-Anzeige aller Lagerbestände als Tabelle
+    lager_daten = []
+    for h_id, h_lager in db["lager"].items():
+        lager_daten.append({
+            "Hof": HOF_MAPPING[h_id],
+            "Silage (Silo in L)": f"{h_lager.get('Silage (Silo)', 0):,}",
+            "Silage (Ballen in L)": f"{h_lager.get('Silage (Ballen)', 0):,}",
+            "Paletten (Stück)": f"{h_lager.get('Paletten', 0):,}",
+            "Ballen Allg. (Stück)": f"{h_lager.get('Ballen (Allg.)', 0):,}"
+        })
+    st.dataframe(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True)
+    
+    st.write("---")
+    st.subheader("📥 / 📤 Bestand buchen (Einlagern / Auslagern)")
+    
+    col_l1, col_l2, col_l3 = st.columns(3)
+    with col_l1:
+        l_hof = st.selectbox("Welcher Hof?", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        l_typ = st.radio("Aktion:", ["➕ Einlagern", "➖ Auslagern"])
+    with col_l2:
+        l_gut = st.selectbox("Lager-Objekt:", ["Silage (Silo)", "Silage (Ballen)", "Paletten", "Ballen (Allg.)"])
+    with col_l3:
+        einheit = "Liter (L)" if "Silage" in l_gut else "Stück"
+        l_menge = st.number_input(f"Menge ({einheit}):", min_value=1, step=100 if "Silage" in l_gut else 1, value=1000 if "Silage" in l_gut else 10)
+        
+    if st.button("💾 Lagerbestand aktualisieren"):
+        aktueller_bestand = db["lager"][l_hof].get(l_gut, 0)
+        
+        if "Auslagern" in l_typ and l_menge > aktueller_bestand:
+            st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend {l_gut} auf Lager! (Bestand: {aktueller_bestand:,})")
+        else:
+            diff = l_menge if "Einlagern" in l_typ else -l_menge
+            db["lager"][l_hof][l_gut] = aktueller_bestand + diff
+            speichere_globalen_speicher(db)
+            st.success(f"Erfolgreich gebucht! Der Bestand von {l_gut} wurde für {HOF_MAPPING[l_hof]} angepasst.")
+            st.rerun()
