@@ -216,6 +216,11 @@ else:
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
 
+# --- NEU: Synchronisations-Anzeige ---
+last_sync = db.get("letztes_update", "Noch keine Daten")
+st.sidebar.caption(f"🔄 Letzter Sync: {last_sync}")
+st.sidebar.write("---")
+
 idx_monat = MONATE_LISTE.index(db.get("aktueller_monat", "Januar"))
 neuer_monat = st.sidebar.selectbox("📅 Aktueller In-Game Monat:", MONATE_LISTE, index=idx_monat)
 if neuer_monat != db.get("aktueller_monat"):
@@ -247,7 +252,17 @@ with st.sidebar.expander("⚠️ Danger Zone (Reset)"):
 
 bereich = st.sidebar.radio(
     "Menüpunkt auswählen:",
-    ["📊 Dashboard & Finanzen", "💼 LU-Auftragsbuch", "🌾 Warenverkauf & Rechnungen", "🚜 Fuhrpark & Geräte", "📈 Fruchtpreise (Manuell)", "🗺️ Feldverwaltung", "📅 Sähe- & Erntekalender", "📦 Hof-Lagerverwaltung"]
+    [
+        "📊 Dashboard & Finanzen", 
+        "💼 LU-Auftragsbuch", 
+        "🌾 Warenverkauf & Rechnungen", 
+        "🚜 Fuhrpark & Geräte", 
+        "📈 Fruchtpreise (Manuell)", 
+        "🗺️ Feldverwaltung", 
+        "📅 Sähe- & Erntekalender", 
+        "📦 Hof-Lagerverwaltung",
+        "🐄 Tier- & Futtermanagement" # NEU HINZUGEFÜGT
+    ]
 )
 
 # ==============================================================================
