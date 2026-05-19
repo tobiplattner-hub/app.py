@@ -266,7 +266,6 @@ if bereich == "📊 Dashboard & Finanzen":
             
     st.write("---")
     
-    # Digitales Hof-Schwarzes Brett für den Informationsaustausch
     st.subheader("📌 Digitales Hof-Schwarzes Brett (Informationsaustausch)")
     col_msg1, col_msg2 = st.columns([1, 2])
     
@@ -462,26 +461,22 @@ elif bereich == "💼 LU-Auftragsbuch":
             auftrag["stunden_gefahren"] = stunden_gefahren
             auftrag["status"] = "Abgerechnet"
             
-            # Geldtransfer buchen
             if auftrag["kunde"] in db["hoefe"]:
                 db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
             db["hoefe"][auftrag["auftragnehmer"]]["konto"] += end_preis
             speichere_globalen_speicher(db)
             
-            # PDF jetzt direkt generieren und im Session State parken
             k_name = KUNDEN_MAPPING.get(auftrag['kunde'], auftrag['kunde'])
-            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}<br/><b>Auftrags-ID:</b> #{auftrag['id']}"
+            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[text_lu]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}<br/><b>Auftrags-ID:</b> #{auftrag['id']}"
             posten = [[
                 f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", 
                 f"{stunden_gefahren:.1f} Betriebsstunden auf {auftrag['maschine']}<br/>(Basis: {auftrag['stundensatz']} €/h)", 
                 f"{end_preis:,.2f} €"
             ]]
             
-            # PDF-Generierung für den Download-Button vorbereiten
             st.session_state["lu_pdf_ready"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN ABRECHNUNG", meta, posten, end_preis, "Buchung wurde dem Server-Kassenbuch automatisch belastet/gutgeschrieben.")
             st.session_state["lu_erfolg_msg"] = f"Erfolgreich abgerechnet! {stunden_gefahren:.1f} Std. ergeben einen Betrag von {end_preis:,.2f} €."
             
-        # Wenn eine PDF-Abrechnung bereitliegt, zeige sie an
         if "lu_pdf_ready" in st.session_state:
             st.success(st.session_state["lu_erfolg_msg"])
             st.download_button(
@@ -679,7 +674,6 @@ elif bereich == "📅 Sähe- & Erntekalender":
     aktueller_m = db.get("aktueller_monat", "Januar")
     st.info(f"📅 **Aktueller Server-Monat:** {aktueller_m}")
     
-    # Live-Meldungen basierend auf dem eingestellten Monat
     st.subheader("🔔 Aktuelle Feld-Meldungen für diesen Monat:")
     
     sähen_erlaubt = []
@@ -687,7 +681,6 @@ elif bereich == "📅 Sähe- & Erntekalender":
     
     for eintrag in db.get("kalender", []):
         if "frucht" in eintrag:
-            # Check Säen
             try:
                 idx_start_s = MONATE_LISTE.index(eintrag["saat_von"])
                 idx_end_s = MONATE_LISTE.index(eintrag["saat_bis"])
@@ -699,7 +692,6 @@ elif bereich == "📅 Sähe- & Erntekalender":
                     if idx_akt >= idx_start_s or idx_akt <= idx_end_s: sähen_erlaubt.append(eintrag["frucht"])
             except: pass
             
-            # Check Ernte
             try:
                 idx_start_e = MONATE_LISTE.index(eintrag["ernte_von"])
                 idx_end_e = MONATE_LISTE.index(eintrag["ernte_bis"])
@@ -767,7 +759,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         with col_ke2:
             k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
             
-        if st.button("📅 Kalendereintrag speichern"):
+        if st.button("📅 Kalendereintrag保存"):
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
@@ -802,7 +794,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
             st.info("Keine löschbaren Einträge vorhanden.")
 
 # ==============================================================================
-# BEREICH 8: HOF-LAGERVERWALTUNG (FEHLERBEHOBEN & ÜBERARBEITET)
+# BEREICH 8: HOF-LAGERVERWALTUNG (VOLLSTÄNDIG KORRIGIERT & SYNCHRONISIERT)
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
     st.title("📦 Hof-Lagerverwaltung & Silomanagement")
@@ -893,18 +885,27 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             l_name_eingabe = st.text_input("Genaue Bezeichnung / Name der Ware:", placeholder=platzhalter_text, value="Silage (Silo)" if "Silo" in l_kat else "")
             
         with col_l2:
+            # Vereinheitlichte Eingabe- und Umrechnungslogik (Ganzzahlen)
             if "Paletten" in l_kat:
-                l_modus = st.radio("Berechnungsgrundlage:", ["Stückzahl (Paletten)", "Direkt in Liter"], horizontal=True)
+                l_modus = st.radio("Eingabe als:", ["Stückzahl (Paletten)", "Direkt in Liter"], horizontal=True)
                 if l_modus == "Stückzahl (Paletten)":
                     anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
-                    l_menge = anzahl_paletten * 1000
-                    st.info(f"Berechnetes Volumen (1.000L pro Palette): **{l_menge:,} Liter**")
+                    finale_liter = anzahl_paletten * 1000
+                    st.info(f"Umgerechnetes Gesamtvolumen (1.000L pro Palette): **{finale_liter:,} Liter**")
                 else:
-                    # Einheitliche Ganzzahlen (Integers) zur Vermeidung von Typenfehlern
-                    l_menge = st.number_input("Volumen in Liter (L):", min_value=1, step=100, value=1000)
+                    finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=100, value=1000)
+            
+            elif "Ballen" in l_kat:
+                l_modus_ballen = st.radio("Eingabe als:", ["Stückzahl (Ballen)", "Direkt in Liter"], horizontal=True)
+                if l_modus_ballen == "Stückzahl (Ballen)":
+                    anzahl_ballen = st.number_input("Anzahl Ballen (Stück):", min_value=1, step=1, value=1)
+                    finale_liter = anzahl_ballen * 5000
+                    st.info(f"Umgerechnetes Gesamtvolumen (5.000L pro Großballen): **{finale_liter:,} Liter**")
+                else:
+                    finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
+            
             else:
-                # Reiner Integer-Wert (5000 statt 5.000) verhindert Streamlit-Absturz
-                l_menge = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
+                finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
                 
             dauer_gärung = 2
             if "Silo" in l_kat and "Einlagern" in l_typ:
@@ -920,10 +921,10 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             else:
                 aktueller_bestand = db["lager"].get(l_hof, {}).get(waren_name_clean, 0)
                 
-                if "Auslagern" in l_typ and l_menge > aktueller_bestand:
-                    st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend '{waren_name_clean}' auf Lager! (Bestand: {aktueller_bestand:,} L)")
+                if "Auslagern" in l_typ and finale_liter > aktueller_bestand:
+                    st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend '{waren_name_clean}' auf Lager! Verfügbar: {aktueller_bestand:,} L – Gewünscht: {finale_liter:,} L.")
                 else:
-                    diff = l_menge if "Einlagern" in l_typ else -l_menge
+                    diff = finale_liter if "Einlagern" in l_typ else -finale_liter
                     
                     if l_hof not in db["lager"]:
                         db["lager"][l_hof] = {}
@@ -936,11 +937,11 @@ elif bereich == "📦 Hof-Lagerverwaltung":
                     if "Silo" in l_kat and "Einlagern" in l_typ:
                         db["silage_gärung"].append({
                             "hof": l_hof,
-                            "menge": l_menge,
+                            "menge": finale_liter,
                             "start_monat": aktueller_m,
                             "dauer": int(dauer_gärung)
                         })
                         
                     speichere_globalen_speicher(db)
-                    st.success(f"Bestand erfolgreich aktualisiert! {l_menge:,} L '{waren_name_clean}' für {HOF_MAPPING[l_hof]} gebucht.")
+                    st.success(f"Bestand erfolgreich aktualisiert! {finale_liter:,} L '{waren_name_clean}' für {HOF_MAPPING[l_hof]} verbucht.")
                     st.rerun()
