@@ -135,6 +135,7 @@ MONATE_LISTE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 
 def generiere_standard_daten():
     return {
+        "aktueller_monat": "Januar",
         "hoefe": {
             "Hof 1": {"name": "Hof 1 - Hauptbetrieb (LU)", "konto": START_KONTO_HOF1},
             "Hof 2": {"name": "Hof 2 - Bio-Betrieb", "konto": START_KONTO_HOF2},
@@ -149,6 +150,7 @@ def generiere_standard_daten():
             "Hof 2": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0},
             "Hof 3": {"Silage (Silo)": 0, "Silage (Ballen)": 0, "Paletten": 0, "Ballen (Allg.)": 0}
         },
+        "silage_gärung": [],
         "felder": [
             {"id": 1, "besitzer": "Hof 1", "groesse": 4.5, "frucht": "Weizen", "status": "Wachstum", "ernte_typ": "Normale Ernte"},
             {"id": 2, "besitzer": "Hof 2", "groesse": 2.1, "frucht": "Mais", "status": "Erntebereit", "ernte_typ": "Silage"}
@@ -170,6 +172,10 @@ def lade_globalen_speicher():
     try:
         with open(DB_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
+            if "aktueller_monat" not in daten:
+                daten["aktueller_monat"] = "Januar"
+            if "silage_gärung" not in daten:
+                daten["silage_gärung"] = []
             for key in ["preise", "verkaeufe", "manuelle_buchungen", "auftraege", "felder", "fruchtarten", "kalender", "lager"]:
                 if key not in daten:
                     daten[key] = default_daten[key] if key in default_daten else ([] if key != "lager" else default_daten["lager"])
@@ -207,6 +213,15 @@ else:
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
 
+# Live-In-Game Monat wechseln
+idx_monat = MONATE_LISTE.index(db.get("aktueller_monat", "Januar"))
+neuer_monat = st.sidebar.selectbox("📅 Aktueller In-Game Monat:", MONATE_LISTE, index=idx_monat)
+if neuer_monat != db.get("aktueller_monat"):
+    db["aktueller_monat"] = neuer_monat
+    speichere_globalen_speicher(db)
+    st.sidebar.success(f"Monat auf {neuer_monat} geändert!")
+    st.rerun()
+
 with st.sidebar.expander("📝 Hofnamen live ändern"):
     h1_n = st.text_input("Name Hof 1:", db["hoefe"]["Hof 1"]["name"])
     h2_n = st.text_input("Name Hof 2:", db["hoefe"]["Hof 2"]["name"])
@@ -238,6 +253,8 @@ bereich = st.sidebar.radio(
 # ==============================================================================
 if bereich == "📊 Dashboard & Finanzen":
     st.title("🚜 LS25 Server-Dashboard")
+    
+    st.info(f"📅 **Aktuelle Server-Saison:** {db.get('aktueller_monat', 'Januar')}")
     
     col1, col2, col3 = st.columns(3)
     for i, (k, v) in enumerate(db["hoefe"].items()):
@@ -619,6 +636,54 @@ elif bereich == "🗺️ Feldverwaltung":
 elif bereich == "📅 Sähe- & Erntekalender":
     st.title("📅 Server Anbau- & Erntekalender (inkl. Mod-Früchte)")
     
+    aktueller_m = db.get("aktueller_monat", "Januar")
+    st.info(f"📅 **Aktueller Server-Monat:** {aktueller_m}")
+    
+    # Live-Meldungen basierend auf dem eingestellten Monat
+    st.subheader("🔔 Aktuelle Feld-Meldungen für diesen Monat:")
+    
+    sähen_erlaubt = []
+    ernten_erlaubt = []
+    
+    for eintrag in db.get("kalender", []):
+        if "frucht" in eintrag:
+            # Check Säen
+            try:
+                idx_start_s = MONATE_LISTE.index(eintrag["saat_von"])
+                idx_end_s = MONATE_LISTE.index(eintrag["saat_bis"])
+                idx_akt = MONATE_LISTE.index(aktueller_m)
+                
+                if idx_start_s <= idx_end_s:
+                    if idx_start_s <= idx_akt <= idx_end_s: sähen_erlaubt.append(eintrag["frucht"])
+                else: # Jahresübergreifend
+                    if idx_akt >= idx_start_s or idx_akt <= idx_end_s: sähen_erlaubt.append(eintrag["frucht"])
+            except: pass
+            
+            # Check Ernte
+            try:
+                idx_start_e = MONATE_LISTE.index(eintrag["ernte_von"])
+                idx_end_e = MONATE_LISTE.index(eintrag["ernte_bis"])
+                
+                if idx_start_e <= idx_end_e:
+                    if idx_start_e <= idx_akt <= idx_end_e: ernten_erlaubt.append(eintrag["frucht"])
+                else: # Jahresübergreifend
+                    if idx_akt >= idx_start_e or idx_akt <= idx_end_e: ernten_erlaubt.append(eintrag["frucht"])
+            except: pass
+
+    col_not1, col_not2 = st.columns(2)
+    with col_not1:
+        if sähen_erlaubt:
+            st.success(f"🌱 **Jetzt SÄEN im {aktueller_m}:**\n" + "\n".join([f"* {f}" for f in sähen_erlaubt]))
+        else:
+            st.write(f"ℹ️ Keine spezifischen Saaten im {aktueller_m} eingetragen.")
+    with col_not2:
+        if ernten_erlaubt:
+            st.warning(f"🚜 **Jetzt ERNTEN im {aktueller_m}:**\n" + "\n".join([f"* {f}" for f in ernten_erlaubt]))
+        else:
+            st.write(f"ℹ️ Keine spezifischen Ernten im {aktueller_m} eingetragen.")
+            
+    st.write("---")
+    
     bereinigter_kalender = []
     if db.get("kalender"):
         for eintrag in db["kalender"]:
@@ -687,7 +752,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
     with col_k2:
         st.subheader("🗑️ Fruchttyp aus Kalender löschen")
         if bereinigter_kalender:
-            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["frucht"] for x in bereinigter_kalender])
+            k_loesch_frucht = st.selectbox("Welche Frucht entfernen?", [x["float"] for x in bereinigter_kalender if "frucht" in x])
             if st.button("🔴 Aus Kalender löschen"):
                 db["kalender"] = [x for x in bereinigter_kalender if x["frucht"] != k_loesch_frucht]
                 speichere_globalen_speicher(db)
@@ -702,6 +767,9 @@ elif bereich == "📅 Sähe- & Erntekalender":
 elif bereich == "📦 Hof-Lagerverwaltung":
     st.title("📦 Allgemeine Hof-Lagerbestände (Volumen-Abrechnung)")
     
+    aktueller_m = db.get("aktueller_monat", "Januar")
+    st.info(f"📅 **Aktueller In-Game Monat auf dem Server:** {aktueller_m}")
+
     # Live-Anzeige aller Lagerbestände als Tabelle (Einheitlich in Liter)
     lager_daten = []
     for h_id, h_lager in db["lager"].items():
@@ -713,6 +781,36 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             "Ballen Allg. (Gesamtvolumen in L)": f"{h_lager.get('Ballen (Allg.)', 0):,}"
         })
     st.dataframe(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True)
+    
+    # Anzeige der gärenden Silos
+    if db.get("silage_gärung"):
+        st.subheader("⏳ Laufende Silo-Fermentierungen (Gärungsprozesse):")
+        gaer_liste = []
+        for g in db["silage_gärung"]:
+            idx_start = MONATE_LISTE.index(g["start_monat"])
+            idx_bereit = (idx_start + g["dauer"]) % 12
+            bereit_monat = MONATE_LISTE[idx_bereit]
+            
+            # Status ermitteln
+            idx_akt = MONATE_LISTE.index(aktueller_m)
+            # Einfache relative Distanzberechnung
+            schon_fertig = False
+            if idx_start <= idx_bereit:
+                if idx_akt >= idx_bereit or idx_akt < idx_start: schon_fertig = True
+            else:
+                if idx_bereit <= idx_akt < idx_start: schon_fertig = True
+                
+            status_text = "🟢 FERTIG / Bereit zum Öffnen!" if schon_fertig else "⏳ Gärt noch..."
+            
+            gaer_liste.append({
+                "Hof": HOF_MAPPING[g["hof"]],
+                "Menge (L)": f"{g['menge']:,}",
+                "Zugedeckt im": g["start_monat"],
+                "Dauer (Monate)": g["dauer"],
+                "Fertig im Monat": bereit_monat,
+                "Status": status_text
+            })
+        st.dataframe(pd.DataFrame(gaer_liste), use_container_width=True, hide_index=True)
     
     st.write("---")
     st.subheader("📥 / 📤 Bestand buchen")
@@ -727,7 +825,6 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         # Bedingte Logik je nach ausgewähltem Gut
         if l_gut == "Paletten":
             anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
-            # Rechnerische Umrechnung: 1 Palette = 1000 Liter
             l_menge = anzahl_paletten * 1000
             st.caption(f"ℹ️ Entspricht bei 1.000L pro Palette: **{l_menge:,} Litern**")
         elif "Ballen" in l_gut:
@@ -736,6 +833,11 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         else:
             # Normales Silo
             l_menge = st.number_input("Menge in Liter (L):", min_value=1, step=1000, value=5000)
+            
+        # Wenn Silo zugedeckt wird -> Fermentationszeit abfragen
+        dauer_gärung = 1
+        if l_gut == "Silage (Silo)" and "Einlagern" in l_typ:
+            dauer_gärung = st.number_input("Gärungszeit / Dauer (in In-Game Monaten):", min_value=1, max_value=12, value=2, step=1)
         
     if st.button("💾 Lagerbestand aktualisieren"):
         aktueller_bestand = db["lager"][l_hof].get(l_gut, 0)
@@ -745,6 +847,16 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         else:
             diff = l_menge if "Einlagern" in l_typ else -l_menge
             db["lager"][l_hof][l_gut] = aktueller_bestand + diff
+            
+            # Bei Einlagerung von Silo einen Tracker für die Gärung hinterlegen
+            if l_gut == "Silage (Silo)" and "Einlagern" in l_typ:
+                db["silage_gärung"].append({
+                    "hof": l_hof,
+                    "menge": l_menge,
+                    "start_monat": aktueller_m,
+                    "dauer": int(dauer_gärung)
+                })
+                
             speichere_globalen_speicher(db)
             st.success(f"Erfolgreich gebucht! Der Bestand von {l_gut} wurde für {HOF_MAPPING[l_hof]} angepasst.")
             st.rerun()
