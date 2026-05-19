@@ -700,22 +700,22 @@ elif bereich == "📅 Sähe- & Erntekalender":
 # BEREICH 8: HOF-LAGERVERWALTUNG
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
-    st.title("📦 Allgemeine Hof-Lagerbestände")
+    st.title("📦 Allgemeine Hof-Lagerbestände (Volumen-Abrechnung)")
     
-    # Live-Anzeige aller Lagerbestände als Tabelle
+    # Live-Anzeige aller Lagerbestände als Tabelle (Einheitlich in Liter)
     lager_daten = []
     for h_id, h_lager in db["lager"].items():
         lager_daten.append({
             "Hof": HOF_MAPPING[h_id],
             "Silage (Silo in L)": f"{h_lager.get('Silage (Silo)', 0):,}",
             "Silage (Ballen in L)": f"{h_lager.get('Silage (Ballen)', 0):,}",
-            "Paletten (Stück)": f"{h_lager.get('Paletten', 0):,}",
-            "Ballen Allg. (Stück)": f"{h_lager.get('Ballen (Allg.)', 0):,}"
+            "Paletten (Gesamtvolumen in L)": f"{h_lager.get('Paletten', 0):,}",
+            "Ballen Allg. (Gesamtvolumen in L)": f"{h_lager.get('Ballen (Allg.)', 0):,}"
         })
     st.dataframe(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True)
     
     st.write("---")
-    st.subheader("📥 / 📤 Bestand buchen (Einlagern / Auslagern)")
+    st.subheader("📥 / 📤 Bestand buchen")
     
     col_l1, col_l2, col_l3 = st.columns(3)
     with col_l1:
@@ -724,14 +724,24 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     with col_l2:
         l_gut = st.selectbox("Lager-Objekt:", ["Silage (Silo)", "Silage (Ballen)", "Paletten", "Ballen (Allg.)"])
     with col_l3:
-        einheit = "Liter (L)" if "Silage" in l_gut else "Stück"
-        l_menge = st.number_input(f"Menge ({einheit}):", min_value=1, step=100 if "Silage" in l_gut else 1, value=1000 if "Silage" in l_gut else 10)
+        # Bedingte Logik je nach ausgewähltem Gut
+        if l_gut == "Paletten":
+            anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
+            # Rechnerische Umrechnung: 1 Palette = 1000 Liter
+            l_menge = anzahl_paletten * 1000
+            st.caption(f"ℹ️ Entspricht bei 1.000L pro Palette: **{l_menge:,} Litern**")
+        elif "Ballen" in l_gut:
+            st.info("💡 Ballen haben unterschiedliche Größen! Bitte gib das Gesamtvolumen in Litern an.")
+            l_menge = st.number_input("Gesamtvolumen der Ballen (Liter):", min_value=1, step=100, value=2000)
+        else:
+            # Normales Silo
+            l_menge = st.number_input("Menge in Liter (L):", min_value=1, step=1000, value=5000)
         
     if st.button("💾 Lagerbestand aktualisieren"):
         aktueller_bestand = db["lager"][l_hof].get(l_gut, 0)
         
         if "Auslagern" in l_typ and l_menge > aktueller_bestand:
-            st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend {l_gut} auf Lager! (Bestand: {aktueller_bestand:,})")
+            st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend {l_gut} auf Lager! (Bestand: {aktueller_bestand:,} L)")
         else:
             diff = l_menge if "Einlagern" in l_typ else -l_menge
             db["lager"][l_hof][l_gut] = aktueller_bestand + diff
