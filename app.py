@@ -863,7 +863,50 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         )
     else:
         st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
+        
+# ==============================================================================
+# BEREICH 9: TIER- & FUTTERMANAGEMENT
+# ==============================================================================
+elif bereich == "🐄 Tier- & Futtermanagement":
+    st.title("🐄 Tier- & Futtermanagement")
     
+    tier_profile = {
+        "Milchkühe": {"verbrauch": 350, "heu": 0.5, "silage": 0.4, "stroh": 0.1},
+        "Fleischrinder": {"verbrauch": 550, "heu": 0.5, "silage": 0.4, "stroh": 0.1},
+        "Jungtiere": {"verbrauch": 181, "heu": 0.5, "silage": 0.4, "stroh": 0.1}
+    }
+
+    st.subheader("🏠 Tierbestand pro Hof")
+    cols = st.columns(3)
+    hof_tiere = {}
+    for i, h_id in enumerate(["Hof 1", "Hof 2", "Hof 3"]):
+        with cols[i]:
+            st.markdown(f"**{HOF_MAPPING[h_id]}**")
+            hof_tiere[h_id] = st.number_input(f"Tiere:", min_value=0, value=db.get("tierbestand", {}).get(h_id, 50), key=f"tiere_{h_id}")
+
+    # Speichern der Bestände im Globalen Speicher
+    if st.button("Tierbestand auf Höfen fixieren"):
+        db["tierbestand"] = hof_tiere
+        speichere_globalen_speicher(db)
+        st.success("Bestände aktualisiert!")
+
+    st.write("---")
+    st.subheader("📊 Jahres-Futterverbrauch (kumuliert)")
+    
+    # Berechnung für Chart
+    gesamttiere = sum(hof_tiere.values())
+    monate_df = pd.DataFrame({
+        "Monat": list(range(1, 13)),
+        "L": [gesamttiere * 350 * m for m in range(1, 13)]
+    })
+    st.line_chart(monate_df.set_index("Monat"))
+
+    st.subheader("⚙️ TMR-Bedarf für aktuelle Planung")
+    if st.button("TMR-Mischplan berechnen"):
+        for h_id, anzahl in hof_tiere.items():
+            if anzahl > 0:
+                bedarf = anzahl * 350 
+                st.write(f"**{HOF_MAPPING[h_id]}**: {bedarf*0.5:,.0f}L Heu | {bedarf*0.4:,.0f}L Silage | {bedarf*0.1:,.0f}L Stroh")
     # --------------------------------------------------------------------------
     # 2. Gärungsprozesse Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
