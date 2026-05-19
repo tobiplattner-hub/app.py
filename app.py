@@ -216,7 +216,6 @@ else:
 st.sidebar.image("https://img.icons8.com/color/96/tractor.png", width=80)
 st.sidebar.title("⚙️ Server-Zentrale")
 
-# Live-In-Game Monat wechseln
 idx_monat = MONATE_LISTE.index(db.get("aktueller_monat", "Januar"))
 neuer_monat = st.sidebar.selectbox("📅 Aktueller In-Game Monat:", MONATE_LISTE, index=idx_monat)
 if neuer_monat != db.get("aktueller_monat"):
@@ -467,7 +466,7 @@ elif bereich == "💼 LU-Auftragsbuch":
             speichere_globalen_speicher(db)
             
             k_name = KUNDEN_MAPPING.get(auftrag['kunde'], auftrag['kunde'])
-            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[text_lu]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}<br/><b>Auftrags-ID:</b> #{auftrag['id']}"
+            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}<br/><b>Auftrags-ID:</b> #{auftrag['id']}"
             posten = [[
                 f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", 
                 f"{stunden_gefahren:.1f} Betriebsstunden auf {auftrag['maschine']}<br/>(Basis: {auftrag['stundensatz']} €/h)", 
@@ -759,7 +758,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
         with col_ke2:
             k_ernte_bis = st.selectbox("Ernte End-Monat:", MONATE_LISTE, index=8)
             
-        if st.button("📅 Kalendereintrag保存"):
+        if st.button("📅 Kalendereintrag speichern"):
             if k_frucht.strip() == "":
                 st.error("Bitte gib einen Namen für die Frucht ein!")
             else:
@@ -794,7 +793,7 @@ elif bereich == "📅 Sähe- & Erntekalender":
             st.info("Keine löschbaren Einträge vorhanden.")
 
 # ==============================================================================
-# BEREICH 8: HOF-LAGERVERWALTUNG (VOLLSTÄNDIG KORRIGIERT & SYNCHRONISIERT)
+# BEREICH 8: HOF-LAGERVERWALTUNG (GRAFISCH OPTIMIERT & LOGISCH REIN)
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
     st.title("📦 Hof-Lagerverwaltung & Silomanagement")
@@ -803,7 +802,7 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     st.markdown(f"📅 **Aktueller Server-Monat:** `{aktueller_m}`")
     
     # --------------------------------------------------------------------------
-    # 1. Lagerbestände Übersicht
+    # 1. Lagerbestände Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
     st.subheader("📋 Aktuelle Lagerbestände")
     
@@ -820,15 +819,37 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             zeile = {"Hof / Betrieb": HOF_MAPPING[h_id]}
             for gut in liste_gueter:
                 menge = db["lager"].get(h_id, {}).get(gut, 0)
-                zeile[f"{gut} (L)"] = f"{menge:,}" if menge > 0 else "-"
+                zeile[f"{gut} (L)"] = menge if menge > 0 else 0
             lager_daten.append(zeile)
             
-        st.dataframe(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True)
+        df_lager = pd.DataFrame(lager_daten)
+        
+        st.data_editor(
+            df_lager,
+            use_container_width=True,
+            hide_index=True,
+            disabled=True,
+            column_config={
+                "Hof / Betrieb": st.column_config.TextColumn(
+                    "🏠 Hof / Betrieb",
+                    help="Der jeweilige Bauernhof",
+                    width="medium"
+                ),
+                **{
+                    f"{gut} (L)": st.column_config.NumberColumn(
+                        f"🌾 {gut}",
+                        format="%d L",
+                        help=f"Aktueller Bestand von {gut} in Litern",
+                        min_value=0
+                    ) for gut in liste_gueter
+                }
+            }
+        )
     else:
         st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
     
     # --------------------------------------------------------------------------
-    # 2. Gärungsprozesse Übersicht
+    # 2. Gärungsprozesse Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
     if db.get("silage_gärung"):
         st.write("---")
@@ -852,13 +873,26 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             
             gaer_liste.append({
                 "Hof": HOF_MAPPING[g["hof"]],
-                "Menge (L)": f"{g['menge']:,}",
+                "Menge": g['menge'],
                 "Eingelagert in": g["start_monat"],
                 "Dauer": f"{g['dauer']} Mon.",
                 "Fertig im": bereit_monat,
                 "Status": status_text
             })
-        st.dataframe(pd.DataFrame(gaer_liste), use_container_width=True, hide_index=True)
+            
+        df_gaerung = pd.DataFrame(gaer_liste)
+        
+        st.data_editor(
+            df_gaerung,
+            use_container_width=True,
+            hide_index=True,
+            disabled=True,
+            column_config={
+                "Hof": st.column_config.TextColumn("🏠 Hof"),
+                "Menge": st.column_config.NumberColumn("Volumen", format="%d L"),
+                "Status": st.column_config.TextColumn("Status", help="Gärstatus des Silos")
+            }
+        )
     
     # --------------------------------------------------------------------------
     # 3. Integrierte Buchungsmaske
@@ -885,7 +919,6 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             l_name_eingabe = st.text_input("Genaue Bezeichnung / Name der Ware:", placeholder=platzhalter_text, value="Silage (Silo)" if "Silo" in l_kat else "")
             
         with col_l2:
-            # Vereinheitlichte Eingabe- und Umrechnungslogik (Ganzzahlen)
             if "Paletten" in l_kat:
                 l_modus = st.radio("Eingabe als:", ["Stückzahl (Paletten)", "Direkt in Liter"], horizontal=True)
                 if l_modus == "Stückzahl (Paletten)":
