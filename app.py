@@ -187,6 +187,7 @@ def lade_globalen_speicher():
         return default_daten
 
 def speichere_globalen_speicher(daten):
+    daten["letztes_update"] = datetime.now().strftime('%H:%M:%S')
     with open(DB_DATEI, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False, indent=4)
 
