@@ -457,10 +457,14 @@ elif bereich == "💼 LU-Auftragsbuch":
     
     if offene:
         df_offene = pd.DataFrame(offene)
-        # Darstellung Maschinen-Liste als String für Tabelle
+        # Fehlerbehebung: Prüfen ob 'maschinen' existiert, sonst aus 'maschine' konvertieren
+        if "maschinen" not in df_offene.columns:
+            df_offene["maschinen"] = df_offene["maschine"].apply(lambda x: [x] if isinstance(x, str) else [])
+        
+        # Ab hier ist sichergestellt, dass die Spalte 'maschinen' existiert
         df_offene["Kunde"] = df_offene["kunde"].map(lambda x: KUNDEN_MAPPING.get(x, x))
         df_offene["Lohnunternehmen"] = df_offene["auftragnehmer"].map(HOF_MAPPING)
-        df_offene["Maschinen_Anzeige"] = df_offene["maschinen"].apply(lambda x: ", ".join(x))
+        df_offene["Maschinen_Anzeige"] = df_offene["maschinen"].apply(lambda x: ", ".join(x) if isinstance(x, list) else str(x))
         
         st.dataframe(df_offene[["id", "Kunde", "Lohnunternehmen", "typ", "Maschinen_Anzeige", "stundensatz"]], use_container_width=True, hide_index=True)
         
