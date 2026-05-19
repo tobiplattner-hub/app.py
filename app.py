@@ -865,48 +865,71 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
         
 # ==============================================================================
-# BEREICH 9: TIER- & FUTTERMANAGEMENT
+# BEREICH 9: TIER- & FUTTERMANAGEMENT (LS25)
 # ==============================================================================
 elif bereich == "🐄 Tier- & Futtermanagement":
     st.title("🐄 Tier- & Futtermanagement")
     
+    # LS25 Futter-Profile
     tier_profile = {
-        "Milchkühe": {"verbrauch": 350, "heu": 0.5, "silage": 0.4, "stroh": 0.1},
-        "Fleischrinder": {"verbrauch": 550, "heu": 0.5, "silage": 0.4, "stroh": 0.1},
-        "Jungtiere": {"verbrauch": 181, "heu": 0.5, "silage": 0.4, "stroh": 0.1}
+        "Milchkühe": {"verbrauch": 350, "heu": 0.5, "silage": 0.4, "stroh": 0.1, "typ": "TMR"},
+        "Wasserbüffel": {"verbrauch": 380, "heu": 0.5, "silage": 0.4, "stroh": 0.1, "typ": "TMR"},
+        "Ziegen": {"verbrauch": 200, "gras_heu": 0.8, "mineral": 0.2, "typ": "GRAS"},
+        "Schweine": {"verbrauch": 250, "mais": 0.5, "weizen": 0.3, "raps": 0.2, "typ": "Mix"},
+        "Hühner": {"verbrauch": 80, "weizen": 1.0, "typ": "Getreide"}
     }
 
     st.subheader("🏠 Tierbestand pro Hof")
     cols = st.columns(3)
     hof_tiere = {}
+    
+    # Aufbau der Auswahl pro Hof
     for i, h_id in enumerate(["Hof 1", "Hof 2", "Hof 3"]):
         with cols[i]:
             st.markdown(f"**{HOF_MAPPING[h_id]}**")
             hof_tiere[h_id] = st.number_input(f"Tiere:", min_value=0, value=db.get("tierbestand", {}).get(h_id, 50), key=f"tiere_{h_id}")
 
-    # Speichern der Bestände im Globalen Speicher
-    if st.button("Tierbestand auf Höfen fixieren"):
+    if st.button("Tierbestand speichern"):
         db["tierbestand"] = hof_tiere
         speichere_globalen_speicher(db)
         st.success("Bestände aktualisiert!")
 
     st.write("---")
-    st.subheader("📊 Jahres-Futterverbrauch (kumuliert)")
+    st.subheader("📊 Futterbedarfs-Rechner")
+    tier_typ = st.selectbox("Tierart für Berechnung wählen:", list(tier_profile.keys()))
+    monate = st.slider("Planungszeitraum (Monate):", 1, 12, 1)
     
-    # Berechnung für Chart
-    gesamttiere = sum(hof_tiere.values())
-    monate_df = pd.DataFrame({
-        "Monat": list(range(1, 13)),
-        "L": [gesamttiere * 350 * m for m in range(1, 13)]
-    })
-    st.line_chart(monate_df.set_index("Monat"))
+    # Berechnung
+    p = tier_profile[tier_typ]
+    gesamt_tiere = sum(hof_tiere.values())
+    bedarf_total = gesamt_tiere * p["verbrauch"] * monate
+    
+    st.info(f"### Gesamtbedarf für {gesamt_tiere} Tiere ({monate} Monate): {bedarf_total:,.0f} Liter")
+    
+    # Dynamische Anzeige je nach Typ
+    if p["typ"] == "TMR":
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Heu (50%)", f"{bedarf_total * p['heu']:,.0f} L")
+        c2.metric("Silage (40%)", f"{bedarf_total * p['silage']:,.0f} L")
+        c3.metric("Stroh (10%)", f"{bedarf_total * p['stroh']:,.0f} L")
+        
+    elif p["typ"] == "GRAS":
+        c1, c2 = st.columns(2)
+        c1.metric("Gras/Heu (80%)", f"{bedarf_total * p['gras_heu']:,.0f} L")
+        c2.metric("Mineralfutter (20%)", f"{bedarf_total * p['mineral']:,.0f} L")
+        
+    elif p["typ"] == "Mix":
+        st.write("Mischverhältnis: 50% Mais, 30% Weizen, 20% Raps")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Mais (50%)", f"{bedarf_total * p['mais']:,.0f} L")
+        c2.metric("Weizen (30%)", f"{bedarf_total * p['weizen']:,.0f} L")
+        c3.metric("Raps (20%)", f"{bedarf_total * p['raps']:,.0f} L")
+        
+    elif p["typ"] == "Getreide":
+        st.metric("Getreide (100%)", f"{bedarf_total:,.0f} L")
 
-    st.subheader("⚙️ TMR-Bedarf für aktuelle Planung")
-    if st.button("TMR-Mischplan berechnen"):
-        for h_id, anzahl in hof_tiere.items():
-            if anzahl > 0:
-                bedarf = anzahl * 350 
-                st.write(f"**{HOF_MAPPING[h_id]}**: {bedarf*0.5:,.0f}L Heu | {bedarf*0.4:,.0f}L Silage | {bedarf*0.1:,.0f}L Stroh")
+    st.write("---")
+    st.line_chart(pd.DataFrame({"Bedarf": [gesamt_tiere * p['verbrauch'] * m for m in range(1, 13)]}))
     # --------------------------------------------------------------------------
     # 2. Gärungsprozesse Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
