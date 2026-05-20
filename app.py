@@ -1122,18 +1122,15 @@ elif bereich == "👥 Mitarbeiter & Stunden":
     st.subheader("📊 Übersicht der Arbeitsstunden")
     
     if db["stundenkonto"]:
-        import pandas as pd
+        # Pandas wird jetzt oben im Skript importiert, hier nutzen wir es einfach:
         df_stunden = pd.DataFrame(db["stundenkonto"])
         
-        # Tabelle anzeigen
         st.dataframe(df_stunden, use_container_width=True)
         
-        # Auswertung pro Mitarbeiter
         st.write("### Auswertung: Stunden pro Person")
         summe_pro_person = df_stunden.groupby("Mitarbeiter")["Stunden"].sum()
         st.bar_chart(summe_pro_person)
         
-        # Reset-Button (für Monatsabschluss)
         if st.button("🔴 Alle Stunden zurücksetzen (Monatsabschluss)"):
             db["stundenkonto"] = []
             speichere_globalen_speicher(db)
