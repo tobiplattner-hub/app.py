@@ -1136,49 +1136,36 @@ elif bereich == "🐄 Tier- & Futtermanagement":
 elif bereich == "👥 Mitarbeiter & Stunden":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
-    # 1. Sicherstellen, dass die Datenstruktur korrekt ist (Typ-Check)
-    if not isinstance(db.get("stundenkonto"), list):
+    # Sicherstellen, dass die Daten existieren
+    if "stundenkonto" not in db or not isinstance(db["stundenkonto"], list):
         db["stundenkonto"] = []
-    if "mitarbeiter" not in db or not isinstance(db["mitarbeiter"], list):
-        db["mitarbeiter"] = ["Spieler 1", "Spieler 2", "Spieler 3"]
-
-    # 2. Neue Stunden erfassen
-    st.subheader("➕ Stunden erfassen")
-    col1, col2, col3, col4 = st.columns(4)
     
-    mitarbeiter = col1.selectbox("Mitarbeiter:", db["mitarbeiter"])
-    hof = col2.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"])
-    aufgabe = col3.text_input("Aufgabe:")
-    stunden = col4.number_input("Stunden:", min_value=0.5, step=0.5)
-    
-    if st.button("Arbeitsnachweis speichern"):
-        db["stundenkonto"].append({
-            "Mitarbeiter": mitarbeiter,
-            "Hof": hof,
-            "Aufgabe": aufgabe,
-            "Stunden": stunden
-        })
-        speichere_globalen_speicher(db)
-        st.success("Stunden gespeichert!")
-        st.rerun()
-
-    st.write("---")
-    st.subheader("📊 Übersicht der Arbeitsstunden")
-    
-    # 3. Sicherer Check auf leere Liste
-    if len(db["stundenkonto"]) > 0:
-        df_stunden = pd.DataFrame(db["stundenkonto"])
-        st.dataframe(df_stunden, use_container_width=True)
+    # --- FORMULAR ---
+    with st.form("stunden_form"):
+        col1, col2, col3, col4 = st.columns(4)
+        ma = col1.selectbox("Mitarbeiter:", db.get("mitarbeiter", ["Spieler 1"]))
+        hof = col2.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"])
+        aufgabe = col3.text_input("Aufgabe:")
+        std = col4.number_input("Stunden:", min_value=0.5, step=0.5)
         
-        st.write("### Auswertung: Stunden pro Person")
-        # Sicherstellen, dass die Spalte existiert, bevor gruppiert wird
-        if "Mitarbeiter" in df_stunden.columns and "Stunden" in df_stunden.columns:
-            summe_pro_person = df_stunden.groupby("Mitarbeiter")["Stunden"].sum()
-            st.bar_chart(summe_pro_person)
-        
-        if st.button("🔴 Alle Stunden zurücksetzen"):
-            db["stundenkonto"] = []
+        if st.form_submit_button("Speichern"):
+            db["stundenkonto"].append({"Mitarbeiter": ma, "Hof": hof, "Aufgabe": aufgabe, "Stunden": std})
             speichere_globalen_speicher(db)
             st.rerun()
+
+    # --- DATEN ANZEIGE (Sicher) ---
+    if db["stundenkonto"]:
+        try:
+            df = pd.DataFrame(db["stundenkonto"])
+            st.dataframe(df)
+            
+            if "Mitarbeiter" in df.columns:
+                st.bar_chart(df.groupby("Mitarbeiter")["Stunden"].sum())
+        except Exception as e:
+            st.error(f"Fehler bei der Datenanzeige: {e}")
+            if st.button("Daten zurücksetzen (Bei Fehler)"):
+                db["stundenkonto"] = []
+                speichere_globalen_speicher(db)
+                st.rerun()
     else:
-        st.info("Noch keine Stunden erfasst.")
+        st.write("Noch keine Daten vorhanden.")
