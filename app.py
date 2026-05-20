@@ -1131,9 +1131,8 @@ elif bereich == "🐄 Tier- & Futtermanagement":
                 "Hof": st.column_config.TextColumn("🏠 Hof"),
                 "Menge": st.column_config.NumberColumn("Volumen", format="%d L"),
                 "Status": st.column_config.TextColumn("Status", help="Gärstatus des Silos")
-            }
-        )
-elif bereich == "👥 Mitarbeiter & Stunden":
+            })
+         elif bereich == "👥 Mitarbeiter & Stunden":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     st.write("Test: Wenn du das hier siehst, läuft der Code!")
     
