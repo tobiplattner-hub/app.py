@@ -1138,6 +1138,7 @@ elif bereich == "🐄 Tier- & Futtermanagement":
             }
         )
 elif bereich == "👥 Mitarbeiter & Stunden":
+    st.write("DEBUG: Mitarbeiter-Block gestartet")
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
     # Initialisierung der Daten
