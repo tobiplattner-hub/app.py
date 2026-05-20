@@ -1047,8 +1047,8 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         st.subheader("🌾 TMR-Zusammensetzung (50/40/10)")
         c1, c2, c3 = st.columns(3)
         c1.metric("Heu (50%)", f"{bedarf_mit_reserve * p['heu']:,.0f} L")
-        c2.metric("Silage (40%)", f"{bedarf_mit_reserve * p['silage']:,.0f} L")
-        c3.metric("Stroh (10%)", f"{bedarf_mit_reserve * p['stroh']:,.0f} L")
+        c2.metric("Silage (25%)", f"{bedarf_mit_reserve * p['silage']:,.0f} L")
+        c3.metric("Stroh (25%)", f"{bedarf_mit_reserve * p['stroh']:,.0f} L")
     elif p["typ"] == "Mix":
         st.subheader("🌾 Mix-Zusammensetzung")
         c1, c2, c3 = st.columns(3)
