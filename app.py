@@ -1133,7 +1133,7 @@ elif bereich == "🐄 Tier- & Futtermanagement":
                 "Status": st.column_config.TextColumn("Status", help="Gärstatus des Silos")
             })
         
-elif bereich == "👥 Mitarbeiter & Stunden":
+elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
     # Sicherstellen, dass die Daten existieren
