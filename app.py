@@ -1135,37 +1135,10 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         )
 elif bereich == "👥 Mitarbeiter & Stunden":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
+    st.write("Test: Wenn du das hier siehst, läuft der Code!")
     
-    # Sicherstellen, dass die Daten existieren
-    if "stundenkonto" not in db or not isinstance(db["stundenkonto"], list):
-        db["stundenkonto"] = []
+    # Minimalster Test: Stürzt es bei einer einfachen Liste ab?
+    test_liste = [{"Test": "Daten"}]
+    st.write(pd.DataFrame(test_liste))
     
-    # --- FORMULAR ---
-    with st.form("stunden_form"):
-        col1, col2, col3, col4 = st.columns(4)
-        ma = col1.selectbox("Mitarbeiter:", db.get("mitarbeiter", ["Spieler 1"]))
-        hof = col2.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"])
-        aufgabe = col3.text_input("Aufgabe:")
-        std = col4.number_input("Stunden:", min_value=0.5, step=0.5)
-        
-        if st.form_submit_button("Speichern"):
-            db["stundenkonto"].append({"Mitarbeiter": ma, "Hof": hof, "Aufgabe": aufgabe, "Stunden": std})
-            speichere_globalen_speicher(db)
-            st.rerun()
-
-    # --- DATEN ANZEIGE (Sicher) ---
-    if db["stundenkonto"]:
-        try:
-            df = pd.DataFrame(db["stundenkonto"])
-            st.dataframe(df)
-            
-            if "Mitarbeiter" in df.columns:
-                st.bar_chart(df.groupby("Mitarbeiter")["Stunden"].sum())
-        except Exception as e:
-            st.error(f"Fehler bei der Datenanzeige: {e}")
-            if st.button("Daten zurücksetzen (Bei Fehler)"):
-                db["stundenkonto"] = []
-                speichere_globalen_speicher(db)
-                st.rerun()
-    else:
-        st.write("Noch keine Daten vorhanden.")
+    st.write("Wenn du das DataFrame siehst, liegt der Fehler in deinen echten Daten!")
