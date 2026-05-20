@@ -1136,49 +1136,59 @@ elif bereich == "🐄 Tier- & Futtermanagement":
 elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
-    # Sicherstellen, dass die Datenstruktur existiert
+    # 1. Sicherstellen, dass die Datenstruktur existiert
     if "stundenkonto" not in db or not isinstance(db.get("stundenkonto"), list):
         db["stundenkonto"] = []
     
-    # --- FORMULAR ZUR ERFASSUNG ---
+    # 2. Dynamische Hof-Liste aus deiner Datenbank abrufen
+    # Nutzt die Namen, die du im Sidebar-Expander festlegst
+    hof_mapping = {h_id: h_data["name"] for h_id, h_data in db["hoefe"].items()}
+    
+    # 3. Liste der 5 Spieler
+    SPIELER_LISTE = ["Spieler 1", "Spieler 2", "Spieler 3", "Spieler 4", "Spieler 5"]
+    
+    # 4. Formular zur Erfassung
     with st.form("stunden_form"):
         col1, col2, col3, col4 = st.columns(4)
+        
         ma = col1.selectbox("Mitarbeiter:", SPIELER_LISTE)
-        hof = col2.selectbox("Hof zuweisen:", HOF_LISTE)
+        # Zeigt den Namen aus der DB an, speichert aber die ID
+        hof_id = col2.selectbox("Hof zuweisen:", options=list(hof_mapping.keys()), format_func=lambda x: hof_mapping[x])
         aufgabe = col3.text_input("Aufgabe:")
         std = col4.number_input("Stunden:", min_value=0.5, step=0.5)
         
-        # DIESER BUTTON MUSS HIER STEHEN:
+        # Submit Button
         submitted = st.form_submit_button("Arbeitsnachweis speichern")
         
         if submitted:
             db["stundenkonto"].append({
                 "Mitarbeiter": ma,
-                "Hof": hof,
+                "Hof": hof_mapping[hof_id],
                 "Aufgabe": aufgabe,
                 "Stunden": std
             })
             speichere_globalen_speicher(db)
-            st.success("Stunden gespeichert!")
+            st.success("Stunden erfolgreich gespeichert!")
             st.rerun()
 
-    # --- ÜBERSICHT & FILTER ---
+    # 5. Übersicht & Filter
     st.write("---")
     st.subheader("📊 Stundenübersicht")
     
-    filter_hof = st.selectbox("Nach Hof filtern:", ["Alle"] + HOF_LISTE)
-    
-    if db.get("stundenkonto"):
+    if db["stundenkonto"]:
         df = pd.DataFrame(db["stundenkonto"])
+        
+        # Filter nach Hof
+        filter_optionen = ["Alle"] + list(hof_mapping.values())
+        filter_hof = st.selectbox("Nach Hof filtern:", filter_optionen)
         
         if filter_hof != "Alle":
             df = df[df["Hof"] == filter_hof]
         
         st.dataframe(df, use_container_width=True)
         
+        # Kurze grafische Auswertung
         if not df.empty:
             st.bar_chart(df.groupby("Mitarbeiter")["Stunden"].sum())
-        else:
-            st.info("Keine Stunden für diesen Hof gefunden.")
     else:
-        st.info("Noch keine Stunden erfasst.")
+        st.info("Noch keine Arbeitsstunden erfasst.")
