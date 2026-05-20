@@ -819,22 +819,16 @@ elif bereich == "📅 Sähe- & Erntekalender":
             st.info("Keine löschbaren Einträge vorhanden.")
 
 # ==============================================================================
-# BEREICH 8: HOF-LAGERVERWALTUNG (GRAFISCH OPTIMIERT & LOGISCH REIN)
+# BEREICH 8: HOF-LAGERVERWALTUNG
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
     st.title("📦 Hof-Lagerverwaltung & Silomanagement")
     
-    aktueller_m = db.get("aktueller_monat", "Januar")
-    st.markdown(f"📅 **Aktueller Server-Monat:** `{aktueller_m}`")
-    
-    # --------------------------------------------------------------------------
-    # 1. Lagerbestände Übersicht (Grafisch aufgewertet)
-    # --------------------------------------------------------------------------
+    # 1. Übersicht
     st.subheader("📋 Aktuelle Lagerbestände")
-    
     alle_gueter = set()
     for h_id in ["Hof 1", "Hof 2", "Hof 3"]:
-        if h_id in db["lager"]:
+        if h_id in db.get("lager", {}):
             alle_gueter.update(db["lager"][h_id].keys())
     
     liste_gueter = sorted(list(alle_gueter))
@@ -842,37 +836,47 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     if liste_gueter:
         lager_daten = []
         for h_id in ["Hof 1", "Hof 2", "Hof 3"]:
-            zeile = {"Hof / Betrieb": HOF_MAPPING[h_id]}
+            zeile = {"Hof / Betrieb": HOF_MAPPING.get(h_id, h_id)}
             for gut in liste_gueter:
-                menge = db["lager"].get(h_id, {}).get(gut, 0)
-                zeile[f"{gut} (L)"] = menge if menge > 0 else 0
+                zeile[f"{gut} (L)"] = db["lager"].get(h_id, {}).get(gut, 0)
             lager_daten.append(zeile)
-            
-        df_lager = pd.DataFrame(lager_daten)
-        
-        st.data_editor(
-            df_lager,
-            use_container_width=True,
-            hide_index=True,
-            disabled=True,
-            column_config={
-                "Hof / Betrieb": st.column_config.TextColumn(
-                    "🏠 Hof / Betrieb",
-                    help="Der jeweilige Bauernhof",
-                    width="medium"
-                ),
-                **{
-                    f"{gut} (L)": st.column_config.NumberColumn(
-                        f"🌾 {gut}",
-                        format="%d L",
-                        help=f"Aktueller Bestand von {gut} in Litern",
-                        min_value=0
-                    ) for gut in liste_gueter
-                }
-            }
-        )
+        st.data_editor(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True, disabled=True)
     else:
-        st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
+        st.info("Das Lager ist leer.")
+
+    # 2. Buchungsmaske (Ein- & Auslagern)
+    st.write("---")
+    st.subheader("🔄 Lagerbewegung")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        auswahl_hof = st.selectbox("Hof wählen:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x))
+    with c2:
+        typ = st.radio("Aktion:", ["Einlagern", "Auslagern"])
+    with c3:
+        gut_name = st.text_input("Gut (z.B. Weizen, Paletten):")
+    with c4:
+        ist_palette = st.checkbox("Ist Palette (1 = 1000L)")
+        menge = st.number_input("Menge:", min_value=0, value=0)
+        
+    if st.button("Lagerbuchung ausführen"):
+        if gut_name:
+            reale_menge = menge * 1000 if ist_palette else menge
+            if typ == "Auslagern": reale_menge = -reale_menge
+            
+            if "lager" not in db: db["lager"] = {}
+            if auswahl_hof not in db["lager"]: db["lager"][auswahl_hof] = {}
+            
+            db["lager"][auswahl_hof][gut_name] = db["lager"][auswahl_hof].get(gut_name, 0) + reale_menge
+            
+            # Verhindere negative Bestände
+            if db["lager"][auswahl_hof][gut_name] < 0: db["lager"][auswahl_hof][gut_name] = 0
+            
+            speichere_globalen_speicher(db)
+            st.success(f"{typ} von {reale_menge} L {gut_name} bei {HOF_MAPPING.get(auswahl_hof)} erfolgreich.")
+            st.rerun()
+        else:
+            st.error("Bitte gib einen Gut-Namen an.")
         # --------------------------------------------------------------------------
     # 2. Buchungsmaske für manuelle Anpassungen
     # --------------------------------------------------------------------------
