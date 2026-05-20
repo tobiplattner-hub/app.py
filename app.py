@@ -819,67 +819,59 @@ elif bereich == "📅 Sähe- & Erntekalender":
         else:
             st.info("Keine löschbaren Einträge vorhanden.")
 elif bereich == "🌱 Fruchtfolge-Planer":
-    st.title("🌱 Fruchtfolge & Feldmanagement")
+    st.title("🌱 Fruchtfolge-Planer (Erweitert)")
     
     if "feld_planer" not in db: db["feld_planer"] = {}
 
-    st.subheader("Feld-Status & Planung")
-    
     # 1. Feld hinzufügen
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        feld_name = st.text_input("Neues Feld hinzufügen (z.B. Feld 1):", key="feld_name_in")
-    with col2:
-        st.write("###") 
-        if st.button("Hinzufügen"):
-            if feld_name and feld_name not in db["feld_planer"]:
-                # Struktur erweitert für Fruchtfolge
-                db["feld_planer"][feld_name] = {
-                    "Frucht": "Weizen", 
-                    "Folgefrucht": "Dinkel", 
-                    "Ertrag_pro_Feld": 0
-                }
-                speichere_globalen_speicher(db)
-                st.rerun()
+    feld_name = st.text_input("Neues Feld hinzufügen (z.B. Feld 5):")
+    if st.button("Hinzufügen"):
+        if feld_name and feld_name not in db["feld_planer"]:
+            # Wir speichern eine Liste für die Fruchtfolge
+            db["feld_planer"][feld_name] = {"Folge": ["Weizen", "Dinkel", "Gerste"], "Ertrag": 5000}
+            speichere_globalen_speicher(db)
+            st.rerun()
 
     # 2. Felder verwalten
     for feld in list(db["feld_planer"].keys()):
-        with st.expander(f"Feld: {feld} (Aktuell: {db['feld_planer'][feld]['Frucht']} -> Nächstes: {db['feld_planer'][feld]['Folgefrucht']})"):
+        with st.expander(f"Feld: {feld} | Aktuell: {db['feld_planer'][feld]['Folge'][0]}"):
+            
+            # Fruchtfolge bearbeiten (als Komma-getrennte Liste)
+            folge_str = st.text_input(f"Fruchtfolge (Reihenfolge mit Komma trennen):", 
+                                      value=", ".join(db["feld_planer"][feld]["Folge"]), 
+                                      key=f"seq_{feld}")
+            
+            ertrag = st.number_input("Ertrag pro Ernte (Liter)", value=db["feld_planer"][feld]["Ertrag"], key=f"y_{feld}")
+            
             c1, c2, c3 = st.columns(3)
             with c1:
-                frucht = st.text_input("Aktuelle Frucht", value=db["feld_planer"][feld]["Frucht"], key=f"f_{feld}")
+                if st.button("Speichern", key=f"s_{feld}"):
+                    neue_liste = [x.strip() for x in folge_str.split(",")]
+                    db["feld_planer"][feld] = {"Folge": neue_liste, "Ertrag": ertrag}
+                    speichere_globalen_speicher(db)
+                    st.rerun()
+            
             with c2:
-                folge = st.text_input("Geplante Folgefrucht", value=db["feld_planer"][feld]["Folgefrucht"], key=f"ff_{feld}")
+                # "Rotiert" die Liste: Das erste Element wandert nach hinten
+                if st.button("Fruchtfolge weiter", key=f"rot_{feld}"):
+                    alte_liste = db["feld_planer"][feld]["Folge"]
+                    if len(alte_liste) > 1:
+                        neue_liste = alte_liste[1:] + [alte_liste[0]]
+                        db["feld_planer"][feld]["Folge"] = neue_liste
+                        speichere_globalen_speicher(db)
+                        st.success(f"Nächste Frucht: {neue_liste[0]}")
+                        st.rerun()
+            
             with c3:
-                ertrag = st.number_input("Ertrag pro Ernte (L)", value=db["feld_planer"][feld].get("Ertrag_pro_Feld", 0), key=f"ertrag_{feld}")
-            
-            # Aktionen
-            col_a1, col_a2, col_a3 = st.columns(3)
-            with col_a1:
-                if st.button(f"Speichern", key=f"save_{feld}"):
-                    db["feld_planer"][feld] = {"Frucht": frucht, "Folgefrucht": folge, "Ertrag_pro_Feld": ertrag}
-                    speichere_globalen_speicher(db)
-                    st.rerun()
-            
-            with col_a2:
-                # Fruchtfolge durchführen: Tauscht aktuelle Frucht gegen geplante Folgefrucht
-                if st.button(f"Fruchtfolge durchführen", key=f"rotate_{feld}"):
-                    alte_frucht = db["feld_planer"][feld]["Frucht"]
-                    neue_frucht = db["feld_planer"][feld]["Folgefrucht"]
-                    db["feld_planer"][feld]["Frucht"] = neue_frucht
-                    db["feld_planer"][feld]["Folgefrucht"] = "---" # Platzhalter für den nächsten Schritt
-                    speichere_globalen_speicher(db)
-                    st.success(f"Fruchtfolge abgeschlossen: {alte_frucht} -> {neue_frucht}")
-                    st.rerun()
-            
-            with col_a3:
-                if st.button(f"🚀 Ernte buchen", key=f"harvest_{feld}"):
+                # Ernte buchen (nimmt immer die aktuelle Frucht an Stelle 0)
+                if st.button("🚀 Ernte buchen", key=f"h_{feld}"):
+                    aktuelle_frucht = db["feld_planer"][feld]["Folge"][0]
                     hof = "Hof 1"
                     if "lager" not in db: db["lager"] = {}
                     if hof not in db["lager"]: db["lager"][hof] = {}
-                    db["lager"][hof][frucht] = db["lager"][hof].get(frucht, 0) + ertrag
+                    db["lager"][hof][aktuelle_frucht] = db["lager"][hof].get(aktuelle_frucht, 0) + ertrag
                     speichere_globalen_speicher(db)
-                    st.success(f"Geerntet!")
+                    st.success(f"{aktuelle_frucht} geerntet!")
 # ==============================================================================
 # BEREICH 8: HOF-LAGERVERWALTUNG (VOLLSTÄNDIG & BEREINIGT)
 # ==============================================================================
