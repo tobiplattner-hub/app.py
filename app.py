@@ -212,8 +212,8 @@ else:
     KUNDEN_MAPPING = HOF_MAPPING
     
     with st.sidebar.expander("👤 Spielernamen festlegen"):
-    # Initialisierung in der DB, falls noch nicht vorhanden
-    if "spielernamen" not in db:
+    # Diese Zeilen MÜSSEN alle um 4 Leerzeichen eingerückt sein!
+        if "spielernamen" not in db:
         db["spielernamen"] = {f"Spieler {i}": f"Spieler {i}" for i in range(1, 6)}
         speichere_globalen_speicher(db)
         
