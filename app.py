@@ -210,6 +210,24 @@ if sheet_kunden_liste:
 else:
     KUNDEN_AUSWAHL = ["Hof 1", "Hof 2", "Hof 3"]
     KUNDEN_MAPPING = HOF_MAPPING
+    
+    with st.sidebar.expander("👤 Spielernamen festlegen"):
+    # Initialisierung in der DB, falls noch nicht vorhanden
+    if "spielernamen" not in db:
+        db["spielernamen"] = {f"Spieler {i}": f"Spieler {i}" for i in range(1, 6)}
+        speichere_globalen_speicher(db)
+        
+    s1 = st.text_input("Name für Spieler 1:", db["spielernamen"].get("Spieler 1", "Spieler 1"))
+    s2 = st.text_input("Name für Spieler 2:", db["spielernamen"].get("Spieler 2", "Spieler 2"))
+    s3 = st.text_input("Name für Spieler 3:", db["spielernamen"].get("Spieler 3", "Spieler 3"))
+    s4 = st.text_input("Name für Spieler 4:", db["spielernamen"].get("Spieler 4", "Spieler 4"))
+    s5 = st.text_input("Name für Spieler 5:", db["spielernamen"].get("Spieler 5", "Spieler 5"))
+    
+    if st.button("Spielernamen speichern"):
+        db["spielernamen"] = {"Spieler 1": s1, "Spieler 2": s2, "Spieler 3": s3, "Spieler 4": s4, "Spieler 5": s5}
+        speichere_globalen_speicher(db)
+        st.success("Namen gespeichert!")
+        st.rerun()
 
 # ==============================================================================
 # SIDEBAR & SERVER-ZENTRALE
