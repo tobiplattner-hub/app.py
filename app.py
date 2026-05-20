@@ -1137,5 +1137,55 @@ elif bereich == "🐄 Tier- & Futtermanagement":
                 "Status": st.column_config.TextColumn("Status", help="Gärstatus des Silos")
             }
         )
+    elif bereich == "👥 Mitarbeiter & Stunden":
+    st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
+    # Initialisierung der Daten
+    if "stundenkonto" not in db: 
+        db["stundenkonto"] = []
+    if "mitarbeiter" not in db: 
+        db["mitarbeiter"] = ["Spieler 1", "Spieler 2", "Spieler 3"]
+
+    # 1. Neue Stunden erfassen
+    st.subheader("➕ Stunden erfassen")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    mitarbeiter = col1.selectbox("Mitarbeiter:", db["mitarbeiter"])
+    hof = col2.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"])
+    aufgabe = col3.text_input("Aufgabe (z.B. Pflügen):")
+    stunden = col4.number_input("Stunden:", min_value=0.5, step=0.5)
+    
+    if st.button("Arbeitsnachweis speichern"):
+        db["stundenkonto"].append({
+            "Mitarbeiter": mitarbeiter,
+            "Hof": hof,
+            "Aufgabe": aufgabe,
+            "Stunden": stunden
+        })
+        speichere_globalen_speicher(db)
+        st.success("Stunden gespeichert!")
+        st.rerun()
+
+    st.write("---")
+    st.subheader("📊 Übersicht der Arbeitsstunden")
+    
+    if db["stundenkonto"]:
+        # Stellen sicher, dass pd verfügbar ist (sollte oben importiert sein!)
+        df_stunden = pd.DataFrame(db["stundenkonto"])
+        
+        # Tabelle anzeigen
+        st.dataframe(df_stunden, use_container_width=True)
+        
+        # Auswertung pro Mitarbeiter
+        st.write("### Auswertung: Stunden pro Person")
+        summe_pro_person = df_stunden.groupby("Mitarbeiter")["Stunden"].sum()
+        st.bar_chart(summe_pro_person)
+        
+        # Reset-Button
+        if st.button("🔴 Alle Stunden zurücksetzen (Monatsabschluss)"):
+            db["stundenkonto"] = []
+            speichere_globalen_speicher(db)
+            st.rerun()
+    else:
+        st.info("Noch keine Stunden erfasst.")
    
