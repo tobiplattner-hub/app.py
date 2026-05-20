@@ -1091,7 +1091,7 @@ elif bereich == "🐄 Tier- & Futtermanagement":
 
     st.line_chart(pd.DataFrame(monats_daten).set_index("Monat"))
     
-    elif bereich == "👥 Mitarbeiter & Stunden":
+elif bereich == "👥 Mitarbeiter & Stunden":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
     if "stundenkonto" not in db: db["stundenkonto"] = []
