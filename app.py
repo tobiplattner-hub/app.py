@@ -417,6 +417,23 @@ if bereich == "📊 Dashboard & Finanzen":
             )
         else:
             st.info("Bisher keine manuellen Korrekturbuchungen durchgeführt.")
+            
+            st.write("---")
+    st.subheader("🕒 Aktuelle Aktivitäten der Mitarbeiter")
+    
+    if "stundenkonto" in db and len(db["stundenkonto"]) > 0:
+        # Wir erstellen einen DataFrame aus den letzten 10 Einträgen
+        df_stunden = pd.DataFrame(db["stundenkonto"])
+        
+        # Sortieren nach dem aktuellsten Eintrag (falls du einen Zeitstempel hättest, wäre das noch besser)
+        # Hier zeigen wir einfach die letzten 10 Einträge an
+        st.dataframe(
+            df_stunden.tail(10)[["Mitarbeiter", "Hof", "Aufgabe", "Stunden"]], 
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Noch keine Arbeitsstunden erfasst.")
 
 # ==============================================================================
 # BEREICH 2: LU-AUFTRAGSBUCH (MIT MASCHINEN-KETTEN)
