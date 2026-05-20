@@ -1208,7 +1208,8 @@ elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
     if db["stundenkonto"]:
         df = pd.DataFrame(db["stundenkonto"])
         st.dataframe(df, use_container_width=True)
-        elif bereich == "📋 Schwarzes Brett":
+       ")
+elif bereich == "📋 Schwarzes Brett":
     st.title("📋 Schwarzes Brett")
     st.write("Hier kannst du Nachrichten für Mitspieler hinterlassen (z.B. Aufgaben, die noch erledigt werden müssen).")
     
