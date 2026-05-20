@@ -1208,7 +1208,6 @@ elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
     if db["stundenkonto"]:
         df = pd.DataFrame(db["stundenkonto"])
         st.dataframe(df, use_container_width=True)
-       ")
 
 elif bereich == "📋 Schwarzes Brett":
     st.title("📋 Schwarzes Brett")
