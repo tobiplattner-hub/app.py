@@ -854,60 +854,8 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     else:
         st.info("Das Lager ist aktuell leer.")
 
-    # 2. Buchungsmaske (Ein- & Auslagern)
-    st.write("---")
-    st.subheader("🔄 Lagerbewegung")
     
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        auswahl_hof = st.selectbox(
-            "Hof wählen:", 
-            ["Hof 1", "Hof 2", "Hof 3"], 
-            format_func=lambda x: HOF_MAPPING.get(x, x),
-            key="lager_hof_select"
-        )
-    with c2:
-        typ = st.radio("Aktion:", ["Einlagern", "Auslagern"], key="lager_aktion_radio")
-    with c3:
-        gut_name = st.text_input("Gut (z.B. Weizen, Silageballen):", key="lager_gut_input")
-    with c4:
-        einheit = st.radio(
-            "Einheit:", 
-            ["Liter", "Palette (1000L)", "Ballen (4000L)"], 
-            key="lager_einheit_radio"
-        )
-        menge = st.number_input("Anzahl / Menge:", min_value=0, value=0, key="lager_menge_input")
-        
-    if st.button("Lagerbuchung ausführen", key="lager_buchung_btn"):
-        if gut_name:
-            # Umrechnungslogik
-            if einheit == "Palette (1000L)":
-                reale_menge = menge * 1000
-            elif einheit == "Ballen (4000L)":
-                reale_menge = menge * 4000
-            else:
-                reale_menge = menge
-            
-            # Auslagern negativ rechnen
-            if typ == "Auslagern": 
-                reale_menge = -reale_menge
-            
-            # Datenbank aktualisieren
-            if "lager" not in db: db["lager"] = {}
-            if auswahl_hof not in db["lager"]: db["lager"][auswahl_hof] = {}
-            
-            aktueller_bestand = db["lager"][auswahl_hof].get(gut_name, 0)
-            neuer_bestand = aktueller_bestand + reale_menge
-            
-            # Schutz vor negativen Beständen
-            db["lager"][auswahl_hof][gut_name] = max(0, neuer_bestand)
-            
-            speichere_globalen_speicher(db)
-            st.success(f"{typ} von {abs(reale_menge)} L {gut_name} bei {HOF_MAPPING.get(auswahl_hof)} erfolgreich.")
-            st.rerun()
-        else:
-            st.error("Bitte gib einen Gut-Namen an.")
-        # --------------------------------------------------------------------------
+ # --------------------------------------------------------------------------
     # 3. Integrierte Buchungsmaske
     # --------------------------------------------------------------------------
     st.write("---")
