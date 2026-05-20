@@ -1156,59 +1156,37 @@ elif bereich == "🐄 Tier- & Futtermanagement":
 elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
-    # 1. Sicherstellen, dass die Datenstruktur existiert
-    if "stundenkonto" not in db or not isinstance(db.get("stundenkonto"), list):
-        db["stundenkonto"] = []
-    
-    # 2. Dynamische Hof-Liste aus deiner Datenbank abrufen
-    # Nutzt die Namen, die du im Sidebar-Expander festlegst
+    # Datenbank-Check
+    if "stundenkonto" not in db: db["stundenkonto"] = []
+    if "spielernamen" not in db: # Fallback falls nicht gesetzt
+        db["spielernamen"] = {f"Spieler {i}": f"Spieler {i}" for i in range(1, 6)}
+
+    # Mapping für die Selectbox: {"Spieler 1": "Max", "Spieler 2": "Erika"...}
+    spieler_map = db["spielernamen"]
     hof_mapping = {h_id: h_data["name"] for h_id, h_data in db["hoefe"].items()}
     
-    # 3. Liste der 5 Spieler
-    SPIELER_LISTE = ["Spieler 1", "Spieler 2", "Spieler 3", "Spieler 4", "Spieler 5"]
-    
-    # 4. Formular zur Erfassung
     with st.form("stunden_form"):
         col1, col2, col3, col4 = st.columns(4)
         
-        ma = col1.selectbox("Mitarbeiter:", SPIELER_LISTE)
-        # Zeigt den Namen aus der DB an, speichert aber die ID
+        # Anzeige: Hier nutzen wir die Namen aus der DB, speichern aber den Key "Spieler X"
+        ma_id = col1.selectbox("Mitarbeiter:", options=list(spieler_map.keys()), format_func=lambda x: spieler_map[x])
         hof_id = col2.selectbox("Hof zuweisen:", options=list(hof_mapping.keys()), format_func=lambda x: hof_mapping[x])
         aufgabe = col3.text_input("Aufgabe:")
         std = col4.number_input("Stunden:", min_value=0.5, step=0.5)
         
-        # Submit Button
-        submitted = st.form_submit_button("Arbeitsnachweis speichern")
-        
-        if submitted:
+        if st.form_submit_button("Arbeitsnachweis speichern"):
             db["stundenkonto"].append({
-                "Mitarbeiter": ma,
+                "Mitarbeiter": spieler_map[ma_id], # SPEICHERT DEN ECHTEN NAMEN
                 "Hof": hof_mapping[hof_id],
                 "Aufgabe": aufgabe,
                 "Stunden": std
             })
             speichere_globalen_speicher(db)
-            st.success("Stunden erfolgreich gespeichert!")
+            st.success("Gespeichert!")
             st.rerun()
 
-    # 5. Übersicht & Filter
-    st.write("---")
+    # Übersicht
     st.subheader("📊 Stundenübersicht")
-    
     if db["stundenkonto"]:
         df = pd.DataFrame(db["stundenkonto"])
-        
-        # Filter nach Hof
-        filter_optionen = ["Alle"] + list(hof_mapping.values())
-        filter_hof = st.selectbox("Nach Hof filtern:", filter_optionen)
-        
-        if filter_hof != "Alle":
-            df = df[df["Hof"] == filter_hof]
-        
         st.dataframe(df, use_container_width=True)
-        
-        # Kurze grafische Auswertung
-        if not df.empty:
-            st.bar_chart(df.groupby("Mitarbeiter")["Stunden"].sum())
-    else:
-        st.info("Noch keine Arbeitsstunden erfasst.")
