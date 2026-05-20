@@ -1138,22 +1138,21 @@ elif bereich == "🐄 Tier- & Futtermanagement":
             }
         )
 elif bereich == "👥 Mitarbeiter & Stunden":
-    st.write("DEBUG: Mitarbeiter-Block gestartet")
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
-    # Initialisierung der Daten
-    if "stundenkonto" not in db: 
+    # 1. Sicherstellen, dass die Datenstruktur korrekt ist (Typ-Check)
+    if not isinstance(db.get("stundenkonto"), list):
         db["stundenkonto"] = []
-    if "mitarbeiter" not in db: 
+    if "mitarbeiter" not in db or not isinstance(db["mitarbeiter"], list):
         db["mitarbeiter"] = ["Spieler 1", "Spieler 2", "Spieler 3"]
 
-    # 1. Neue Stunden erfassen
+    # 2. Neue Stunden erfassen
     st.subheader("➕ Stunden erfassen")
     col1, col2, col3, col4 = st.columns(4)
     
     mitarbeiter = col1.selectbox("Mitarbeiter:", db["mitarbeiter"])
     hof = col2.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"])
-    aufgabe = col3.text_input("Aufgabe (z.B. Pflügen):")
+    aufgabe = col3.text_input("Aufgabe:")
     stunden = col4.number_input("Stunden:", min_value=0.5, step=0.5)
     
     if st.button("Arbeitsnachweis speichern"):
@@ -1170,23 +1169,20 @@ elif bereich == "👥 Mitarbeiter & Stunden":
     st.write("---")
     st.subheader("📊 Übersicht der Arbeitsstunden")
     
-    if db["stundenkonto"]:
-        # Stellen sicher, dass pd verfügbar ist (sollte oben importiert sein!)
+    # 3. Sicherer Check auf leere Liste
+    if len(db["stundenkonto"]) > 0:
         df_stunden = pd.DataFrame(db["stundenkonto"])
-        
-        # Tabelle anzeigen
         st.dataframe(df_stunden, use_container_width=True)
         
-        # Auswertung pro Mitarbeiter
         st.write("### Auswertung: Stunden pro Person")
-        summe_pro_person = df_stunden.groupby("Mitarbeiter")["Stunden"].sum()
-        st.bar_chart(summe_pro_person)
+        # Sicherstellen, dass die Spalte existiert, bevor gruppiert wird
+        if "Mitarbeiter" in df_stunden.columns and "Stunden" in df_stunden.columns:
+            summe_pro_person = df_stunden.groupby("Mitarbeiter")["Stunden"].sum()
+            st.bar_chart(summe_pro_person)
         
-        # Reset-Button
-        if st.button("🔴 Alle Stunden zurücksetzen (Monatsabschluss)"):
+        if st.button("🔴 Alle Stunden zurücksetzen"):
             db["stundenkonto"] = []
             speichere_globalen_speicher(db)
             st.rerun()
     else:
         st.info("Noch keine Stunden erfasst.")
-   
