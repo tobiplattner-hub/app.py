@@ -1136,24 +1136,22 @@ elif bereich == "🐄 Tier- & Futtermanagement":
 elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
-    # 1. Sicherstellen, dass die Datenstruktur existiert
-    if "stundenkonto" not in db or not isinstance(db["stundenkonto"], list):
+    # Sicherstellen, dass die Datenstruktur existiert
+    if "stundenkonto" not in db or not isinstance(db.get("stundenkonto"), list):
         db["stundenkonto"] = []
     
-    # 2. Stunden erfassen (Formular)
+    # --- FORMULAR ZUR ERFASSUNG ---
     with st.form("stunden_form"):
         col1, col2, col3, col4 = st.columns(4)
-        
-        # Mitarbeiter aus deiner neuen Liste wählen
         ma = col1.selectbox("Mitarbeiter:", SPIELER_LISTE)
-        
-        # Hof auswählen (wird nun aus deiner HOF_LISTE gezogen)
         hof = col2.selectbox("Hof zuweisen:", HOF_LISTE)
-        
         aufgabe = col3.text_input("Aufgabe:")
         std = col4.number_input("Stunden:", min_value=0.5, step=0.5)
         
-        if st.form_submit_button("Arbeitsnachweis speichern"):
+        # DIESER BUTTON MUSS HIER STEHEN:
+        submitted = st.form_submit_button("Arbeitsnachweis speichern")
+        
+        if submitted:
             db["stundenkonto"].append({
                 "Mitarbeiter": ma,
                 "Hof": hof,
@@ -1164,22 +1162,20 @@ elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
             st.success("Stunden gespeichert!")
             st.rerun()
 
-    # 3. Filter-Funktion (Damit jeder "switchen" kann)
+    # --- ÜBERSICHT & FILTER ---
     st.write("---")
     st.subheader("📊 Stundenübersicht")
     
     filter_hof = st.selectbox("Nach Hof filtern:", ["Alle"] + HOF_LISTE)
     
-    if db["stundenkonto"]:
+    if db.get("stundenkonto"):
         df = pd.DataFrame(db["stundenkonto"])
         
-        # Filter anwenden
         if filter_hof != "Alle":
             df = df[df["Hof"] == filter_hof]
         
         st.dataframe(df, use_container_width=True)
         
-        # Auswertung für den gewählten Filter
         if not df.empty:
             st.bar_chart(df.groupby("Mitarbeiter")["Stunden"].sum())
         else:
