@@ -854,26 +854,35 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     with c2:
         typ = st.radio("Aktion:", ["Einlagern", "Auslagern"])
     with c3:
-        gut_name = st.text_input("Gut (z.B. Weizen, Paletten):")
+        gut_name = st.text_input("Gut (z.B. Weizen, Silageballen):")
     with c4:
-        ist_palette = st.checkbox("Ist Palette (1 = 1000L)")
-        menge = st.number_input("Menge:", min_value=0, value=0)
+        # Hier wählen wir, ob es eine Palette oder ein Ballen ist
+        einheit = st.radio("Einheit:", ["Liter", "Palette (1000L)", "Ballen (4000L)"], horizontal=True)
+        menge = st.number_input("Anzahl:", min_value=0, value=0)
         
     if st.button("Lagerbuchung ausführen"):
         if gut_name:
-            reale_menge = menge * 1000 if ist_palette else menge
+            # Umrechnungslogik
+            if einheit == "Palette (1000L)":
+                reale_menge = menge * 1000
+            elif einheit == "Ballen (4000L)":
+                reale_menge = menge * 4000
+            else:
+                reale_menge = menge
+            
             if typ == "Auslagern": reale_menge = -reale_menge
             
+            # DB-Update
             if "lager" not in db: db["lager"] = {}
             if auswahl_hof not in db["lager"]: db["lager"][auswahl_hof] = {}
             
             db["lager"][auswahl_hof][gut_name] = db["lager"][auswahl_hof].get(gut_name, 0) + reale_menge
             
-            # Verhindere negative Bestände
+            # Schutz vor negativen Werten
             if db["lager"][auswahl_hof][gut_name] < 0: db["lager"][auswahl_hof][gut_name] = 0
             
             speichere_globalen_speicher(db)
-            st.success(f"{typ} von {reale_menge} L {gut_name} bei {HOF_MAPPING.get(auswahl_hof)} erfolgreich.")
+            st.success(f"{typ} von {abs(reale_menge)} L {gut_name} bei {HOF_MAPPING.get(auswahl_hof)} erfolgreich.")
             st.rerun()
         else:
             st.error("Bitte gib einen Gut-Namen an.")
