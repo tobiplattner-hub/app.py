@@ -264,6 +264,7 @@ bereich = st.sidebar.radio(
         "🌱 Fruchtfolge-Planer",
         "📦 Hof-Lagerverwaltung",
         "🐄 Tier- & Futtermanagement" # NEU HINZUGEFÜGT
+        "👥 Mitarbeiter- & Stundenverwaltung",
     ]
 )
 
