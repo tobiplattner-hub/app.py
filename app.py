@@ -819,59 +819,61 @@ elif bereich == "📅 Sähe- & Erntekalender":
         else:
             st.info("Keine löschbaren Einträge vorhanden.")
 elif bereich == "🌱 Fruchtfolge-Planer":
-    st.title("🌱 Fruchtfolge-Planer (Erweitert)")
+    st.title("🌱 Fruchtfolge-Planer")
     
     if "feld_planer" not in db: db["feld_planer"] = {}
+
+    # --- REPARATUR-LOGIK: Alt-Daten in neues Format konvertieren ---
+    for feld in db["feld_planer"]:
+        if "Folge" not in db["feld_planer"][feld]:
+            # Altes Format (Frucht + Folgefrucht) in Liste umwandeln
+            f1 = db["feld_planer"][feld].get("Frucht", "Weizen")
+            f2 = db["feld_planer"][feld].get("Folgefrucht", "Dinkel")
+            ertrag = db["feld_planer"][feld].get("Ertrag_pro_Feld", 5000)
+            db["feld_planer"][feld] = {"Folge": [f1, f2], "Ertrag": ertrag}
+            speichere_globalen_speicher(db)
+    # -----------------------------------------------------------
 
     # 1. Feld hinzufügen
     feld_name = st.text_input("Neues Feld hinzufügen (z.B. Feld 5):")
     if st.button("Hinzufügen"):
         if feld_name and feld_name not in db["feld_planer"]:
-            # Wir speichern eine Liste für die Fruchtfolge
-            db["feld_planer"][feld_name] = {"Folge": ["Weizen", "Dinkel", "Gerste"], "Ertrag": 5000}
+            db["feld_planer"][feld_name] = {"Folge": ["Weizen"], "Ertrag": 5000}
             speichere_globalen_speicher(db)
             st.rerun()
 
     # 2. Felder verwalten
     for feld in list(db["feld_planer"].keys()):
-        # Sicherer Zugriff: Wenn "Folge" fehlt oder leer ist, gib einen Platzhalter aus
+        # Sicherer Zugriff
         daten = db["feld_planer"][feld]
         folge_liste = daten.get("Folge", ["-"])
         aktuelle_frucht = folge_liste[0] if len(folge_liste) > 0 else "-"
         
         with st.expander(f"Feld: {feld} | Aktuell: {aktuelle_frucht}"):
-            # ... restlicher Code bleibt identisch
-            
-            # Fruchtfolge bearbeiten (als Komma-getrennte Liste)
             folge_str = st.text_input(f"Fruchtfolge (Reihenfolge mit Komma trennen):", 
-                                      value=", ".join(db["feld_planer"][feld]["Folge"]), 
+                                      value=", ".join(folge_liste), 
                                       key=f"seq_{feld}")
             
-            ertrag = st.number_input("Ertrag pro Ernte (Liter)", value=db["feld_planer"][feld]["Ertrag"], key=f"y_{feld}")
+            ertrag = st.number_input("Ertrag pro Ernte (Liter)", value=daten.get("Ertrag", 5000), key=f"y_{feld}")
             
             c1, c2, c3 = st.columns(3)
             with c1:
                 if st.button("Speichern", key=f"s_{feld}"):
-                    neue_liste = [x.strip() for x in folge_str.split(",")]
+                    neue_liste = [x.strip() for x in folge_str.split(",") if x.strip()]
                     db["feld_planer"][feld] = {"Folge": neue_liste, "Ertrag": ertrag}
                     speichere_globalen_speicher(db)
                     st.rerun()
             
             with c2:
-                # "Rotiert" die Liste: Das erste Element wandert nach hinten
                 if st.button("Fruchtfolge weiter", key=f"rot_{feld}"):
-                    alte_liste = db["feld_planer"][feld]["Folge"]
-                    if len(alte_liste) > 1:
-                        neue_liste = alte_liste[1:] + [alte_liste[0]]
+                    if len(folge_liste) > 1:
+                        neue_liste = folge_liste[1:] + [folge_liste[0]]
                         db["feld_planer"][feld]["Folge"] = neue_liste
                         speichere_globalen_speicher(db)
-                        st.success(f"Nächste Frucht: {neue_liste[0]}")
                         st.rerun()
             
             with c3:
-                # Ernte buchen (nimmt immer die aktuelle Frucht an Stelle 0)
                 if st.button("🚀 Ernte buchen", key=f"h_{feld}"):
-                    aktuelle_frucht = db["feld_planer"][feld]["Folge"][0]
                     hof = "Hof 1"
                     if "lager" not in db: db["lager"] = {}
                     if hof not in db["lager"]: db["lager"][hof] = {}
