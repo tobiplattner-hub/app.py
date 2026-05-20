@@ -211,9 +211,10 @@ else:
     KUNDEN_AUSWAHL = ["Hof 1", "Hof 2", "Hof 3"]
     KUNDEN_MAPPING = HOF_MAPPING
     
-    with st.sidebar.expander("👤 Spielernamen festlegen"):
-    # Diese Zeilen MÜSSEN alle um 4 Leerzeichen eingerückt sein!
-        if "spielernamen" not in db:
+with st.sidebar.expander("👤 Spielernamen festlegen"):
+    # 1. Einrückungsebene: Alles unter dem with (4 Leerzeichen)
+    if "spielernamen" not in db:
+        # 2. Einrückungsebene: Alles unter dem if (weitere 4 Leerzeichen = 8 total)
         db["spielernamen"] = {f"Spieler {i}": f"Spieler {i}" for i in range(1, 6)}
         speichere_globalen_speicher(db)
         
@@ -224,6 +225,7 @@ else:
     s5 = st.text_input("Name für Spieler 5:", db["spielernamen"].get("Spieler 5", "Spieler 5"))
     
     if st.button("Spielernamen speichern"):
+        # Auch hier: Wieder 8 Leerzeichen einrücken!
         db["spielernamen"] = {"Spieler 1": s1, "Spieler 2": s2, "Spieler 3": s3, "Spieler 4": s4, "Spieler 5": s5}
         speichere_globalen_speicher(db)
         st.success("Namen gespeichert!")
