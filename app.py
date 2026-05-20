@@ -288,7 +288,14 @@ bereich = st.sidebar.radio(
         "📋 Schwarzes Brett"
     ]
 )
+if "status_ticker" not in db:
+    db["status_ticker"] = "Alles läuft nach Plan."
 
+ticker_text = db["status_ticker"]
+if any(wort in ticker_text.upper() for wort in ["WICHTIG", "ACHTUNG", "DRINGEND"]):
+    st.error(f"🚨 **ACHTUNG:** {ticker_text}")
+else:
+    st.success(f"📢 **Status:** {ticker_text}")
 # ==============================================================================
 # BEREICH 1: DASHBOARD & FINANZEN
 # ==============================================================================
