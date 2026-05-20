@@ -1211,28 +1211,46 @@ elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
 
 elif bereich == "📋 Schwarzes Brett":
     st.title("📋 Schwarzes Brett")
-    st.write("Hier kannst du Nachrichten für Mitspieler hinterlassen.")
     
+    # 1. Sicherstellen, dass das Brett existiert
     if "aufgaben_brett" not in db:
         db["aufgaben_brett"] = []
     
+    # Spielerliste für die Auswahl
+    spieler_map = db.get("spielernamen", {f"Spieler {i}": f"Spieler {i}" for i in range(1, 6)})
+    spieler_optionen = list(spieler_map.values())
+    
+    # 2. Formular: Wer schreibt an wen?
     with st.form("neue_nachricht", clear_on_submit=True):
-        nachricht = st.text_input("Neue Nachricht / Aufgabe:")
+        col_von, col_an = st.columns(2)
+        absender = col_von.selectbox("Von:", spieler_optionen)
+        empfaenger = col_an.selectbox("An:", ["Alle"] + spieler_optionen)
+        nachricht_text = st.text_input("Nachricht:")
+        
         if st.form_submit_button("Nachricht veröffentlichen"):
-            if nachricht:
-                db["aufgaben_brett"].append(nachricht)
+            if nachricht_text:
+                db["aufgaben_brett"].append({
+                    "von": absender,
+                    "an": empfaenger,
+                    "text": nachricht_text
+                })
                 speichere_globalen_speicher(db)
                 st.rerun()
     
     st.write("---")
     
+    # 3. Nachrichten anzeigen
     if db["aufgaben_brett"]:
-        for i, text in enumerate(db["aufgaben_brett"]):
+        for i, eintrag in enumerate(db["aufgaben_brett"]):
+            # Schöne Darstellung
+            titel = f"**{eintrag['von']}** an **{eintrag['an']}**:"
             col1, col2 = st.columns([0.85, 0.15])
-            col1.info(text)
-            if col2.button("Löschen", key=f"del_{i}"):
+            
+            col1.info(f"{titel} {eintrag['text']}")
+            
+            if col2.button("✅", key=f"del_{i}"):
                 db["aufgaben_brett"].pop(i)
                 speichere_globalen_speicher(db)
                 st.rerun()
     else:
-        st.write("Aktuell keine Nachrichten auf dem Brett.")
+        st.info("Aktuell keine Nachrichten auf dem Brett.")
