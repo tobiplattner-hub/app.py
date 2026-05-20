@@ -873,7 +873,47 @@ elif bereich == "📦 Hof-Lagerverwaltung":
         )
     else:
         st.info("Das Lager ist aktuell komplett leer. Nutze die Buchungsmaske unten, um Bestände einzutragen.")
+ # --------------------------------------------------------------------------
+    # 2. Buchungsmaske für manuelle Anpassungen
+    # --------------------------------------------------------------------------
+    st.write("---")
+    st.subheader("➕ Lagerbestand buchen")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        auswahl_hof = st.selectbox("Hof wählen:", ["Hof 1", "Hof 2", "Hof 3"])
+        hof_key = HOF_MAPPING.get(auswahl_hof, auswahl_hof)
+    
+    with col2:
+        # Hier kannst du bekannte Güter vorgeben oder neue frei eingeben
+        neues_gut = st.text_input("Guttyp (z.B. Heuballen, Paletten):", placeholder="z.B. Silageballen")
         
+    with col3:
+        menge_input = st.number_input("Menge (L oder Stück):", min_value=0, value=0)
+
+    if st.button("Bestand zum Lager hinzufügen"):
+        if neues_gut:
+            if "lager" not in db: db["lager"] = {}
+            if auswahl_hof not in db["lager"]: db["lager"][auswahl_hof] = {}
+            
+            # Aktuellen Wert erhöhen
+            aktueller_wert = db["lager"][auswahl_hof].get(neues_gut, 0)
+            db["lager"][auswahl_hof][neues_gut] = aktueller_wert + menge_input
+            
+            speichere_globalen_speicher(db)
+            st.success(f"Erfolgreich {menge_input} bei {neues_gut} für {hof_key} verbucht!")
+            st.rerun()
+        else:
+            st.warning("Bitte gib einen Guttyp ein.")
+
+    # 3. Bestände leeren (optionaler Notfall-Button)
+    if st.checkbox("Bestandsverwaltung entsperren (Vorsicht!)"):
+        if st.button("Lager für diesen Hof komplett leeren"):
+            db["lager"][auswahl_hof] = {}
+            speichere_globalen_speicher(db)
+            st.warning(f"Lager von {hof_key} wurde geleert!")
+            st.rerun()       
 # ==============================================================================
 # BEREICH: TIER- & FUTTERMANAGEMENT (VOLLSTÄNDIG)
 # ==============================================================================
