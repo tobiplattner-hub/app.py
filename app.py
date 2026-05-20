@@ -822,65 +822,43 @@ elif bereich == "📅 Sähe- & Erntekalender":
 elif bereich == "🌱 Fruchtfolge-Planer":
     st.title("🌱 Fruchtfolge-Planer")
     
-    # Sicherstellen, dass der Monat existiert
-    aktueller_m = db.get("aktueller_monat", "Januar")
-    
-    if "feld_planer" not in db: db["feld_planer"] = {}
-
-    # --- REPARATUR-LOGIK ---
-    for feld in db["feld_planer"]:
-        if "Folge" not in db["feld_planer"][feld]:
-            db["feld_planer"][feld] = {"Folge": ["Weizen"], "Ertrag": 5000, "ErnteMonat": "August"}
-            speichere_globalen_speicher(db)
-
-    # 1. Felder verwalten
-    for feld in list(db["feld_planer"].keys()):
-        daten = db["feld_planer"][feld]
-        folge_liste = daten.get("Folge", ["-"])
-        aktuelle_frucht = folge_liste[0] if len(folge_liste) > 0 else "-"
-        ernte_monat = daten.get("ErnteMonat", "August")
-        
-        # Logik für Warnung
-        ist_erntereif = (ernte_monat == aktueller_m)
-        header = f"📍 {feld} | 🌾 {aktuelle_frucht}"
-        if ist_erntereif: header = f"🚨 ERNTEZEIT! {header}"
-
-        with st.expander(header, expanded=ist_erntereif):
-            c_a, c_b = st.columns(2)
-            with c_a:
-                folge_str = st.text_input(f"Fruchtfolge:", value=", ".join(folge_liste), key=f"seq_{feld}")
-            with c_b:
-                neuer_monat = st.selectbox("Erntemonat festlegen:", ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"], 
-                                          index=["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"].index(ernte_monat) if ernte_monat in ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"] else 7,
-                                          key=f"m_{feld}")
+    if "felder" not in db: 
+        st.error("Keine Felder gefunden. Bitte erst in der Feldverwaltung Felder anlegen.")
+    else:
+        # Wir gehen durch die Liste der Felder aus der zentralen DB
+        for feld in db["felder"]:
+            # Sicherstellen, dass die nötigen Keys für die Fruchtfolge existieren
+            if "folge" not in feld: feld["folge"] = ["Weizen"]
+            if "ernte_monat" not in feld: feld["ernte_monat"] = "Aug"
             
-            # Manueller Ertrag pro Feld
-            neuer_ertrag = st.number_input(f"Ertrag für {feld} (Liter):", value=daten.get("Ertrag", 5000), key=f"y_{feld}")
+            feld_name = feld.get("id", "Unbekannt")
+            aktuelle_frucht = feld["folge"][0]
             
-            # Buttons
-            c1, c2, c3, c4 = st.columns(4)
-            if c1.button("💾 Speichern", key=f"s_{feld}"):
-                db["feld_planer"][feld] = {"Folge": [x.strip() for x in folge_str.split(",")], "Ertrag": neuer_ertrag, "ErnteMonat": neuer_monat}
-                speichere_globalen_speicher(db)
-                st.rerun()
-            
-            if c2.button("🔄 Nächste", key=f"rot_{feld}"):
-                db["feld_planer"][feld]["Folge"] = folge_liste[1:] + [folge_liste[0]]
-                speichere_globalen_speicher(db)
-                st.rerun()
+            # UI für das jeweilige Feld
+            with st.expander(f"📍 {feld_name} | 🌾 {aktuelle_frucht}"):
+                c_a, c_b = st.columns(2)
+                with c_a:
+                    # Fruchtfolge bearbeiten
+                    folge_str = st.text_input(f"Fruchtfolge:", value=", ".join(feld["folge"]), key=f"seq_{feld_name}")
+                with c_b:
+                    # Monat bearbeiten
+                    neuer_monat = st.selectbox("Erntemonat:", ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"], 
+                                             index=["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"].index(feld.get("ernte_monat", "Aug")),
+                                             key=f"m_{feld_name}")
                 
-            if c3.button("🚀 Ernte", key=f"h_{feld}"):
-                hof = "Hof 1"
-                if "lager" not in db: db["lager"] = {}
-                db["lager"][hof][aktuelle_frucht] = db["lager"][hof].get(aktuelle_frucht, 0) + neuer_ertrag
-                st.balloons() # Das Konfetti für die Ernte!
-                speichere_globalen_speicher(db)
-                st.success(f"Ernte von {feld} gebucht!")
-                
-            if c4.button("🗑️ Löschen", key=f"del_{feld}"):
-                del db["feld_planer"][feld]
-                speichere_globalen_speicher(db)
-                st.rerun()
+                # Speichern Button
+                if st.button("💾 Speichern", key=f"save_{feld_name}"):
+                    feld["folge"] = [x.strip() for x in folge_str.split(",")]
+                    feld["ernte_monat"] = neuer_monat
+                    speichere_globalen_speicher(db)
+                    st.rerun()
+
+                # Buttons für Nächste / Ernte
+                c1, c2 = st.columns(2)
+                if c1.button("🔄 Nächste Frucht", key=f"rot_{feld_name}"):
+                    feld["folge"] = feld["folge"][1:] + [feld["folge"][0]]
+                    speichere_globalen_speicher(db)
+                    st.rerun()
 # ==============================================================================
 # BEREICH 8: HOF-LAGERVERWALTUNG (VOLLSTÄNDIG & BEREINIGT)
 # ==============================================================================
