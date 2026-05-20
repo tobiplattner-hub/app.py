@@ -820,66 +820,78 @@ elif bereich == "📅 Sähe- & Erntekalender":
             st.info("Keine löschbaren Einträge vorhanden.")
 elif bereich == "🌱 Fruchtfolge-Planer":
     st.title("🌱 Fruchtfolge-Planer")
+    st.markdown("---")
     
     if "feld_planer" not in db: db["feld_planer"] = {}
 
-    # --- REPARATUR-LOGIK: Alt-Daten in neues Format konvertieren ---
+    # --- REPARATUR-LOGIK (bleibt gleich) ---
     for feld in db["feld_planer"]:
         if "Folge" not in db["feld_planer"][feld]:
-            # Altes Format (Frucht + Folgefrucht) in Liste umwandeln
             f1 = db["feld_planer"][feld].get("Frucht", "Weizen")
             f2 = db["feld_planer"][feld].get("Folgefrucht", "Dinkel")
             ertrag = db["feld_planer"][feld].get("Ertrag_pro_Feld", 5000)
             db["feld_planer"][feld] = {"Folge": [f1, f2], "Ertrag": ertrag}
             speichere_globalen_speicher(db)
-    # -----------------------------------------------------------
 
-    # 1. Feld hinzufügen
-    feld_name = st.text_input("Neues Feld hinzufügen (z.B. Feld 5):")
-    if st.button("Hinzufügen"):
-        if feld_name and feld_name not in db["feld_planer"]:
-            db["feld_planer"][feld_name] = {"Folge": ["Weizen"], "Ertrag": 5000}
-            speichere_globalen_speicher(db)
-            st.rerun()
+    # 1. Feld hinzufügen (Layout optimiert)
+    with st.container():
+        c_add1, c_add2 = st.columns([4, 1])
+        feld_name = c_add1.text_input("➕ Neues Feld registrieren:", placeholder="Beispiel: Feld 12")
+        if c_add2.button("Anlegen", use_container_width=True):
+            if feld_name and feld_name not in db["feld_planer"]:
+                db["feld_planer"][feld_name] = {"Folge": ["Weizen"], "Ertrag": 5000}
+                speichere_globalen_speicher(db)
+                st.rerun()
 
-    # 2. Felder verwalten
+    st.write("### 🗺️ Bewirtschaftete Felder")
+
+    # 2. Felder verwalten (Grafisch aufgewertet)
     for feld in list(db["feld_planer"].keys()):
-        # Sicherer Zugriff
         daten = db["feld_planer"][feld]
         folge_liste = daten.get("Folge", ["-"])
         aktuelle_frucht = folge_liste[0] if len(folge_liste) > 0 else "-"
         
-        with st.expander(f"Feld: {feld} | Aktuell: {aktuelle_frucht}"):
+        # Expander mit Status-Info
+        with st.expander(f"📍 {feld} | 🌾 Aktuell: {aktuelle_frucht}", expanded=False):
+            
+            # Metric-Boxen für bessere Übersicht
+            m1, m2 = st.columns(2)
+            m1.metric("Aktuelle Kultur", aktuelle_frucht)
+            m2.metric("Ertrag (L/Ernte)", f"{daten.get('Ertrag', 0):,}".replace(",", " "))
+            
+            st.markdown("---")
             folge_str = st.text_input(f"Fruchtfolge (Reihenfolge mit Komma trennen):", 
                                       value=", ".join(folge_liste), 
                                       key=f"seq_{feld}")
             
-            ertrag = st.number_input("Ertrag pro Ernte (Liter)", value=daten.get("Ertrag", 5000), key=f"y_{feld}")
+            ertrag = st.number_input("Ertrag anpassen:", value=daten.get("Ertrag", 5000), key=f"y_{feld}")
             
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if st.button("Speichern", key=f"s_{feld}"):
-                    neue_liste = [x.strip() for x in folge_str.split(",") if x.strip()]
-                    db["feld_planer"][feld] = {"Folge": neue_liste, "Ertrag": ertrag}
+            # Button-Leiste mit Icons
+            c1, c2, c3, c4 = st.columns(4)
+            if c1.button("💾 Speichern", key=f"s_{feld}"):
+                neue_liste = [x.strip() for x in folge_str.split(",") if x.strip()]
+                db["feld_planer"][feld] = {"Folge": neue_liste, "Ertrag": ertrag}
+                speichere_globalen_speicher(db)
+                st.rerun()
+            
+            if c2.button("🔄 Nächste", key=f"rot_{feld}"):
+                if len(folge_liste) > 1:
+                    db["feld_planer"][feld]["Folge"] = folge_liste[1:] + [folge_liste[0]]
                     speichere_globalen_speicher(db)
                     st.rerun()
             
-            with c2:
-                if st.button("Fruchtfolge weiter", key=f"rot_{feld}"):
-                    if len(folge_liste) > 1:
-                        neue_liste = folge_liste[1:] + [folge_liste[0]]
-                        db["feld_planer"][feld]["Folge"] = neue_liste
-                        speichere_globalen_speicher(db)
-                        st.rerun()
-            
-            with c3:
-                if st.button("🚀 Ernte buchen", key=f"h_{feld}"):
-                    hof = "Hof 1"
-                    if "lager" not in db: db["lager"] = {}
-                    if hof not in db["lager"]: db["lager"][hof] = {}
-                    db["lager"][hof][aktuelle_frucht] = db["lager"][hof].get(aktuelle_frucht, 0) + ertrag
-                    speichere_globalen_speicher(db)
-                    st.success(f"{aktuelle_frucht} geerntet!")
+            if c3.button("🚀 Ernte", key=f"h_{feld}"):
+                hof = "Hof 1"
+                if "lager" not in db: db["lager"] = {}
+                if hof not in db["lager"]: db["lager"][hof] = {}
+                db["lager"][hof][aktuelle_frucht] = db["lager"][hof].get(aktuelle_frucht, 0) + ertrag
+                speichere_globalen_speicher(db)
+                st.success("Ernte gebucht!")
+                
+            if c4.button("🗑️ Feld löschen", key=f"del_{feld}"):
+                del db["feld_planer"][feld]
+                speichere_globalen_speicher(db)
+                st.rerun()
 # ==============================================================================
 # BEREICH 8: HOF-LAGERVERWALTUNG (VOLLSTÄNDIG & BEREINIGT)
 # ==============================================================================
