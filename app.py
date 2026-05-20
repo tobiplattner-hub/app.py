@@ -1093,50 +1093,9 @@ elif bereich == "🐄 Tier- & Futtermanagement":
     st.line_chart(pd.DataFrame(monats_daten).set_index("Monat"))
     
 elif bereich == "👥 Mitarbeiter & Stunden":
-    st.title("👥 Mitarbeiter- & Stundenverwaltung")
-    
-    if "stundenkonto" not in db: db["stundenkonto"] = []
-    if "mitarbeiter" not in db: db["mitarbeiter"] = ["Spieler 1", "Spieler 2", "Spieler 3"]
-
-    # 1. Neue Stunden erfassen
-    st.subheader("➕ Stunden erfassen")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    mitarbeiter = col1.selectbox("Mitarbeiter:", db["mitarbeiter"])
-    hof = col2.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"])
-    aufgabe = col3.text_input("Aufgabe (z.B. Pflügen):")
-    stunden = col4.number_input("Stunden:", min_value=0.5, step=0.5)
-    
-    if st.button("Arbeitsnachweis speichern"):
-        db["stundenkonto"].append({
-            "Mitarbeiter": mitarbeiter,
-            "Hof": hof,
-            "Aufgabe": aufgabe,
-            "Stunden": stunden
-        })
-        speichere_globalen_speicher(db)
-        st.success("Stunden gespeichert!")
-        st.rerun()
-
-    st.write("---")
-    st.subheader("📊 Übersicht der Arbeitsstunden")
-    
-    if db["stundenkonto"]:
-        # Pandas wird jetzt oben im Skript importiert, hier nutzen wir es einfach:
-        df_stunden = pd.DataFrame(db["stundenkonto"])
-        
-        st.dataframe(df_stunden, use_container_width=True)
-        
-        st.write("### Auswertung: Stunden pro Person")
-        summe_pro_person = df_stunden.groupby("Mitarbeiter")["Stunden"].sum()
-        st.bar_chart(summe_pro_person)
-        
-        if st.button("🔴 Alle Stunden zurücksetzen (Monatsabschluss)"):
-            db["stundenkonto"] = []
-            speichere_globalen_speicher(db)
-            st.rerun()
-    else:
-        st.info("Noch keine Stunden erfasst.")
+    st.title("Testseite")
+    st.write("Wenn du das siehst, ist der Block korrekt eingebunden.")
+    # Wir machen hier gar nichts anderes, kein Pandas, keine DB.
     # --------------------------------------------------------------------------
     # 2. Gärungsprozesse Übersicht (Grafisch aufgewertet)
     # --------------------------------------------------------------------------
