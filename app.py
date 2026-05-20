@@ -907,7 +907,90 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             st.rerun()
         else:
             st.error("Bitte gib einen Gut-Namen an.")
-       
+        # --------------------------------------------------------------------------
+    # 3. Integrierte Buchungsmaske
+    # --------------------------------------------------------------------------
+    st.write("---")
+    st.subheader("⚙️ Lagerbewegung buchen")
+    
+    with st.expander("👉 Neuen Eintrag oder Entnahme erfassen", expanded=True):
+        col_l1, col_l2 = st.columns(2)
+        
+        with col_l1:
+            l_hof = st.selectbox("Betroffener Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+            l_typ = st.radio("Aktionsart:", ["➕ Einlagern (Bestand erhöhen)", "➖ Auslagern (Bestand reduzieren)"], horizontal=True)
+            l_kat = st.selectbox("Kategorie / Zustand:", ["Loses Material / Frucht", "Paletten-Ware", "Ballen-Ware", "Silo-Silage (mit Gärung)"])
+            
+            platzhalter_text = "z. B. Getreide, Trauben, Kalk, Diesel, Häckselgut"
+            if "Paletten" in l_kat:
+                platzhalter_text = "z. B. Tomaten-Paletten, Saatgut-Paletten, Salat-Paletten"
+            elif "Ballen" in l_kat:
+                platzhalter_text = "z. B. Stroh-Ballen, Silage-Ballen, Heu-Ballen"
+            elif "Silo" in l_kat:
+                platzhalter_text = "Silage (Silo)"
+                
+            l_name_eingabe = st.text_input("Genaue Bezeichnung / Name der Ware:", placeholder=platzhalter_text, value="Silage (Silo)" if "Silo" in l_kat else "")
+            
+        with col_l2:
+            if "Paletten" in l_kat:
+                l_modus = st.radio("Eingabe als:", ["Stückzahl (Paletten)", "Direkt in Liter"], horizontal=True)
+                if l_modus == "Stückzahl (Paletten)":
+                    anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
+                    finale_liter = anzahl_paletten * 1000
+                    st.info(f"Umgerechnetes Gesamtvolumen (1.000L pro Palette): **{finale_liter:,} Liter**")
+                else:
+                    finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=100, value=1000)
+            
+            elif "Ballen" in l_kat:
+                l_modus_ballen = st.radio("Eingabe als:", ["Stückzahl (Ballen)", "Direkt in Liter"], horizontal=True)
+                if l_modus_ballen == "Stückzahl (Ballen)":
+                    anzahl_ballen = st.number_input("Anzahl Ballen (Stück):", min_value=1, step=1, value=1)
+                    finale_liter = anzahl_ballen * 5000
+                    st.info(f"Umgerechnetes Gesamtvolumen (5.000L pro Großballen): **{finale_liter:,} Liter**")
+                else:
+                    finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
+            
+            else:
+                finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
+                
+            dauer_gärung = 2
+            if "Silo" in l_kat and "Einlagern" in l_typ:
+                st.write(" ")
+                dauer_gärung = st.number_input("Fermentationsdauer (In-Game Monate):", min_value=1, max_value=12, value=2, step=1)
+        
+        st.write(" ")
+        if st.button("💾 Buchung abschließen und live synchronisieren", use_container_width=True):
+            waren_name_clean = l_name_eingabe.strip()
+            
+            if waren_name_clean == "":
+                st.error("Bitte gib eine Bezeichnung für das Gut ein!")
+            else:
+                aktueller_bestand = db["lager"].get(l_hof, {}).get(waren_name_clean, 0)
+                
+                if "Auslagern" in l_typ and finale_liter > aktueller_bestand:
+                    st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend '{waren_name_clean}' auf Lager! Verfügbar: {aktueller_bestand:,} L – Gewünscht: {finale_liter:,} L.")
+                else:
+                    diff = finale_liter if "Einlagern" in l_typ else -finale_liter
+                    
+                    if l_hof not in db["lager"]:
+                        db["lager"][l_hof] = {}
+                        
+                    db["lager"][l_hof][waren_name_clean] = aktueller_bestand + diff
+                    
+                    if db["lager"][l_hof][waren_name_clean] <= 0:
+                        del db["lager"][l_hof][waren_name_clean]
+                    
+                    if "Silo" in l_kat and "Einlagern" in l_typ:
+                        db["silage_gärung"].append({
+                            "hof": l_hof,
+                            "menge": finale_liter,
+                            "start_monat": aktueller_m,
+                            "dauer": int(dauer_gärung)
+                        })
+                        
+                    speichere_globalen_speicher(db)
+                    st.success(f"Bestand erfolgreich aktualisiert! {finale_liter:,} L '{waren_name_clean}' für {HOF_MAPPING[l_hof]} verbucht.")
+                    st.rerun()
  # ==============================================================================
 # BEREICH: TIER- & FUTTERMANAGEMENT (VOLLSTÄNDIG)
 # ==============================================================================
@@ -1043,87 +1126,4 @@ elif bereich == "🐄 Tier- & Futtermanagement":
             }
         )
     
-    # --------------------------------------------------------------------------
-    # 3. Integrierte Buchungsmaske
-    # --------------------------------------------------------------------------
-    st.write("---")
-    st.subheader("⚙️ Lagerbewegung buchen")
-    
-    with st.expander("👉 Neuen Eintrag oder Entnahme erfassen", expanded=True):
-        col_l1, col_l2 = st.columns(2)
-        
-        with col_l1:
-            l_hof = st.selectbox("Betroffener Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-            l_typ = st.radio("Aktionsart:", ["➕ Einlagern (Bestand erhöhen)", "➖ Auslagern (Bestand reduzieren)"], horizontal=True)
-            l_kat = st.selectbox("Kategorie / Zustand:", ["Loses Material / Frucht", "Paletten-Ware", "Ballen-Ware", "Silo-Silage (mit Gärung)"])
-            
-            platzhalter_text = "z. B. Getreide, Trauben, Kalk, Diesel, Häckselgut"
-            if "Paletten" in l_kat:
-                platzhalter_text = "z. B. Tomaten-Paletten, Saatgut-Paletten, Salat-Paletten"
-            elif "Ballen" in l_kat:
-                platzhalter_text = "z. B. Stroh-Ballen, Silage-Ballen, Heu-Ballen"
-            elif "Silo" in l_kat:
-                platzhalter_text = "Silage (Silo)"
-                
-            l_name_eingabe = st.text_input("Genaue Bezeichnung / Name der Ware:", placeholder=platzhalter_text, value="Silage (Silo)" if "Silo" in l_kat else "")
-            
-        with col_l2:
-            if "Paletten" in l_kat:
-                l_modus = st.radio("Eingabe als:", ["Stückzahl (Paletten)", "Direkt in Liter"], horizontal=True)
-                if l_modus == "Stückzahl (Paletten)":
-                    anzahl_paletten = st.number_input("Anzahl Paletten (Stück):", min_value=1, step=1, value=1)
-                    finale_liter = anzahl_paletten * 1000
-                    st.info(f"Umgerechnetes Gesamtvolumen (1.000L pro Palette): **{finale_liter:,} Liter**")
-                else:
-                    finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=100, value=1000)
-            
-            elif "Ballen" in l_kat:
-                l_modus_ballen = st.radio("Eingabe als:", ["Stückzahl (Ballen)", "Direkt in Liter"], horizontal=True)
-                if l_modus_ballen == "Stückzahl (Ballen)":
-                    anzahl_ballen = st.number_input("Anzahl Ballen (Stück):", min_value=1, step=1, value=1)
-                    finale_liter = anzahl_ballen * 5000
-                    st.info(f"Umgerechnetes Gesamtvolumen (5.000L pro Großballen): **{finale_liter:,} Liter**")
-                else:
-                    finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
-            
-            else:
-                finale_liter = st.number_input("Volumen in Liter (L):", min_value=1, step=1000, value=5000)
-                
-            dauer_gärung = 2
-            if "Silo" in l_kat and "Einlagern" in l_typ:
-                st.write(" ")
-                dauer_gärung = st.number_input("Fermentationsdauer (In-Game Monate):", min_value=1, max_value=12, value=2, step=1)
-        
-        st.write(" ")
-        if st.button("💾 Buchung abschließen und live synchronisieren", use_container_width=True):
-            waren_name_clean = l_name_eingabe.strip()
-            
-            if waren_name_clean == "":
-                st.error("Bitte gib eine Bezeichnung für das Gut ein!")
-            else:
-                aktueller_bestand = db["lager"].get(l_hof, {}).get(waren_name_clean, 0)
-                
-                if "Auslagern" in l_typ and finale_liter > aktueller_bestand:
-                    st.error(f"Fehler: {HOF_MAPPING[l_hof]} hat nicht genügend '{waren_name_clean}' auf Lager! Verfügbar: {aktueller_bestand:,} L – Gewünscht: {finale_liter:,} L.")
-                else:
-                    diff = finale_liter if "Einlagern" in l_typ else -finale_liter
-                    
-                    if l_hof not in db["lager"]:
-                        db["lager"][l_hof] = {}
-                        
-                    db["lager"][l_hof][waren_name_clean] = aktueller_bestand + diff
-                    
-                    if db["lager"][l_hof][waren_name_clean] <= 0:
-                        del db["lager"][l_hof][waren_name_clean]
-                    
-                    if "Silo" in l_kat and "Einlagern" in l_typ:
-                        db["silage_gärung"].append({
-                            "hof": l_hof,
-                            "menge": finale_liter,
-                            "start_monat": aktueller_m,
-                            "dauer": int(dauer_gärung)
-                        })
-                        
-                    speichere_globalen_speicher(db)
-                    st.success(f"Bestand erfolgreich aktualisiert! {finale_liter:,} L '{waren_name_clean}' für {HOF_MAPPING[l_hof]} verbucht.")
-                    st.rerun()
+   
