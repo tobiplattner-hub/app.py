@@ -689,7 +689,60 @@ elif bereich == "🗺️ Feldverwaltung":
                 speichere_globalen_speicher(db)
                 st.success("Feld gelöscht!")
                 st.rerun()
+elif bereich == "🌱 Fruchtfolge-Planer":
+    st.title("🌱 Fruchtfolge & Feldmanagement")
+    
+    if "feld_planer" not in db: db["feld_planer"] = {}
 
+    st.subheader("Feld-Status Übersicht")
+    
+    # 1. Feld hinzufügen
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        feld_name = st.text_input("Neues Feld hinzufügen (z.B. Feld 12):", key="feld_name_in")
+    with col2:
+        st.write("###") # Abstand
+        if st.button("Hinzufügen"):
+            if feld_name and feld_name not in db["feld_planer"]:
+                db["feld_planer"][feld_name] = {"Frucht": "-", "Aussaat": "-", "Ernte": "-", "Ertrag_pro_Feld": 0}
+                speichere_globalen_speicher(db)
+                st.rerun()
+
+    # 2. Felder verwalten
+    for feld in list(db["feld_planer"].keys()):
+        with st.expander(f"Feld: {feld}"):
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                frucht = st.text_input("Fruchtart", value=db["feld_planer"][feld]["Frucht"], key=f"f_{feld}")
+            with c2:
+                aussaat = st.selectbox("Aussaat", ["-", "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"], 
+                                       index=["-", "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"].index(db["feld_planer"][feld]["Aussaat"]), key=f"a_{feld}")
+            with c3:
+                ernte = st.selectbox("Ernte", ["-", "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"], 
+                                     index=["-", "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"].index(db["feld_planer"][feld]["Ernte"]), key=f"e_{feld}")
+            with c4:
+                ertrag = st.number_input("Ertrag (Liter)", value=db["feld_planer"][feld].get("Ertrag_pro_Feld", 0), key=f"ertrag_{feld}")
+            
+            # Speichern & Ernte-Button
+            save_col, harvest_col = st.columns(2)
+            with save_col:
+                if st.button(f"Speichern {feld}", key=f"save_{feld}"):
+                    db["feld_planer"][feld] = {"Frucht": frucht, "Aussaat": aussaat, "Ernte": ernte, "Ertrag_pro_Feld": ertrag}
+                    speichere_globalen_speicher(db)
+                    st.success("Gespeichert!")
+                    st.rerun()
+            
+            with harvest_col:
+                if frucht != "-":
+                    if st.button(f"🚀 Ernte für {feld} ins Lager buchen", key=f"harvest_{feld}"):
+                        # Verknüpfung zum Lager
+                        hof = "Hof 1" # Hier könntest du auch eine Auswahl pro Feld machen
+                        if "lager" not in db: db["lager"] = {}
+                        if hof not in db["lager"]: db["lager"][hof] = {}
+                        
+                        db["lager"][hof][frucht] = db["lager"][hof].get(frucht, 0) + ertrag
+                        speichere_globalen_speicher(db)
+                        st.success(f"{ertrag} L {frucht} wurde zu {hof} hinzugefügt!")
 # ==============================================================================
 # BEREICH 7: SÄHE- & ERNTEKALENDER
 # ==============================================================================
