@@ -834,7 +834,13 @@ elif bereich == "🌱 Fruchtfolge-Planer":
 
     # 2. Felder verwalten
     for feld in list(db["feld_planer"].keys()):
-        with st.expander(f"Feld: {feld} | Aktuell: {db['feld_planer'][feld]['Folge'][0]}"):
+        # Sicherer Zugriff: Wenn "Folge" fehlt oder leer ist, gib einen Platzhalter aus
+        daten = db["feld_planer"][feld]
+        folge_liste = daten.get("Folge", ["-"])
+        aktuelle_frucht = folge_liste[0] if len(folge_liste) > 0 else "-"
+        
+        with st.expander(f"Feld: {feld} | Aktuell: {aktuelle_frucht}"):
+            # ... restlicher Code bleibt identisch
             
             # Fruchtfolge bearbeiten (als Komma-getrennte Liste)
             folge_str = st.text_input(f"Fruchtfolge (Reihenfolge mit Komma trennen):", 
