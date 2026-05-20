@@ -822,38 +822,35 @@ elif bereich == "📅 Sähe- & Erntekalender":
 elif bereich == "🌱 Fruchtfolge-Planer":
     st.title("🌱 Fruchtfolge-Planer")
     
+    # 1. Globale Definitionen
     ERNTEMAP = {"Weizen": "Aug", "Wintergerste": "Jul", "Raps": "Jul", "Mais": "Okt", "Roggen": "Aug", "Sonnenblumen": "Sep"}
-
+    
     if "felder" not in db or not db["felder"]:
         st.error("Keine Felder gefunden. Bitte erst in der Feldverwaltung Felder anlegen.")
     else:
         for feld in db["felder"]:
             if "folge" not in feld: feld["folge"] = ["Weizen"]
-            # Ertrag mit Standardwert 5000 initialisieren, falls nicht vorhanden
             if "ertrag_pro_ha" not in feld: feld["ertrag_pro_ha"] = 5000
             
             feld_name = feld.get("id", "Unbekannt")
+            besitzer_id = feld.get("besitzer", "hof1") # Der Key für den Besitzer
+            hof_name = HOF_MAPPING.get(besitzer_id, "Unbekannter Hof")
+            
             aktuelle_frucht = feld["folge"][0]
             ernte_monat = ERNTEMAP.get(aktuelle_frucht, "Aug")
             akt_m = db.get("aktueller_monat", "Jan")
-            ist_erntereif = (ernte_monat == akt_m)
             
-            header = f"📍 {feld_name} | 🌾 {aktuelle_frucht}"
-            if ist_erntereif: header = f"🚨 ERNTEZEIT! {header}"
-
-            with st.expander(header, expanded=ist_erntereif):
+            with st.expander(f"📍 {feld_name} | 🌾 {aktuelle_frucht} ({hof_name})"):
                 c_a, c_b = st.columns(2)
                 with c_a:
-                    folge_str = st.text_input(f"Fruchtfolge:", value=", ".join(feld["folge"]), key=f"seq_{feld_name}")
+                    folge_str = st.text_input("Fruchtfolge:", value=", ".join(feld["folge"]), key=f"seq_{feld_name}")
                 with c_b:
-                    # Input für den Ertrag
                     neuer_ertrag = st.number_input(f"Ertrag (Liter) für {aktuelle_frucht}:", 
                                                   value=feld.get("ertrag_pro_ha", 5000), 
                                                   key=f"y_{feld_name}")
                 
-                st.write(f"Geplanter Erntemonat: **{ernte_monat}**")
+                st.write(f"Geplanter Erntemonat: **{ernte_monat}** | Besitzer: **{hof_name}**")
                 
-                # Aktionen
                 c1, c2, c3 = st.columns(3)
                 
                 if c1.button("💾 Speichern", key=f"save_{feld_name}"):
@@ -868,16 +865,16 @@ elif bereich == "🌱 Fruchtfolge-Planer":
                         speichere_globalen_speicher(db)
                         st.rerun()
                 
-                if c3.button("🚀 Ernte", key=f"h_{feld_name}"):
-                    hof = "Hof 1"
+                if c3.button("🚀 Ernte buchen", key=f"h_{feld_name}"):
+                    # Dynamische Ziel-Hof Zuweisung
                     if "lager" not in db: db["lager"] = {}
-                    if hof not in db["lager"]: db["lager"][hof] = {}
+                    if besitzer_id not in db["lager"]: db["lager"][besitzer_id] = {}
                     
-                    # Hier wird der aktuell eingegebene Wert verwendet
-                    db["lager"][hof][aktuelle_frucht] = db["lager"][hof].get(aktuelle_frucht, 0) + neuer_ertrag
+                    # Lager-Eintrag auf den Besitzer-Key (z.B. "hof1")
+                    db["lager"][besitzer_id][aktuelle_frucht] = db["lager"][besitzer_id].get(aktuelle_frucht, 0) + neuer_ertrag
                     
                     st.balloons()
-                    st.success(f"{neuer_ertrag} Liter {aktuelle_frucht} ins Lager gebucht!")
+                    st.success(f"Ernte erfolgreich in {hof_name} gebucht!")
                     speichere_globalen_speicher(db)
                     st.rerun()
 # ==============================================================================
