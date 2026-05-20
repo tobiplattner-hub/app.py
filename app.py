@@ -263,8 +263,8 @@ bereich = st.sidebar.radio(
         "📅 Sähe- & Erntekalender", 
         "🌱 Fruchtfolge-Planer",
         "📦 Hof-Lagerverwaltung",
-        "🐄 Tier- & Futtermanagement" # NEU HINZUGEFÜGT
-        "👥 Mitarbeiter- & Stundenverwaltung",
+        "🐄 Tier- & Futtermanagement", # NEU HINZUGEFÜGT
+        "👥 Mitarbeiter- & Stundenverwaltung"
     ]
 )
 
