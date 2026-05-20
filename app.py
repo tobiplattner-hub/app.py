@@ -1209,15 +1209,14 @@ elif bereich == "👥 Mitarbeiter- & Stundenverwaltung":
         df = pd.DataFrame(db["stundenkonto"])
         st.dataframe(df, use_container_width=True)
        ")
+
 elif bereich == "📋 Schwarzes Brett":
     st.title("📋 Schwarzes Brett")
-    st.write("Hier kannst du Nachrichten für Mitspieler hinterlassen (z.B. Aufgaben, die noch erledigt werden müssen).")
+    st.write("Hier kannst du Nachrichten für Mitspieler hinterlassen.")
     
-    # 1. Sicherstellen, dass die Liste existiert
     if "aufgaben_brett" not in db:
         db["aufgaben_brett"] = []
     
-    # 2. Formular zum Schreiben einer neuen Nachricht
     with st.form("neue_nachricht", clear_on_submit=True):
         nachricht = st.text_input("Neue Nachricht / Aufgabe:")
         if st.form_submit_button("Nachricht veröffentlichen"):
@@ -1228,13 +1227,10 @@ elif bereich == "📋 Schwarzes Brett":
     
     st.write("---")
     
-    # 3. Alle Nachrichten anzeigen
     if db["aufgaben_brett"]:
         for i, text in enumerate(db["aufgaben_brett"]):
             col1, col2 = st.columns([0.85, 0.15])
             col1.info(text)
-            
-            # Löschen-Button, um die Nachricht zu entfernen, wenn sie erledigt ist
             if col2.button("Löschen", key=f"del_{i}"):
                 db["aufgaben_brett"].pop(i)
                 speichere_globalen_speicher(db)
