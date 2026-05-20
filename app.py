@@ -819,13 +819,17 @@ elif bereich == "📅 Sähe- & Erntekalender":
             st.info("Keine löschbaren Einträge vorhanden.")
 
 # ==============================================================================
-# BEREICH 8: HOF-LAGERVERWALTUNG
+# BEREICH 8: HOF-LAGERVERWALTUNG (VOLLSTÄNDIG & BEREINIGT)
 # ==============================================================================
 elif bereich == "📦 Hof-Lagerverwaltung":
     st.title("📦 Hof-Lagerverwaltung & Silomanagement")
     
-    # 1. Übersicht
+    aktueller_m = db.get("aktueller_monat", "Januar")
+    st.markdown(f"📅 **Aktueller Server-Monat:** `{aktueller_m}`")
+    
+    # 1. Lagerbestände Übersicht
     st.subheader("📋 Aktuelle Lagerbestände")
+    
     alle_gueter = set()
     for h_id in ["Hof 1", "Hof 2", "Hof 3"]:
         if h_id in db.get("lager", {}):
@@ -840,9 +844,15 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             for gut in liste_gueter:
                 zeile[f"{gut} (L)"] = db["lager"].get(h_id, {}).get(gut, 0)
             lager_daten.append(zeile)
-        st.data_editor(pd.DataFrame(lager_daten), use_container_width=True, hide_index=True, disabled=True)
+            
+        st.data_editor(
+            pd.DataFrame(lager_daten), 
+            use_container_width=True, 
+            hide_index=True, 
+            disabled=True
+        )
     else:
-        st.info("Das Lager ist leer.")
+        st.info("Das Lager ist aktuell leer.")
 
     # 2. Buchungsmaske (Ein- & Auslagern)
     st.write("---")
@@ -850,18 +860,25 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        auswahl_hof = st.selectbox("Hof wählen:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x))
-        key="lager_hof_selectbox"
+        auswahl_hof = st.selectbox(
+            "Hof wählen:", 
+            ["Hof 1", "Hof 2", "Hof 3"], 
+            format_func=lambda x: HOF_MAPPING.get(x, x),
+            key="lager_hof_select"
+        )
     with c2:
-        typ = st.radio("Aktion:", ["Einlagern", "Auslagern"])
+        typ = st.radio("Aktion:", ["Einlagern", "Auslagern"], key="lager_aktion_radio")
     with c3:
-        gut_name = st.text_input("Gut (z.B. Weizen, Silageballen):")
+        gut_name = st.text_input("Gut (z.B. Weizen, Silageballen):", key="lager_gut_input")
     with c4:
-        # Hier wählen wir, ob es eine Palette oder ein Ballen ist
-        einheit = st.radio("Einheit:", ["Liter", "Palette (1000L)", "Ballen (4000L)"], horizontal=True)
-        menge = st.number_input("Anzahl:", min_value=0, value=0)
+        einheit = st.radio(
+            "Einheit:", 
+            ["Liter", "Palette (1000L)", "Ballen (4000L)"], 
+            key="lager_einheit_radio"
+        )
+        menge = st.number_input("Anzahl / Menge:", min_value=0, value=0, key="lager_menge_input")
         
-    if st.button("Lagerbuchung ausführen"):
+    if st.button("Lagerbuchung ausführen", key="lager_buchung_btn"):
         if gut_name:
             # Umrechnungslogik
             if einheit == "Palette (1000L)":
@@ -871,16 +888,19 @@ elif bereich == "📦 Hof-Lagerverwaltung":
             else:
                 reale_menge = menge
             
-            if typ == "Auslagern": reale_menge = -reale_menge
+            # Auslagern negativ rechnen
+            if typ == "Auslagern": 
+                reale_menge = -reale_menge
             
-            # DB-Update
+            # Datenbank aktualisieren
             if "lager" not in db: db["lager"] = {}
             if auswahl_hof not in db["lager"]: db["lager"][auswahl_hof] = {}
             
-            db["lager"][auswahl_hof][gut_name] = db["lager"][auswahl_hof].get(gut_name, 0) + reale_menge
+            aktueller_bestand = db["lager"][auswahl_hof].get(gut_name, 0)
+            neuer_bestand = aktueller_bestand + reale_menge
             
-            # Schutz vor negativen Werten
-            if db["lager"][auswahl_hof][gut_name] < 0: db["lager"][auswahl_hof][gut_name] = 0
+            # Schutz vor negativen Beständen
+            db["lager"][auswahl_hof][gut_name] = max(0, neuer_bestand)
             
             speichere_globalen_speicher(db)
             st.success(f"{typ} von {abs(reale_menge)} L {gut_name} bei {HOF_MAPPING.get(auswahl_hof)} erfolgreich.")
