@@ -1090,6 +1090,7 @@ elif bereich == "🐄 Tier- & Futtermanagement":
         monats_daten.append(data)
 
     st.line_chart(pd.DataFrame(monats_daten).set_index("Monat"))
+    
     elif bereich == "👥 Mitarbeiter & Stunden":
     st.title("👥 Mitarbeiter- & Stundenverwaltung")
     
