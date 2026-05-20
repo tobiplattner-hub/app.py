@@ -851,7 +851,7 @@ elif bereich == "📦 Hof-Lagerverwaltung":
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         auswahl_hof = st.selectbox("Hof wählen:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x))
-        key="lager_hof_selectbox")
+        key="lager_hof_selectbox"
     with c2:
         typ = st.radio("Aktion:", ["Einlagern", "Auslagern"])
     with c3:
