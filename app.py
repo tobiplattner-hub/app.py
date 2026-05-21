@@ -1446,7 +1446,30 @@ elif bereich == "🏭 Produktionsplaner":
     # 4. Aktion ausführen
     if st.button("🚀 Aktion ausführen"):
         if modus == "Nur Berechnen (Simulation)":
-            st.success("Simulation kalkuliert!")
+            st.success("Simulation kalkuliert! (Nichts wurde gebucht)")
         else:
-            # Hier läuft die gleiche Buchungslogik wie zuvor...
-            # (Die Logik aus dem vorherigen Post bleibt hier gleich)
+            # Buchungslogik
+            erfolgreich = True
+            # Erst prüfen
+            for name in aktive_anlagen:
+                p = db["produktionen"][name]
+                input_total = p['input_menge'] * p['zyklus_faktor'] * monate
+                vorrat = db.get("lager", {}).get(prod_hof, {}).get(p['input_gut'], 0)
+                if vorrat < input_total:
+                    st.error(f"Nicht genug {p['input_gut']} für {name}!")
+                    erfolgreich = False
+                    break
+            
+            # Dann verbuchen
+            if erfolgreich:
+                for name in aktive_anlagen:
+                    p = db["produktionen"][name]
+                    input_total = p['input_menge'] * p['zyklus_faktor'] * monate
+                    output_total = p['output_menge'] * p['zyklus_faktor'] * monate
+                    
+                    db["lager"][prod_hof][p['input_gut']] -= input_total
+                    db["lager"][prod_hof][p['output_gut']] = db["lager"][prod_hof].get(p['output_gut'], 0) + output_total
+                
+                speichere_globalen_speicher(db)
+                st.success("Produktion wurde erfolgreich im Lager verbucht!")
+                st.rerun()
