@@ -686,7 +686,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
         st.subheader("🔄 Bestehenden Preis ändern")
         # Alle Preise aus der DB als Auswahlmöglichkeit
         f_auswahl = st.selectbox("Artikel auswählen:", list(db["preise"].keys()))
-        neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 1.0)), step=0.1)
+        neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500)), step=1)
         
         if st.button("Kurs aktualisieren"):
             db["preise"][f_auswahl] = neuer_preis
@@ -697,7 +697,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
     with col_p2:
         st.subheader("➕ Neue Mod-Frucht")
         neue_mod_frucht = st.text_input("Name der Mod-Frucht:")
-        mod_start_preis = st.number_input("Startpreis pro 1.000L:", min_value=0.0, value=500.0, step=50.0)
+        mod_start_preis = st.number_input("Startpreis pro 1.000L:", min_value=0, value=500, step=50)
         
         if st.button("Mod-Frucht hinzufügen"):
             frucht_name_clean = neue_mod_frucht.strip()
