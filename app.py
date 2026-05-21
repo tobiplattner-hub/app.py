@@ -669,7 +669,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
         frucht_daten = {k: int(v) for k, v in db["preise"].items() if k not in BETRIEBSMITTEL_KEYS}
         df = pd.DataFrame(list(frucht_daten.items()), columns=["Fruchtart", "Preis/1.000L (€)"])
         # Erzwinge den Datentyp Integer für die Spalte
-        df["Preis/1.000L"] = df["Preis/1.000L"].apply(lambda x: f"{x:,} €")
+        df["Preis/1.000L (€)"] = df["Preis/1.000L (€)"].apply(lambda x: f"{x:,} €")
         st.table(df)
 
     with col_d2:
@@ -677,7 +677,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
         bm_daten = {k: int(v) for k, v in db["preise"].items() if k in BETRIEBSMITTEL_KEYS}
         df_bm = pd.DataFrame(list(bm_daten.items()), columns=["Betriebsmittel", "Preis/1.000L (€)"])
         # Erzwinge den Datentyp Integer
-        df_bm["Preis/1.000L"] = df_bm["Preis/1.000L"].apply(lambda x: f"{x:,} €")
+        df_bm["Preis/1.000L (€)"] = df_bm["Preis/1.000L (€)"].apply(lambda x: f"{x:,} €")
         st.table(df_bm)
     st.write("---")
     col_p1, col_p2 = st.columns(2)
