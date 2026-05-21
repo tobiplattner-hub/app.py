@@ -659,19 +659,26 @@ elif bereich == "📈 Preise (Feld & Hof)":
     BETRIEBSMITTEL_KEYS = ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid"]
     if "preise" not in db: db["preise"] = {}
     for bm in BETRIEBSMITTEL_KEYS:
-        if bm not in db["preise"]: db["preise"][bm] = 1 # Standardwert
+        if bm not in db["preise"]: db["preise"][bm] = 500 # Standardwert
     
     # 2. Anzeige der Preise (Aufgeteilt)
     col_d1, col_d2 = st.columns(2)
     with col_d1:
         st.subheader("🌾 Verkaufsfrüchte")
-        frucht_daten = {k: v for k, v in db["preise"].items() if k not in BETRIEBSMITTEL_KEYS}
-        st.table(pd.DataFrame(list(frucht_daten.items()), columns=["Fruchtart", "Preis/1.000L (€)"]))
+        # WICHTIG: Hier wandeln wir alles mit int() in Ganzzahlen um
+        frucht_daten = {k: int(v) for k, v in db["preise"].items() if k not in BETRIEBSMITTEL_KEYS}
+        df = pd.DataFrame(list(frucht_daten.items()), columns=["Fruchtart", "Preis/1.000L (€)"])
+        # Erzwinge den Datentyp Integer für die Spalte
+        df["Preis/1.000L (€)"] = df["Preis/1.000L (€)"].astype(int)
+        st.table(df)
+
     with col_d2:
         st.subheader("⛽ Betriebsmittel")
-        bm_daten = {k: v for k, v in db["preise"].items() if k in BETRIEBSMITTEL_KEYS}
-        st.table(pd.DataFrame(list(bm_daten.items()), columns=["Betriebsmittel", "Preis/1.000L (€)"]))
-    
+        bm_daten = {k: int(v) for k, v in db["preise"].items() if k in BETRIEBSMITTEL_KEYS}
+        df_bm = pd.DataFrame(list(bm_daten.items()), columns=["Betriebsmittel", "Preis/1.000L (€)"])
+        # Erzwinge den Datentyp Integer
+        df_bm["Preis/1.000L (€)"] = df_bm["Preis/1.000L (€)"].astype(int)
+        st.table(df_bm)
     st.write("---")
     col_p1, col_p2 = st.columns(2)
     
