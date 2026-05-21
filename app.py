@@ -1289,36 +1289,39 @@ elif bereich == "📋 Schwarzes Brett":
         st.info("Aktuell keine Nachrichten auf dem Brett.")
         
 # ==============================================================================
-# BEREICH: BETRIEBSMITTEL-MANAGEMENT (DYNAMISCH)
+# BEREICH: BETRIEBSMITTEL-MANAGEMENT (DYNAMISCH & PREIS-GEKOPPELT)
 # ==============================================================================
 elif bereich == "⛽ Betriebsmittel-Management":
     st.title("⛽ Betriebsmittel-Management")
     
-    # 1. Daten-Initialisierung
-    if "betriebsmittel" not in db:
-        db["betriebsmittel"] = {h_id: {"Diesel": 0, "Saatgut": 0, "Dünger": 0, "Kalk": 0} for h_id in ["Hof 1", "Hof 2", "Hof 3"]}
+    # 1. Daten-Initialisierung (inkl. Herbizid)
+    BETRIEBSMITTEL_LISTE = ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid"]
     
-    PREISE = {"Diesel": 1.5, "Saatgut": 0.8, "Dünger": 0.5, "Kalk": 0.2}
+    if "betriebsmittel" not in db:
+        db["betriebsmittel"] = {h_id: {bm: 0 for bm in BETRIEBSMITTEL_LISTE} for h_id in ["Hof 1", "Hof 2", "Hof 3"]}
+    
+    # Preise werden direkt aus der Datenbank geholt (synchron zu deiner Preis-Zentrale)
+    # Falls der Schlüssel noch fehlt, nutzen wir Standardwerte
+    PREISE = {bm: db["preise"].get(bm, 1.0) for bm in BETRIEBSMITTEL_LISTE}
     
     # 2. Übersicht mit dynamischen Hofnamen
     st.subheader("📋 Aktuelle Vorräte")
     
-    # Wir erstellen ein neues Dictionary für die Anzeige, das die echten Namen verwendet
     anzeige_daten = {}
     for h_id, werte in db["betriebsmittel"].items():
-        hof_name = HOF_MAPPING.get(h_id, h_id) # Holt den aktuellen Namen aus dem Mapping
-        anzeige_daten[hof_name] = werte
+        hof_name = HOF_MAPPING.get(h_id, h_id)
+        # Nur die Betriebsmittel anzeigen, die wir definiert haben
+        anzeige_daten[hof_name] = {k: v for k, v in werte.items() if k in BETRIEBSMITTEL_LISTE}
         
-    df_bm = pd.DataFrame(anzeige_daten).T # .T dreht die Tabelle, damit Höfe Zeilen sind
+    df_bm = pd.DataFrame(anzeige_daten).T
     st.table(df_bm)
 
     # 3. Einkauf
     st.subheader("🛍️ Betriebsmittel einkaufen")
     col_e1, col_e2 = st.columns(2)
     with col_e1:
-        # Hier nutzen wir HOF_MAPPING für die Auswahl
         e_hof = st.selectbox("Hof für Einkauf:", list(HOF_MAPPING.keys()), format_func=lambda x: HOF_MAPPING[x])
-        e_gut = st.selectbox("Betriebsmittel:", list(PREISE.keys()))
+        e_gut = st.selectbox("Betriebsmittel:", BETRIEBSMITTEL_LISTE)
     with col_e2:
         e_menge = st.number_input("Menge (Liter/kg):", min_value=1, value=1000)
         kosten = e_menge * PREISE[e_gut]
@@ -1327,9 +1330,9 @@ elif bereich == "⛽ Betriebsmittel-Management":
     if st.button("🛒 Jetzt kaufen & vom Hofkonto abbuchen"):
         if db["hoefe"][e_hof]["konto"] >= kosten:
             db["hoefe"][e_hof]["konto"] -= kosten
-            db["betriebsmittel"][e_hof][e_gut] += e_menge
+            db["betriebsmittel"][e_hof][e_gut] = db["betriebsmittel"][e_hof].get(e_gut, 0) + e_menge
             speichere_globalen_speicher(db)
-            st.success(f"Einkauf erfolgreich! {e_menge} Einheiten {e_gut} verbucht.")
+            st.success(f"Einkauf erfolgreich! {e_menge} Einheiten {e_gut} für {HOF_MAPPING[e_hof]} verbucht.")
             st.rerun()
         else:
             st.error("Nicht genügend Geld auf dem Hofkonto!")
@@ -1341,12 +1344,12 @@ elif bereich == "⛽ Betriebsmittel-Management":
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         v_hof = st.selectbox("Hof für Verbrauch:", list(HOF_MAPPING.keys()), format_func=lambda x: HOF_MAPPING[x], key="v_hof")
-        v_gut = st.selectbox("Verbrauchtes Material:", list(PREISE.keys()), key="v_gut")
+        v_gut = st.selectbox("Verbrauchtes Material:", BETRIEBSMITTEL_LISTE, key="v_gut")
     with col_v2:
         v_menge = st.number_input("Verbrauchte Menge (L/kg):", min_value=1, value=100, key="v_menge")
     
     if st.button("📉 Verbrauch verbuchen"):
-        if db["betriebsmittel"][v_hof][v_gut] >= v_menge:
+        if db["betriebsmittel"][v_hof].get(v_gut, 0) >= v_menge:
             db["betriebsmittel"][v_hof][v_gut] -= v_menge
             speichere_globalen_speicher(db)
             st.success(f"{v_menge} Einheiten {v_gut} wurden von {HOF_MAPPING[v_hof]} abgebucht.")
