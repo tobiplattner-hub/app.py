@@ -670,7 +670,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
     with col_d2:
         st.subheader("⛽ Betriebsmittel")
         bm_daten = {k: v for k, v in db["preise"].items() if k in BETRIEBSMITTEL_KEYS}
-        st.table(pd.DataFrame(list(bm_daten.items()), columns=["Betriebsmittel", "Preis/Einheit (€)"]))
+        st.table(pd.DataFrame(list(bm_daten.items()), columns=["Betriebsmittel", "Preis/1.000L (€)"]))
     
     st.write("---")
     col_p1, col_p2 = st.columns(2)
