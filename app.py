@@ -296,12 +296,13 @@ if any(wort in ticker_text.upper() for wort in ["WICHTIG", "ACHTUNG", "DRINGEND"
     st.error(f"🚨 **ACHTUNG:** {ticker_text}")
 else:
     st.success(f"📢 **Status:** {ticker_text}")
-    with st.sidebar.expander("📢 Status-Ticker bearbeiten"):
-     neuer_status = st.text_input("Neuer Status:", db.get("status_ticker", "Alles läuft nach Plan."))
-     if st.button("Ticker aktualisieren"):
-        db["status_ticker"] = neuer_status
-        speichere_globalen_speicher(db)
-        st.rerun()
+    # --- TICKER BEARBEITEN (PERMANENT IN SIDEBAR - OFEN) ---
+st.sidebar.markdown("### 📢 Status-Ticker")
+neuer_status = st.sidebar.text_input("Neuer Status:", db.get("status_ticker", "Alles läuft nach Plan."))
+if st.sidebar.button("Ticker aktualisieren"):
+    db["status_ticker"] = neuer_status
+    speichere_globalen_speicher(db)
+    st.rerun()
 # ==============================================================================
 # BEREICH 1: DASHBOARD & FINANZEN
 # ==============================================================================
