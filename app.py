@@ -659,7 +659,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
     BETRIEBSMITTEL_KEYS = ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid"]
     if "preise" not in db: db["preise"] = {}
     for bm in BETRIEBSMITTEL_KEYS:
-        if bm not in db["preise"]: db["preise"][bm] = 1.0 # Standardwert
+        if bm not in db["preise"]: db["preise"][bm] = 1 # Standardwert
     
     # 2. Anzeige der Preise (Aufgeteilt)
     col_d1, col_d2 = st.columns(2)
