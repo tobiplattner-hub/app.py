@@ -143,9 +143,12 @@ def generiere_standard_daten():
         },
         "fruchtarten": ["Weizen", "Gerste", "Raps", "Gras", "Mais", "Kartoffeln", "Zuckerrüben", "Silage (Silo)", "Silage (Ballen)"],
         "preise": {
-            "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0, "Silage (Silo)": 410.0, "Silage (Ballen)": 460.0
+            "Weizen": 850.0, "Gerste": 780.0, "Raps": 1450.0, "Gras": 220.0, "Mais": 900.0, "Kartoffeln": 450.0, "Zuckerrüben": 320.0, "Silage (Silo)": 410.0, "Silage (Ballen)": 460.0,
+            "Diesel": 500.0, "Dünger": 500.0, "Kalk": 150.0, "Herbizid": 150.0
         },
+    
         "lager": {
+            
             "Hof 1": {},
             "Hof 2": {},
             "Hof 3": {}
