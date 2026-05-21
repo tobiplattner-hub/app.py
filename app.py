@@ -1331,7 +1331,7 @@ elif bereich == "⛽ Betriebsmittel-Management":
         e_gut = st.selectbox("Betriebsmittel:", BETRIEBSMITTEL_LISTE)
     with col_e2:
         e_menge = st.number_input("Menge (Liter/kg):", min_value=1, value=1000)
-        kosten = e_menge * PREISE[e_gut]
+        kosten = int(e_menge * (PREISE[e_gut] / 1000))
         st.write(f"Kosten: **{int(kosten):,} €**")
     
     if st.button("🛒 Jetzt kaufen & vom Hofkonto abbuchen"):
