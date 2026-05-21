@@ -289,7 +289,8 @@ bereich = st.sidebar.radio(
         "🐄 Tier- & Futtermanagement", # NEU HINZUGEFÜGT
         "👥 Mitarbeiter- & Stundenverwaltung",
         "📋 Schwarzes Brett",
-        "⛽ Betriebsmittel-Management"
+        "⛽ Betriebsmittel-Management",
+        "🏭 Produktionsplaner"
     ]
 )
 if "status_ticker" not in db:
@@ -1363,3 +1364,54 @@ elif bereich == "⛽ Betriebsmittel-Management":
             st.rerun()
         else:
             st.error(f"Fehler: Nicht genug {v_gut} auf Lager!")
+
+# ==============================================================================
+# BEREICH 9: PRODUKTIONSPLANER
+# ==============================================================================
+
+elif bereich == "🏭 Produktionsplaner":
+    st.title("🏭 Produktionsplaner")
+
+    # 1. Initialisierung
+    if "produktionen" not in db:
+        db["produktionen"] = {
+            "Mühle": {"input_gut": "Weizen", "input_menge": 9, "output_gut": "Mehl", "output_menge": 15}
+        }
+
+    # 2. Bestehende Produktionen
+    df_prod = pd.DataFrame.from_dict(db["produktionen"], orient='index')
+    df_prod.columns = ["Input-Ware", "Input-Menge", "Output-Ware", "Output-Menge"]
+    st.table(df_prod)
+
+    # 3. Produktion ausführen
+    st.subheader("⚙️ Produktion verbuchen")
+    c1, c2 = st.columns(2)
+    with c1:
+        prod_wahl = st.selectbox("Anlage wählen:", list(db["produktionen"].keys()))
+        prod_hof = st.selectbox("Hof für Produktion:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        monate = st.number_input("Anzahl Monate:", min_value=1, value=1)
+    
+    p = db["produktionen"][prod_wahl]
+    input_total = p['input_menge'] * monate
+    output_total = p['output_menge'] * monate
+
+    with c2:
+        st.info(f"**Vorschau:**")
+        st.write(f"📉 Input: {input_total} {p['input_gut']}")
+        st.write(f"📈 Output: {output_total} {p['output_gut']}")
+
+    if st.button("🚀 Produktion jetzt durchführen"):
+        # Zugriff auf dein Lager
+        lager = db.get("lager", {}).get(prod_hof, {})
+        vorrat = lager.get(p['input_gut'], 0)
+
+        if vorrat >= input_total:
+            # Lager anpassen
+            db["lager"][prod_hof][p['input_gut']] -= input_total
+            db["lager"][prod_hof][p['output_gut']] = db["lager"][prod_hof].get(p['output_gut'], 0) + output_total
+            
+            speichere_globalen_speicher(db)
+            st.success(f"Produktion von {prod_wahl} erfolgreich auf {HOF_MAPPING[prod_hof]} verbucht!")
+            st.rerun()
+        else:
+            st.error(f"Nicht genug {p['input_gut']} auf {HOF_MAPPING[prod_hof]}! (Vorrat: {vorrat})")
