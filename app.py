@@ -285,7 +285,8 @@ bereich = st.sidebar.radio(
         "📦 Hof-Lagerverwaltung",
         "🐄 Tier- & Futtermanagement", # NEU HINZUGEFÜGT
         "👥 Mitarbeiter- & Stundenverwaltung",
-        "📋 Schwarzes Brett"
+        "📋 Schwarzes Brett",
+        "⛽ Betriebsmittel-Management"
     ]
 )
 if "status_ticker" not in db:
@@ -1268,3 +1269,63 @@ elif bereich == "📋 Schwarzes Brett":
                 st.rerun()
     else:
         st.info("Aktuell keine Nachrichten auf dem Brett.")
+        
+# ==============================================================================
+# BEREICH: BETRIEBSMITTEL-MANAGEMENT (EINKAUF & VERBRAUCH)
+# ==============================================================================
+elif bereich == "⛽ Betriebsmittel-Management":
+    st.title("⛽ Betriebsmittel-Management")
+    
+    # 1. Daten-Initialisierung
+    if "betriebsmittel" not in db:
+        db["betriebsmittel"] = {h_id: {"Diesel": 0, "Saatgut": 0, "Dünger": 0, "Kalk": 0} for h_id in ["Hof 1", "Hof 2", "Hof 3"]}
+    
+    # Preise definieren (könnte man auch in db auslagern)
+    PREISE = {"Diesel": 1.5, "Saatgut": 0.8, "Dünger": 0.5, "Kalk": 0.2}
+    
+    # 2. Übersicht
+    st.subheader("📋 Aktuelle Vorräte")
+    df_bm = pd.DataFrame(db["betriebsmittel"]).T
+    st.table(df_bm)
+
+    # 3. Einkauf
+    st.subheader("🛍️ Betriebsmittel einkaufen")
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
+        e_hof = st.selectbox("Hof für Einkauf:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        e_gut = st.selectbox("Betriebsmittel:", list(PREISE.keys()))
+    with col_e2:
+        e_menge = st.number_input("Menge (Liter/kg):", min_value=1, value=1000)
+        kosten = e_menge * PREISE[e_gut]
+        st.write(f"Kosten: **{kosten:,.2f} €**")
+    
+    if st.button("🛒 Jetzt kaufen & vom Hofkonto abbuchen"):
+        # Angepasste Zeile für deinen Code:
+        if db["hoefe"][e_hof]["konto"] >= kosten:
+            db["hoefe"][e_hof]["konto"] -= kosten
+            db["betriebsmittel"][e_hof][e_gut] += e_menge
+            speichere_globalen_speicher(db)
+            st.success(f"Einkauf erfolgreich! {e_menge} Einheiten {e_gut} verbucht.")
+            st.rerun()
+        else:
+            st.error("Nicht genügend Geld auf dem Hofkonto!")
+
+    st.write("---")
+
+    # 4. Manueller Verbrauch
+    st.subheader("📉 Materialverbrauch nach Feldarbeit buchen")
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        v_hof = st.selectbox("Hof für Verbrauch:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="v_hof")
+        v_gut = st.selectbox("Verbrauchtes Material:", list(PREISE.keys()), key="v_gut")
+    with col_v2:
+        v_menge = st.number_input("Verbrauchte Menge (L/kg):", min_value=1, value=100, key="v_menge")
+    
+    if st.button("📉 Verbrauch verbuchen"):
+        if db["betriebsmittel"][v_hof][v_gut] >= v_menge:
+            db["betriebsmittel"][v_hof][v_gut] -= v_menge
+            speichere_globalen_speicher(db)
+            st.success(f"{v_menge} Einheiten {v_gut} wurden von {HOF_MAPPING[v_hof]} abgebucht.")
+            st.rerun()
+        else:
+            st.error(f"Fehler: Nicht genug {v_gut} auf Lager!")
