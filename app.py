@@ -686,7 +686,7 @@ elif bereich == "📈 Preise (Feld & Hof)":
         st.subheader("🔄 Bestehenden Preis ändern")
         # Alle Preise aus der DB als Auswahlmöglichkeit
         f_auswahl = st.selectbox("Artikel auswählen:", list(db["preise"].keys()))
-        neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500)), step=1)
+        neuer_preis = st.number_input("Neuer Preis (€):", value=int(db["preise"].get(f_auswahl, 500)), step=1)
         
         if st.button("Kurs aktualisieren"):
             db["preise"][f_auswahl] = neuer_preis
