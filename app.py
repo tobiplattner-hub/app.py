@@ -281,7 +281,7 @@ bereich = st.sidebar.radio(
         "💼 LU-Auftragsbuch", 
         "🌾 Warenverkauf & Rechnungen", 
         "🚜 Fuhrpark & Geräte", 
-        "📈 Fruchtpreise (Manuell)", 
+        "📈 Preise (Feld & Hof)", 
         "🗺️ Feldverwaltung", 
         "📅 Sähe- & Erntekalender", 
         "🌱 Fruchtfolge-Planer",
