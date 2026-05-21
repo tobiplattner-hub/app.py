@@ -1271,7 +1271,7 @@ elif bereich == "📋 Schwarzes Brett":
         st.info("Aktuell keine Nachrichten auf dem Brett.")
         
 # ==============================================================================
-# BEREICH: BETRIEBSMITTEL-MANAGEMENT (EINKAUF & VERBRAUCH)
+# BEREICH: BETRIEBSMITTEL-MANAGEMENT (DYNAMISCH)
 # ==============================================================================
 elif bereich == "⛽ Betriebsmittel-Management":
     st.title("⛽ Betriebsmittel-Management")
@@ -1280,19 +1280,26 @@ elif bereich == "⛽ Betriebsmittel-Management":
     if "betriebsmittel" not in db:
         db["betriebsmittel"] = {h_id: {"Diesel": 0, "Saatgut": 0, "Dünger": 0, "Kalk": 0} for h_id in ["Hof 1", "Hof 2", "Hof 3"]}
     
-    # Preise definieren (könnte man auch in db auslagern)
     PREISE = {"Diesel": 1.5, "Saatgut": 0.8, "Dünger": 0.5, "Kalk": 0.2}
     
-    # 2. Übersicht
+    # 2. Übersicht mit dynamischen Hofnamen
     st.subheader("📋 Aktuelle Vorräte")
-    df_bm = pd.DataFrame(db["betriebsmittel"]).T
+    
+    # Wir erstellen ein neues Dictionary für die Anzeige, das die echten Namen verwendet
+    anzeige_daten = {}
+    for h_id, werte in db["betriebsmittel"].items():
+        hof_name = HOF_MAPPING.get(h_id, h_id) # Holt den aktuellen Namen aus dem Mapping
+        anzeige_daten[hof_name] = werte
+        
+    df_bm = pd.DataFrame(anzeige_daten).T # .T dreht die Tabelle, damit Höfe Zeilen sind
     st.table(df_bm)
 
     # 3. Einkauf
     st.subheader("🛍️ Betriebsmittel einkaufen")
     col_e1, col_e2 = st.columns(2)
     with col_e1:
-        e_hof = st.selectbox("Hof für Einkauf:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        # Hier nutzen wir HOF_MAPPING für die Auswahl
+        e_hof = st.selectbox("Hof für Einkauf:", list(HOF_MAPPING.keys()), format_func=lambda x: HOF_MAPPING[x])
         e_gut = st.selectbox("Betriebsmittel:", list(PREISE.keys()))
     with col_e2:
         e_menge = st.number_input("Menge (Liter/kg):", min_value=1, value=1000)
@@ -1300,7 +1307,6 @@ elif bereich == "⛽ Betriebsmittel-Management":
         st.write(f"Kosten: **{kosten:,.2f} €**")
     
     if st.button("🛒 Jetzt kaufen & vom Hofkonto abbuchen"):
-        # Angepasste Zeile für deinen Code:
         if db["hoefe"][e_hof]["konto"] >= kosten:
             db["hoefe"][e_hof]["konto"] -= kosten
             db["betriebsmittel"][e_hof][e_gut] += e_menge
@@ -1316,7 +1322,7 @@ elif bereich == "⛽ Betriebsmittel-Management":
     st.subheader("📉 Materialverbrauch nach Feldarbeit buchen")
     col_v1, col_v2 = st.columns(2)
     with col_v1:
-        v_hof = st.selectbox("Hof für Verbrauch:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x], key="v_hof")
+        v_hof = st.selectbox("Hof für Verbrauch:", list(HOF_MAPPING.keys()), format_func=lambda x: HOF_MAPPING[x], key="v_hof")
         v_gut = st.selectbox("Verbrauchtes Material:", list(PREISE.keys()), key="v_gut")
     with col_v2:
         v_menge = st.number_input("Verbrauchte Menge (L/kg):", min_value=1, value=100, key="v_menge")
