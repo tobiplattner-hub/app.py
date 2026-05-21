@@ -297,8 +297,8 @@ if any(wort in ticker_text.upper() for wort in ["WICHTIG", "ACHTUNG", "DRINGEND"
 else:
     st.success(f"📢 **Status:** {ticker_text}")
     with st.sidebar.expander("📢 Status-Ticker bearbeiten"):
-    neuer_status = st.text_input("Neuer Status:", db.get("status_ticker", "Alles läuft nach Plan."))
-    if st.button("Ticker aktualisieren"):
+     neuer_status = st.text_input("Neuer Status:", db.get("status_ticker", "Alles läuft nach Plan."))
+     if st.button("Ticker aktualisieren"):
         db["status_ticker"] = neuer_status
         speichere_globalen_speicher(db)
         st.rerun()
