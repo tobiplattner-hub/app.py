@@ -1374,102 +1374,65 @@ elif bereich == "🏭 Produktionsplaner":
 
     if "produktionen" not in db:
         db["produktionen"] = {
-            "Mühle": {"input_gut": "Weizen", "input_menge": 9, "output_gut": "Mehl", "output_menge": 15, "zyklus_faktor": 1440}
+            "Molkerei - Butter": {"input": "Milch", "in_menge": 10, "output": "Butter", "out_menge": 2, "zyklus": 1440},
+            "Molkerei - Käse": {"input": "Milch", "in_menge": 20, "output": "Käse", "out_menge": 5, "zyklus": 1440}
         }
 
-    # 1. NEU: Anlage hinzufügen oder bestehende wählen
-    st.subheader("🏭 Anlagen-Verwaltung")
-    col_a1, col_a2 = st.columns([2, 1])
-    with col_a1:
-        prod_wahl = st.selectbox("Anlage auswählen:", list(db["produktionen"].keys()))
-    with col_a2:
-        if st.button("➕ Neue Anlage erstellen"):
-            neuer_name = "Neue Anlage"
-            i = 1
-            while f"{neuer_name} {i}" in db["produktionen"]: i += 1
-            db["produktionen"][f"{neuer_name} {i}"] = {"input_gut": "Rohstoff", "input_menge": 1, "output_gut": "Produkt", "output_menge": 1, "zyklus_faktor": 1440}
+    # 1. Rezept-Verwaltung
+    st.subheader("🛠️ Rezepte verwalten")
+    rezept_namen = list(db["produktionen"].keys())
+    rezept_wahl = st.selectbox("Rezept wählen:", rezept_namen + ["➕ Neues Rezept erstellen"])
+
+    if rezept_wahl == "➕ Neues Rezept erstellen":
+        neuer_name = st.text_input("Name des Rezepts (z.B. Molkerei - Käse):")
+        if st.button("Erstellen"):
+            db["produktionen"][neuer_name] = {"input": "Milch", "in_menge": 1, "output": "Produkt", "out_menge": 1, "zyklus": 1440}
             speichere_globalen_speicher(db)
             st.rerun()
-
-    # 2. Rezept bearbeiten & Umbenennen
-    with st.expander("🛠️ Rezept & Name bearbeiten"):
-        neuer_name = st.text_input("Name der Anlage:", value=prod_wahl)
-        p = db["produktionen"][prod_wahl]
-        c1, c2 = st.columns(2)
-        with c1:
-            n_i_gut = st.text_input("Input-Ware:", value=p['input_gut'])
-            n_i_menge = st.number_input("Input pro Zyklus:", value=p['input_menge'])
-            n_zyklus = st.number_input("Zyklen pro Monat:", value=p.get('zyklus_faktor', 1440))
-        with c2:
-            n_o_gut = st.text_input("Output-Ware:", value=p['output_gut'])
-            n_o_menge = st.number_input("Output pro Zyklus:", value=p['output_menge'])
-        
-        # Lösch-Button für eine Anlage
-        col_s1, col_s2 = st.columns([1, 4])
-        with col_s1:
-            if st.button("🗑️ Löschen"):
-                del db["produktionen"][prod_wahl]
-                speichere_globalen_speicher(db)
-                st.rerun()
-        with col_s2:
-            if st.button("Änderungen speichern"):
-                if neuer_name != prod_wahl:
-                    del db["produktionen"][prod_wahl]
-                db["produktionen"][neuer_name] = {
-                    "input_gut": n_i_gut, "input_menge": n_i_menge,
-                    "output_gut": n_o_gut, "output_menge": n_o_menge,
-                    "zyklus_faktor": n_zyklus
-                }
+    else:
+        # Bestehendes bearbeiten
+        with st.expander("Rezept bearbeiten"):
+            p = db["produktionen"][rezept_wahl]
+            col1, col2 = st.columns(2)
+            with col1:
+                n_input = st.text_input("Input-Ware:", value=p['input'])
+                n_in_m = st.number_input("Menge Input:", value=p['in_menge'])
+                n_zyk = st.number_input("Zyklen pro Monat:", value=p['zyklus'])
+            with col2:
+                n_output = st.text_input("Output-Ware:", value=p['output'])
+                n_out_m = st.number_input("Menge Output:", value=p['out_menge'])
+            
+            if st.button("Speichern"):
+                db["produktionen"][rezept_wahl] = {"input": n_input, "in_menge": n_in_m, "output": n_output, "out_menge": n_out_m, "zyklus": n_zyk}
                 speichere_globalen_speicher(db)
                 st.rerun()
 
     st.write("---")
 
-    # 3. Rechner / Bedarfsanalyse (wie gehabt)
-    st.subheader("📈 Bedarfsrechner (Simulation)")
-    aktive_anlagen = st.multiselect("Anlagen zur Kalkulation:", list(db["produktionen"].keys()))
-    monate = st.number_input("Anzahl der Monate:", min_value=1, value=1)
-    modus = st.radio("Modus:", ["Nur Berechnen (Simulation)", "Im Lager verbuchen"], horizontal=True)
-    prod_hof = st.selectbox("Hof für Buchung:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+    # 2. Produktion (Rechner & Buchung)
+    st.subheader("⚙️ Produktion ausführen")
+    aktive_rezepte = st.multiselect("Rezepte aktivieren:", list(db["produktionen"].keys()))
+    monate = st.number_input("Monate:", min_value=1, value=1)
+    prod_hof = st.selectbox("Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
 
-    if aktive_anlagen:
-        st.write("---")
-        for name in aktive_anlagen:
-            p = db["produktionen"][name]
-            input_total = p['input_menge'] * p['zyklus_faktor'] * monate
-            output_total = p['output_menge'] * p['zyklus_faktor'] * monate
-            vorrat = db.get("lager", {}).get(prod_hof, {}).get(p['input_gut'], 0)
-            st.write(f"**{name}:** Benötigt {input_total:,} {p['input_gut']} → Erzeugt {output_total:,} {p['output_gut']}")
-            if modus == "Im Lager verbuchen":
-                st.caption(f"Lagerbestand {p['input_gut']}: {vorrat:,} | Status: {'✅' if vorrat >= input_total else '❌ Nicht genug'}")
-
-    # 4. Aktion ausführen
-    if st.button("🚀 Aktion ausführen"):
-        if modus == "Nur Berechnen (Simulation)":
-            st.success("Simulation kalkuliert! (Nichts wurde gebucht)")
-        else:
-            # Buchungslogik
-            erfolgreich = True
-            # Erst prüfen
-            for name in aktive_anlagen:
-                p = db["produktionen"][name]
-                input_total = p['input_menge'] * p['zyklus_faktor'] * monate
-                vorrat = db.get("lager", {}).get(prod_hof, {}).get(p['input_gut'], 0)
-                if vorrat < input_total:
-                    st.error(f"Nicht genug {p['input_gut']} für {name}!")
-                    erfolgreich = False
-                    break
+    if st.button("🚀 Produktion verbuchen"):
+        erfolgreich = True
+        for r_name in aktive_rezepte:
+            p = db["produktionen"][r_name]
+            bedarf = p['in_menge'] * p['zyklus'] * monate
+            vorrat = db["lager"].get(prod_hof, {}).get(p['input'], 0)
             
-            # Dann verbuchen
-            if erfolgreich:
-                for name in aktive_anlagen:
-                    p = db["produktionen"][name]
-                    input_total = p['input_menge'] * p['zyklus_faktor'] * monate
-                    output_total = p['output_menge'] * p['zyklus_faktor'] * monate
-                    
-                    db["lager"][prod_hof][p['input_gut']] -= input_total
-                    db["lager"][prod_hof][p['output_gut']] = db["lager"][prod_hof].get(p['output_gut'], 0) + output_total
-                
-                speichere_globalen_speicher(db)
-                st.success("Produktion wurde erfolgreich im Lager verbucht!")
-                st.rerun()
+            if vorrat < bedarf:
+                st.error(f"Nicht genug {p['input']} für {r_name}!")
+                erfolgreich = False
+                break
+        
+        if erfolgreich:
+            for r_name in aktive_rezepte:
+                p = db["produktionen"][r_name]
+                db["lager"][prod_hof][p['input']] -= (p['in_menge'] * p['zyklus'] * monate)
+                db["lager"][prod_hof][p['output']] = db["lager"][prod_hof].get(p['output'], 0) + (p['out_menge'] * p['zyklus'] * monate)
+            
+            speichere_globalen_speicher(db)
+            st.success("Produktion erfolgreich!")
+            st.rerun()
