@@ -647,45 +647,60 @@ elif bereich == "🚜 Fuhrpark & Geräte":
         st.error("Preisliste konnte nicht aus Google Sheets geladen werden. Bitte Freigabe prüfen.")
 
 # ==============================================================================
-# BEREICH 5: MANUELLE FRUCHTPREISE
+# BEREICH 5: MANUELLE FRUCHT- & BETRIEBSMITTELPREISE
 # ==============================================================================
-elif bereich == "📈 Fruchtpreise (Manuell)":
-    st.title("🌾 Fruchtpreis-Zentrale für den Server")
+elif bereich == "📈 Preise (Feld & Hof)":
+    st.title("💰 Preis-Zentrale für Waren & Betriebsmittel")
     
-    df_preise = pd.DataFrame(list(db["preise"].items()), columns=["Fruchtart", "Preis pro 1.000L (€)"])
-    st.dataframe(df_preise, use_container_width=True, hide_index=True)
+    # 1. Betriebsmittel-Definition (für den Fall, dass sie noch nicht in DB sind)
+    BETRIEBSMITTEL_KEYS = ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid"]
+    if "preise" not in db: db["preise"] = {}
+    for bm in BETRIEBSMITTEL_KEYS:
+        if bm not in db["preise"]: db["preise"][bm] = 1.0 # Standardwert
+    
+    # 2. Anzeige der Preise (Aufgeteilt)
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        st.subheader("🌾 Verkaufsfrüchte")
+        frucht_daten = {k: v for k, v in db["preise"].items() if k not in BETRIEBSMITTEL_KEYS}
+        st.table(pd.DataFrame(list(frucht_daten.items()), columns=["Fruchtart", "Preis/1.000L (€)"]))
+    with col_d2:
+        st.subheader("⛽ Betriebsmittel")
+        bm_daten = {k: v for k, v in db["preise"].items() if k in BETRIEBSMITTEL_KEYS}
+        st.table(pd.DataFrame(list(bm_daten.items()), columns=["Betriebsmittel", "Preis/Einheit (€)"]))
     
     st.write("---")
     col_p1, col_p2 = st.columns(2)
     
     with col_p1:
         st.subheader("🔄 Bestehenden Preis ändern")
-        f_auswahl = st.selectbox("Fruchtart auswählen:", db["fruchtarten"])
-        neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 500.0)), step=10.0, key="edit_price")
+        # Alle Preise aus der DB als Auswahlmöglichkeit
+        f_auswahl = st.selectbox("Artikel auswählen:", list(db["preise"].keys()))
+        neuer_preis = st.number_input("Neuer Preis (€):", value=float(db["preise"].get(f_auswahl, 1.0)), step=0.1)
         
-        if st.button("Kurs live astrophysikalisch aktualisieren"):
+        if st.button("Kurs aktualisieren"):
             db["preise"][f_auswahl] = neuer_preis
             speichere_globalen_speicher(db)
             st.success(f"Preis für {f_auswahl} aktualisiert!")
             st.rerun()
             
     with col_p2:
-        st.subheader("➕ Neue Mod-Frucht registrieren")
-        neue_mod_frucht = st.text_input("Name der neuen Mod-Frucht:", placeholder="z. B. Dinkel, Alfalfa, Klee, Senf")
-        mod_start_preis = st.number_input("Startpreis (€ pro 1.000L):", min_value=0.0, value=500.0, step=50.0)
+        st.subheader("➕ Neue Mod-Frucht")
+        neue_mod_frucht = st.text_input("Name der Mod-Frucht:")
+        mod_start_preis = st.number_input("Startpreis pro 1.000L:", min_value=0.0, value=500.0, step=50.0)
         
-        if st.button("Mod-Frucht global hinzufügen"):
+        if st.button("Mod-Frucht hinzufügen"):
             frucht_name_clean = neue_mod_frucht.strip()
-            if frucht_name_clean == "":
-                st.error("Bitte gib einen Namen für die Mod-Frucht ein!")
+            if frucht_name_clean == "" or frucht_name_clean in BETRIEBSMITTEL_KEYS:
+                st.error("Ungültiger Name oder reserviertes Wort!")
             elif frucht_name_clean in db["preise"]:
-                st.error("Diese Frucht existiert bereits im Preissystem!")
+                st.error("Existiert bereits!")
             else:
-                if frucht_name_clean not in db["fruchtarten"]:
-                    db["fruchtarten"].append(frucht_name_clean)
                 db["preise"][frucht_name_clean] = mod_start_preis
+                if "fruchtarten" in db and frucht_name_clean not in db["fruchtarten"]:
+                    db["fruchtarten"].append(frucht_name_clean)
                 speichere_globalen_speicher(db)
-                st.success(f"'{frucht_name_clean}' wurde erfolgreich hinzugefügt und mit {mod_start_preis} € bepreist!")
+                st.success(f"'{frucht_name_clean}' hinzugefügt!")
                 st.rerun()
 
 # ==============================================================================
