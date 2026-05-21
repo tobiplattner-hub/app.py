@@ -1332,7 +1332,7 @@ elif bereich == "⛽ Betriebsmittel-Management":
     with col_e2:
         e_menge = st.number_input("Menge (Liter/kg):", min_value=1, value=1000)
         kosten = e_menge * PREISE[e_gut]
-        st.write(f"Kosten: **{kosten:,.2f} €**")
+        st.write(f"Kosten: **{int(kosten):,} €**")
     
     if st.button("🛒 Jetzt kaufen & vom Hofkonto abbuchen"):
         if db["hoefe"][e_hof]["konto"] >= kosten:
