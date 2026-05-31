@@ -1521,32 +1521,41 @@ with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
     
     # 1. Hof-Auswahl
     b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], 
-                         format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof")
+                         format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof_select")
     
-    # 2. Dynamische Waren-Auswahl + Manuelle Überschreibung
+    # 2. Waren-Auswahl (Mehrfachauswahl aus der DB)
     waren_liste = list(db.get("preise", {}).keys())
-    # Standard-Selectbox
-    waren_wahl = st.selectbox("Ware wählen (oder manuell unten):", waren_liste, key="b_gut_wahl")
-    # Text-Input zur manuellen Anpassung des Namens
-    b_gut = st.text_input("Ware manuell anpassen:", value=waren_wahl, key="b_gut_manuell")
+    gewaehlte_waren = st.multiselect("Waren wählen:", waren_liste, key="b_waren_multi")
     
-    # 3. Mengen-Eingabe
-    b_menge = st.number_input("Menge (in Litern):", min_value=1, value=1000, step=500, key="b_menge")
+    # 3. Manuelle Wareneingabe (für Waren, die nicht in der Liste sind)
+    manuelle_ware = st.text_input("Manuelle Ware (optional):", key="b_manuelle_ware")
+    if manuelle_ware:
+        gewaehlte_waren.append(manuelle_ware)
+        
+    # 4. Mengen für jede gewählte Ware festlegen
+    bestell_liste = []
+    gesamt_summe = 0
     
-    # 4. Preisberechnung (greift auf die Datenbank zu)
-    einzelpreis = db.get("preise", {}).get(waren_wahl, 1.0) / 1000 
-    b_gesamt = b_menge * einzelpreis
+    if gewaehlte_waren:
+        st.write("---")
+        for ware in gewaehlte_waren:
+            # Wir nutzen den Preis aus der DB (Standard 0, wenn unbekannt)
+            einzelpreis = db.get("preise", {}).get(ware, 1.0) / 1000 
+            menge = st.number_input(f"Menge für {ware} (Liter):", min_value=1, value=1000, step=500, key=f"menge_{ware}")
+            
+            summe_ware = menge * einzelpreis
+            bestell_liste.append([ware, f"{menge:,} Liter", f"{summe_ware:,.2f} €"])
+            gesamt_summe += summe_ware
+        st.write("---")
 
     # 5. PDF Erstellung
     if st.button("📄 PDF erstellen"):
-        if not b_gut:
-            st.error("Bitte gib eine Ware an!")
+        if not bestell_liste:
+            st.error("Bitte wähle mindestens eine Ware aus!")
         else:
             meta_text = f"<b>Auftraggeber:</b> {HOF_MAPPING.get(b_hof, b_hof)}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
-            # Hier wurde "Einheiten" durch "Liter" ersetzt
-            posten = [[f"Bestellung: {b_gut}", f"{b_menge:,} Liter", f"{b_gesamt:,.2f} €"]]
             
-            pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, posten, b_gesamt, "Hinweis: Bitte bei der Zentrale abholen.")
+            pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, bestell_liste, gesamt_summe, "Hinweis: Bitte bei der Zentrale abholen.")
             st.session_state["pdf_bestellung"] = pdf_buffer
             st.success("PDF bereit!")
 
@@ -1555,6 +1564,6 @@ with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
         st.download_button(
             label="📥 PDF herunterladen", 
             data=st.session_state["pdf_bestellung"], 
-            file_name=f"Bestellung_{b_gut}.pdf", 
+            file_name=f"Bestellung_{datetime.now().strftime('%H%M')}.pdf", 
             mime="application/pdf"
         )
