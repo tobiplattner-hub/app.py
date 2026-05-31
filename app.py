@@ -1521,52 +1521,42 @@ with st.sidebar.expander("🛒 Warenbestellung (PDF)", expanded=True):
     
     # 1. Hof-Auswahl
     b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], 
-                         format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof_select_final")
+                         format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof_select_pro")
     
-    # 2. Mehrfachauswahl (Datenbank + manuelle Eingabe)
-    waren_liste = list(db.get("preise", {}).keys())
-    gewaehlte_waren = st.multiselect("Waren wählen:", waren_liste, key="b_waren_multi_final")
-    
-    manuelle_ware = st.text_input("Zusätzliche Ware (manuell):", key="b_manuelle_ware_final")
-    if manuelle_ware:
-        gewaehlte_waren.append(manuelle_ware)
-        
-    # 3. Mengen-Bereich (Hier erstellen wir die Liste für das PDF)
-    bestell_liste = []
-    gesamt_summe = 0
-    
-    if gewaehlte_waren:
-        st.write("---")
-        for ware in gewaehlte_waren:
-            # Dynamischer Key für jedes Mengenfeld
-            m = st.number_input(f"Menge für {ware} (Liter):", min_value=1, value=1000, step=500, key=f"menge_key_{ware}")
-            
-            # Preis berechnen
-            preis_pro_liter = db.get("preise", {}).get(ware, 1.0) / 1000 
-            summe_ware = m * preis_pro_liter
-            
-            bestell_liste.append([ware, f"{m:,} Liter", f"{summe_ware:,.2f} €"])
-            gesamt_summe += summe_ware
-        st.write("---")
+    # 2. Session State für manuelle Waren-Liste initialisieren
+    if "manuelle_waren_liste" not in st.session_state:
+        st.session_state["manuelle_waren_liste"] = []
 
-    # 4. Der Button muss hier stehen, NICHT innerhalb der Schleife!
-    # Er ist jetzt direkt unter der Schleife sichtbar.
-    if st.button("📄 PDF generieren & bereitstellen"):
-        if not bestell_liste:
-            st.error("Bitte wähle Waren aus!")
+    # 3. Ware hinzufügen
+    neue_ware = st.text_input("Ware hinzufügen (Name):", key="neue_ware_input")
+    if st.button("➕ Hinzufügen"):
+        if neue_ware and neue_ware not in st.session_state["manuelle_waren_liste"]:
+            st.session_state["manuelle_waren_liste"].append(neue_ware)
+    
+    # 4. Liste anzeigen und Mengen definieren
+    bestell_daten = []
+    if st.session_state["manuelle_waren_liste"]:
+        st.write("Aktuelle Liste:")
+        for ware in st.session_state["manuelle_waren_liste"]:
+            c1, c2 = st.columns([2, 1])
+            m = c1.number_input(f"Menge {ware} (L):", min_value=1, value=1000, step=500, key=f"qty_{ware}")
+            if c2.button("🗑️", key=f"del_{ware}"):
+                st.session_state["manuelle_waren_liste"].remove(ware)
+                st.rerun()
+            bestell_daten.append([ware, f"{m:,} Liter", "---"]) # Preis entfernt
+
+    # 5. PDF Erstellung
+    if st.button("📄 PDF generieren"):
+        if not bestell_daten:
+            st.error("Liste ist leer!")
         else:
             meta_text = f"<b>Auftraggeber:</b> {HOF_MAPPING.get(b_hof, b_hof)}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
-            
-            # Aufruf der zentralen PDF-Funktion
-            pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, bestell_liste, gesamt_summe, "Hinweis: Bitte bei der Zentrale abholen.")
+            # PDF ohne Gesamtsumme (0.0 übergeben)
+            pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, bestell_daten, 0.0, "Hinweis: Bitte bei der Zentrale abholen.")
             st.session_state["pdf_bestellung"] = pdf_buffer
             st.success("PDF wurde erstellt!")
 
-    # 5. Download-Button (immer sichtbar, wenn State existiert)
+    # 6. Download
     if "pdf_bestellung" in st.session_state:
-        st.download_button(
-            label="📥 PDF herunterladen", 
-            data=st.session_state["pdf_bestellung"], 
-            file_name=f"Bestellung_{datetime.now().strftime('%H%M')}.pdf", 
-            mime="application/pdf"
-        )
+        st.download_button("📥 PDF herunterladen", st.session_state["pdf_bestellung"], 
+                           file_name="Bestellung.pdf", mime="application/pdf")
