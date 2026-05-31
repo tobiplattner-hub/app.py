@@ -1523,20 +1523,18 @@ with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
     b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], 
                          format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof")
     
-    # 2. Dynamische Waren-Auswahl (Liste aus db + manuelle Option)
-    waren_liste = list(db.get("preise", {}).keys()) # Holt Waren aus deiner Preisliste
-    waren_wahl = st.selectbox("Ware wählen:", waren_liste + ["--- Manuell eingeben ---"], key="b_gut_wahl")
-    
-    if waren_wahl == "--- Manuell eingeben ---":
-        b_gut = st.text_input("Ware manuell eingeben:", key="b_gut_manuell")
-    else:
-        b_gut = waren_wahl
+    # 2. Dynamische Waren-Auswahl + Manuelle Überschreibung
+    waren_liste = list(db.get("preise", {}).keys())
+    # Standard-Selectbox
+    waren_wahl = st.selectbox("Ware wählen (oder manuell unten):", waren_liste, key="b_gut_wahl")
+    # Text-Input zur manuellen Anpassung des Namens
+    b_gut = st.text_input("Ware manuell anpassen:", value=waren_wahl, key="b_gut_manuell")
     
     # 3. Mengen-Eingabe
-    b_menge = st.number_input("Menge:", min_value=1, value=1000, step=500, key="b_menge")
+    b_menge = st.number_input("Menge (in Litern):", min_value=1, value=1000, step=500, key="b_menge")
     
-    # 4. Preisberechnung (nimmt manuellen Preis oder Preis aus DB)
-    einzelpreis = db.get("preise", {}).get(b_gut, 1.0) / 1000 
+    # 4. Preisberechnung (greift auf die Datenbank zu)
+    einzelpreis = db.get("preise", {}).get(waren_wahl, 1.0) / 1000 
     b_gesamt = b_menge * einzelpreis
 
     # 5. PDF Erstellung
@@ -1545,7 +1543,8 @@ with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
             st.error("Bitte gib eine Ware an!")
         else:
             meta_text = f"<b>Auftraggeber:</b> {HOF_MAPPING.get(b_hof, b_hof)}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
-            posten = [[f"Bestellung: {b_gut}", f"{b_menge:,} Einheiten", f"{b_gesamt:,.2f} €"]]
+            # Hier wurde "Einheiten" durch "Liter" ersetzt
+            posten = [[f"Bestellung: {b_gut}", f"{b_menge:,} Liter", f"{b_gesamt:,.2f} €"]]
             
             pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, posten, b_gesamt, "Hinweis: Bitte bei der Zentrale abholen.")
             st.session_state["pdf_bestellung"] = pdf_buffer
