@@ -323,7 +323,7 @@ bereich = st.sidebar.radio(
         "📋 Schwarzes Brett",
         "⛽ Betriebsmittel-Management",
         "🏭 Produktionsplaner",
-        "### 🛒 Neue Bestellung"
+        "🛒 Warenbestellung (PDF)"
     ]
 )
 if "status_ticker" not in db:
