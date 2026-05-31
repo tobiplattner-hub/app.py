@@ -1517,12 +1517,12 @@ elif bereich == "🏭 Produktionsplaner":
 # SIDEBAR-BESTELLUNGEN (PDF-Generator)
 # ==============================================================================
 with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
-    st.markdown("### 🛒 Neue Bestellung")
+    st.markdown(" 🛒 Neue Bestellung")
     
     # Eingabefelder
-    b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof")
-    b_gut = st.selectbox("Ware / Betriebsmittel:", ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid", "Weizen", "Gerste", "Mais"], key="b_gut")
-    b_menge = st.number_input("Menge (L/kg/Stück):", min_value=1, value=1000, step=500, key="b_menge")
+    b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x), key="sidebar_b_hof")
+    b_gut = st.selectbox("Ware / Betriebsmittel:", ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid", "Weizen", "Gerste", "Mais"], key="sidebar_b_gut")
+    b_menge = st.number_input("Menge (L/kg/Stück):", min_value=1, value=1000, step=500, key="sidebar_b_menge")
     
     # Preisberechnung (greift auf die vorhandene Preisliste in db["preise"] zu)
     einzelpreis = db.get("preise", {}).get(b_gut, 1.0) / 1000  # Annahme: Preis pro 1000 Einheiten
