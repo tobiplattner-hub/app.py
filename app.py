@@ -1516,50 +1516,53 @@ elif bereich == "🏭 Produktionsplaner":
 # ==============================================================================
 # SIDEBAR-BESTELLUNGEN (PDF-Generator)
 # ==============================================================================
-with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
+with st.sidebar.expander("🛒 Warenbestellung (PDF)", expanded=True):
     st.markdown("### 🛒 Neue Bestellung")
     
     # 1. Hof-Auswahl
     b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], 
-                         format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof_select")
+                         format_func=lambda x: HOF_MAPPING.get(x, x), key="b_hof_select_final")
     
-    # 2. Waren-Auswahl (Mehrfachauswahl aus der DB)
+    # 2. Mehrfachauswahl (Datenbank + manuelle Eingabe)
     waren_liste = list(db.get("preise", {}).keys())
-    gewaehlte_waren = st.multiselect("Waren wählen:", waren_liste, key="b_waren_multi")
+    gewaehlte_waren = st.multiselect("Waren wählen:", waren_liste, key="b_waren_multi_final")
     
-    # 3. Manuelle Wareneingabe (für Waren, die nicht in der Liste sind)
-    manuelle_ware = st.text_input("Manuelle Ware (optional):", key="b_manuelle_ware")
+    manuelle_ware = st.text_input("Zusätzliche Ware (manuell):", key="b_manuelle_ware_final")
     if manuelle_ware:
         gewaehlte_waren.append(manuelle_ware)
         
-    # 4. Mengen für jede gewählte Ware festlegen
+    # 3. Mengen-Bereich (Hier erstellen wir die Liste für das PDF)
     bestell_liste = []
     gesamt_summe = 0
     
     if gewaehlte_waren:
         st.write("---")
         for ware in gewaehlte_waren:
-            # Wir nutzen den Preis aus der DB (Standard 0, wenn unbekannt)
-            einzelpreis = db.get("preise", {}).get(ware, 1.0) / 1000 
-            menge = st.number_input(f"Menge für {ware} (Liter):", min_value=1, value=1000, step=500, key=f"menge_{ware}")
+            # Dynamischer Key für jedes Mengenfeld
+            m = st.number_input(f"Menge für {ware} (Liter):", min_value=1, value=1000, step=500, key=f"menge_key_{ware}")
             
-            summe_ware = menge * einzelpreis
-            bestell_liste.append([ware, f"{menge:,} Liter", f"{summe_ware:,.2f} €"])
+            # Preis berechnen
+            preis_pro_liter = db.get("preise", {}).get(ware, 1.0) / 1000 
+            summe_ware = m * preis_pro_liter
+            
+            bestell_liste.append([ware, f"{m:,} Liter", f"{summe_ware:,.2f} €"])
             gesamt_summe += summe_ware
         st.write("---")
 
-    # 5. PDF Erstellung
-    if st.button("📄 PDF erstellen"):
+    # 4. Der Button muss hier stehen, NICHT innerhalb der Schleife!
+    # Er ist jetzt direkt unter der Schleife sichtbar.
+    if st.button("📄 PDF generieren & bereitstellen"):
         if not bestell_liste:
-            st.error("Bitte wähle mindestens eine Ware aus!")
+            st.error("Bitte wähle Waren aus!")
         else:
             meta_text = f"<b>Auftraggeber:</b> {HOF_MAPPING.get(b_hof, b_hof)}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
             
+            # Aufruf der zentralen PDF-Funktion
             pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, bestell_liste, gesamt_summe, "Hinweis: Bitte bei der Zentrale abholen.")
             st.session_state["pdf_bestellung"] = pdf_buffer
-            st.success("PDF bereit!")
+            st.success("PDF wurde erstellt!")
 
-    # 6. Download-Button
+    # 5. Download-Button (immer sichtbar, wenn State existiert)
     if "pdf_bestellung" in st.session_state:
         st.download_button(
             label="📥 PDF herunterladen", 
