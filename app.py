@@ -494,59 +494,62 @@ if bereich == "📊 Dashboard & Finanzen":
 elif bereich == "💼 LU-Auftragsbuch":
     st.title("💼 LU-Auftrags- & Rechnungsbuch")
     
-    # 1. AUSWAHL: Was soll abgerechnet werden?
-    rechnungs_typ = st.radio("Was möchtest du abrechnen?", ["Lohnauftrag (Maschinen)", "Warenlieferung (Manuell)"], horizontal=True)
+    rechnungs_typ = st.radio("Rechnungsart:", ["Lohnauftrag (Maschinen)", "Warenlieferung (Manuell)"], horizontal=True)
     
     st.subheader("📌 Rechnung erstellen")
     col_a, col_b = st.columns(2)
     
     with col_a:
         kunde = st.selectbox("Auftraggeber:", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
-        lieferant = st.selectbox("Leistender/Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        lieferant = st.selectbox("Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
     
     with col_b:
         beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
         if rechnungs_typ == "Lohnauftrag (Maschinen)":
+            # Sicherstellen, dass verfuegbare_machines definiert ist
             maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines if 'verfuegbare_machines' in locals() else [])
-            stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0)
+            stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0, step=1.0)
         else:
             maschinen = []
-            stundensatz = 0.0 # Wird bei Waren manuell eingetragen
+            stundensatz = 0.0
 
     # Abrechnungs-Formular
     with st.form("rechnungs_form"):
         c1, c2 = st.columns(2)
-        menge_oder_std = c1.number_input("Anzahl (Stunden / Menge):", min_value=0.1, step=0.1)
-        preis_manuell = c2.number_input("Gesamtpreis (€) (falls manuell):", min_value=0.0, step=1.0)
+        menge = c1.number_input("Anzahl (Stunden / Menge):", min_value=0.1, step=0.1)
+        preis_manuell = c2.number_input("Gesamtpreis (€):", min_value=0.0, step=1.0)
         
         submit_btn = st.form_submit_button("💰 Rechnung erstellen & PDF buchen")
 
     if submit_btn:
         # Berechnung
         if rechnungs_typ == "Lohnauftrag (Maschinen)":
-            end_preis = menge_oder_std * stundensatz
+            end_preis = menge * stundensatz
         else:
             end_preis = preis_manuell
 
         # Buchung im System
         if kunde in db["hoefe"]:
             db["hoefe"][kunde]["konto"] -= end_preis
-        db["hoefe"][lieferant]["konto"] += end_preis
+        db["hoefe"][lieferant.split(" -")[0]]["konto"] += end_preis # Anpassung falls Mapping nötig
         speichere_globalen_speicher(db)
 
-        # PDF Erstellung
-        meta = f"<b>Verkäufer:</b> {HOF_MAPPING[lieferant]}<br/><b>Kunde:</b> {KUNDEN_MAPPING.get(kunde, kunde)}"
-        posten = [[f"Rechnung: {beschreibung}", f"{menge_oder_std} Einheiten", f"{end_preis:,.2f} €"]]
+        # PDF Erstellung mit Formatierung ohne Tausenderpunkt
+        meta = f"<b>Verkäufer:</b> {lieferant}<br/><b>Kunde:</b> {KUNDEN_MAPPING.get(kunde, kunde)}"
+        
+        # Preis-String: .2f für Dezimalstellen, replace für Komma statt Punkt, kein Tausendertrenner
+        preis_str = f"{end_preis:.2f}".replace(".", ",")
+        posten = [[f"Rechnung: {beschreibung}", f"{menge} Liter", f"{preis_str} €"]]
         
         pdf_buffer = erstelle_universal_pdf("RECHNUNG", meta, posten, end_preis, "Zahlung automatisch verbucht.")
         st.session_state["lu_pdf_ready"] = pdf_buffer
-        st.success(f"Erfolgreich! {end_preis:,.2f} € wurden zwischen {lieferant} und {kunde} verbucht.")
+        st.success(f"Erfolgreich! {preis_str} € wurden zwischen den Parteien verbucht.")
         st.rerun()
 
     # Download Bereich
     if "lu_pdf_ready" in st.session_state:
         st.download_button("📄 PDF herunterladen", st.session_state["lu_pdf_ready"], "Rechnung.pdf", "application/pdf")
-        if st.button("Neue Rechnung"):
+        if st.button("Rechnung verwerfen / Neue erstellen"):
             del st.session_state["lu_pdf_ready"]
             st.rerun()
 # ==============================================================================
