@@ -492,123 +492,63 @@ if bereich == "📊 Dashboard & Finanzen":
 # BEREICH 2: LU-AUFTRAGSBUCH (MIT MASCHINEN-KETTEN)
 # ==============================================================================
 elif bereich == "💼 LU-Auftragsbuch":
-    st.title("💼 LU-Betriebsstunden-Abrechnung")
+    st.title("💼 LU-Auftrags- & Rechnungsbuch")
     
-    st.subheader("📌 Neuen Lohnauftrag anlegen")
+    # 1. AUSWAHL: Was soll abgerechnet werden?
+    rechnungs_typ = st.radio("Was möchtest du abrechnen?", ["Lohnauftrag (Maschinen)", "Warenlieferung (Manuell)"], horizontal=True)
+    
+    st.subheader("📌 Rechnung erstellen")
     col_a, col_b = st.columns(2)
     
     with col_a:
-        a_kunde = st.selectbox("Auftraggeber (Kunde aus Google Sheet):", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
-        a_lu = st.selectbox("Auftragnehmer (Lohnunternehmen):", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
-        
-        arbeitsart_optionen = db["fruchtarten"] + ["Dreschen", "Häckseln", "Pflügen", "Säen", "Gülle fahren", "Ballen pressen", "– Eigene Mod-Arbeitsart eingeben –"]
-        a_typ_sel = st.selectbox("Arbeitsart:", arbeitsart_optionen)
-        
-        if a_typ_sel == "– Eigene Mod-Arbeitsart eingeben –":
-            a_typ = st.text_input("Name der Mod-Frucht / Arbeit eingeben:", placeholder="z. B. Klee dreschen")
-        else:
-            a_typ = a_typ_sel
-        
-    with col_b:
-        if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
-            verfuegbare_machines = df_sheet_masch['geraet'].dropna().unique().tolist()
-        else:
-            verfuegbare_machines = ["Standard Schlepper (Kein Sheet geladen)"]
-            
-        # MULTISELECT FÜR MASCHINENKETTE
-        a_maschinen = st.multiselect("Genutzte Maschinen (Mehrfachwahl für Kombination):", verfuegbare_machines)
-        a_feld = st.number_input("Auf Feld Nummer:", min_value=1, step=1)
-        
-    if st.button("Auftrag live ausschreiben"):
-        if a_typ.strip() == "":
-            st.error("Bitte gib einen Namen für die Mod-Arbeitsart ein!")
-        elif not a_maschinen:
-            st.error("Bitte wähle mindestens eine Maschine aus!")
-        else:
-            neuer_id = max([x["id"] for x in db["auftraege"]], default=0) + 1
-            
-            # Preisberechnung: Summe aller gewählten Maschinen
-            stundensatz_summe = 0.0
-            if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
-                for maschine in a_maschinen:
-                    treffer = df_sheet_masch[df_sheet_masch['geraet'] == maschine]['Preis'].values
-                    if len(treffer) > 0:
-                        stundensatz_summe += float(treffer[0])
-            
-            db["auftraege"].append({
-                "id": neuer_id, "kunde": a_kunde, "auftragnehmer": a_lu, "typ": a_typ,
-                "feld": int(a_feld), "maschinen": a_maschinen, "stundensatz": stundensatz_summe, "status": "Offen"
-            })
-            speichere_globalen_speicher(db)
-            st.success(f"Auftrag #{neuer_id} erstellt. Kombi-Preis: {stundensatz_summe} €/h.")
-            st.rerun()
-
-    st.write("---")
-    st.subheader("💳 Offene Aufträge über Zählerstände abrechnen")
-    offene = [x for x in db["auftraege"] if x["status"] == "Offen"]
+        kunde = st.selectbox("Auftraggeber:", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
+        lieferant = st.selectbox("Leistender/Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
     
-    if offene:
-        df_offene = pd.DataFrame(offene)
-        # Fehlerbehebung: Prüfen ob 'maschinen' existiert, sonst aus 'maschine' konvertieren
-        if "maschinen" not in df_offene.columns:
-            df_offene["maschinen"] = df_offene["maschine"].apply(lambda x: [x] if isinstance(x, str) else [])
-        
-        # Ab hier ist sichergestellt, dass die Spalte 'maschinen' existiert
-        df_offene["Kunde"] = df_offene["kunde"].map(lambda x: KUNDEN_MAPPING.get(x, x))
-        df_offene["Lohnunternehmen"] = df_offene["auftragnehmer"].map(HOF_MAPPING)
-        df_offene["Maschinen_Anzeige"] = df_offene["maschinen"].apply(lambda x: ", ".join(x) if isinstance(x, list) else str(x))
-        
-        st.dataframe(df_offene[["id", "Kunde", "Lohnunternehmen", "typ", "Maschinen_Anzeige", "stundensatz"]], use_container_width=True, hide_index=True)
-        
-        col_c, col_d = st.columns(2)
-        with col_c:
-            auf_id = st.selectbox("Welchen Auftrag jetzt abrechnen?", [x["id"] for x in offene], key="select_auf_id")
-            std_start = st.number_input("Betriebsstunden START:", min_value=0.0, step=0.1, key="start")
-        with col_d:
-            std_ende = st.number_input("Betriebsstunden ENDE:", min_value=std_start, step=0.1, key="ende")
-            
-        if st.button("💰 Zählerstände auswerten & Rechnung buchen"):
-            stunden_gefahren = std_ende - std_start
-            auftrag = next(x for x in db["auftraege"] if x["id"] == auf_id)
-            end_preis = stunden_gefahren * auftrag["stundensatz"]
-            
-            # Silage Rabatt Logik
-            feld_treffer = next((f for f in db["felder"] if f["id"] == auftrag["feld"]), None)
-            if feld_treffer and feld_treffer.get("ernte_typ") == "Silage":
-                end_preis *= 0.5
-                
-            auftrag["preis"] = end_preis
-            auftrag["stunden_gefahren"] = stunden_gefahren
-            auftrag["status"] = "Abgerechnet"
-            
-            if auftrag["kunde"] in db["hoefe"]:
-                db["hoefe"][auftrag["kunde"]]["konto"] -= end_preis
-            db["hoefe"][auftrag["auftragnehmer"]]["konto"] += end_preis
-            speichere_globalen_speicher(db)
-            
-            k_name = KUNDEN_MAPPING.get(auftrag['kunde'], auftrag['kunde'])
-            maschinen_text = ", ".join(auftrag['maschinen'])
-            meta = f"<b>Dienstleister:</b> {HOF_MAPPING[auftrag['auftragnehmer']]}<br/><b>Kunde:</b> {k_name}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}<br/><b>Auftrags-ID:</b> #{auftrag['id']}"
-            posten = [[
-                f"Lohnarbeit: {auftrag['typ']} (Feld {auftrag['feld']})", 
-                f"{stunden_gefahren:.1f} Std. mit {maschinen_text}<br/>(Basis: {auftrag['stundensatz']} €/h)", 
-                f"{end_preis:,.2f} €"
-            ]]
-            
-            st.session_state["lu_pdf_ready"] = erstelle_universal_pdf("LU-BETRIEBSSTUNDEN ABRECHNUNG", meta, posten, end_preis, "Buchung automatisch im System verbucht.")
-            st.session_state["lu_erfolg_msg"] = f"Erfolgreich abgerechnet! {stunden_gefahren:.1f} Std. ergeben {end_preis:,.2f} €."
-            st.rerun()
-            
-        if "lu_pdf_ready" in st.session_state:
-            st.success(st.session_state["lu_erfolg_msg"])
-            st.download_button(label="📄 PDF-Abrechnungsbeleg herunterladen", data=st.session_state["lu_pdf_ready"], file_name=f"LU_Abrechnung_{auf_id}.pdf", mime="application/pdf")
-            if st.button("🔄 Seite aktualisieren"):
-                del st.session_state["lu_pdf_ready"]
-                del st.session_state["lu_erfolg_msg"]
-                st.rerun()
-    else:
-        st.info("Hervorragend! Keine offenen LU-Aufträge im System.")
+    with col_b:
+        beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
+        if rechnungs_typ == "Lohnauftrag (Maschinen)":
+            maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines if 'verfuegbare_machines' in locals() else [])
+            stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0)
+        else:
+            maschinen = []
+            stundensatz = 0.0 # Wird bei Waren manuell eingetragen
 
+    # Abrechnungs-Formular
+    with st.form("rechnungs_form"):
+        c1, c2 = st.columns(2)
+        menge_oder_std = c1.number_input("Anzahl (Stunden / Menge):", min_value=0.1, step=0.1)
+        preis_manuell = c2.number_input("Gesamtpreis (€) (falls manuell):", min_value=0.0, step=1.0)
+        
+        submit_btn = st.form_submit_button("💰 Rechnung erstellen & PDF buchen")
+
+    if submit_btn:
+        # Berechnung
+        if rechnungs_typ == "Lohnauftrag (Maschinen)":
+            end_preis = menge_oder_std * stundensatz
+        else:
+            end_preis = preis_manuell
+
+        # Buchung im System
+        if kunde in db["hoefe"]:
+            db["hoefe"][kunde]["konto"] -= end_preis
+        db["hoefe"][lieferant]["konto"] += end_preis
+        speichere_globalen_speicher(db)
+
+        # PDF Erstellung
+        meta = f"<b>Verkäufer:</b> {HOF_MAPPING[lieferant]}<br/><b>Kunde:</b> {KUNDEN_MAPPING.get(kunde, kunde)}"
+        posten = [[f"Rechnung: {beschreibung}", f"{menge_oder_std} Einheiten", f"{end_preis:,.2f} €"]]
+        
+        pdf_buffer = erstelle_universal_pdf("RECHNUNG", meta, posten, end_preis, "Zahlung automatisch verbucht.")
+        st.session_state["lu_pdf_ready"] = pdf_buffer
+        st.success(f"Erfolgreich! {end_preis:,.2f} € wurden zwischen {lieferant} und {kunde} verbucht.")
+        st.rerun()
+
+    # Download Bereich
+    if "lu_pdf_ready" in st.session_state:
+        st.download_button("📄 PDF herunterladen", st.session_state["lu_pdf_ready"], "Rechnung.pdf", "application/pdf")
+        if st.button("Neue Rechnung"):
+            del st.session_state["lu_pdf_ready"]
+            st.rerun()
 # ==============================================================================
 # BEREICH 3: WARENVERKAUF & RECHNUNGEN
 # ==============================================================================
