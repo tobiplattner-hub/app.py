@@ -517,7 +517,7 @@ elif bereich == "💼 LU-Auftragsbuch":
     with st.form("rechnungs_form"):
         c1, c2 = st.columns(2)
         menge = c1.number_input("Anzahl (Stunden / Menge):", min_value=0.1, step=0.1)
-        preis_manuell = c2.number_input("Gesamtpreis (€):", min_value=0.0, step=1.0)
+        preis_manuell = c2.number_input("Gesamtpreis (€):", min_value=0.0, step=0.1)
         
         submit_btn = st.form_submit_button("💰 Rechnung erstellen & PDF buchen")
 
