@@ -1517,42 +1517,40 @@ elif bereich == "🏭 Produktionsplaner":
 # SIDEBAR-BESTELLUNGEN (PDF-Generator)
 # ==============================================================================
 with st.sidebar.expander("🛒 Warenbestellung (PDF)"):
-    st.markdown(" 🛒 Neue Bestellung")
+    st.markdown("### 🛒 Neue Bestellung")
     
-    # Eingabefelder
-    b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x), key="sidebar_b_hof")
-    b_gut = st.selectbox("Ware / Betriebsmittel:", ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid", "Weizen", "Gerste", "Mais"], key="sidebar_b_gut")
-    b_menge = st.number_input("Menge (L/kg/Stück):", min_value=1, value=1000, step=500, key="sidebar_b_menge")
-    
-    # Preisberechnung (greift auf die vorhandene Preisliste in db["preise"] zu)
-    einzelpreis = db.get("preise", {}).get(b_gut, 1.0) / 1000  # Annahme: Preis pro 1000 Einheiten
-    b_gesamt = b_menge * einzelpreis
+    # 1. Sicherer Check: Sind unsere Mapping-Daten überhaupt da?
+    if 'HOF_MAPPING' not in locals() or 'db' not in locals():
+        st.warning("Daten werden geladen...")
+    else:
+        # 2. Eingabefelder mit absolut eindeutigen Keys
+        b_hof = st.selectbox("Bestellender Hof:", ["Hof 1", "Hof 2", "Hof 3"], 
+                             format_func=lambda x: HOF_MAPPING.get(x, x), key="pdf_sidebar_hof")
+        
+        b_gut = st.selectbox("Ware:", ["Diesel", "Saatgut", "Dünger", "Kalk", "Herbizid", "Weizen", "Gerste", "Mais"], 
+                             key="pdf_sidebar_gut")
+        
+        b_menge = st.number_input("Menge:", min_value=1, value=1000, step=500, key="pdf_sidebar_menge")
+        
+        # 3. Preisberechnung (mit .get() um Fehler zu vermeiden)
+        einzelpreis = db.get("preise", {}).get(b_gut, 1.0) / 1000 
+        b_gesamt = b_menge * einzelpreis
 
-    if st.button("📄 PDF-Bestellschein erstellen"):
-        # Metadaten für das PDF
-        meta_text = f"<b>Auftraggeber:</b> {HOF_MAPPING.get(b_hof, b_hof)}<br/><b>Datum:</b> {datetime.now().strftime('%d.%m.%Y')}"
-        
-        # Posten für den Generator (Liste von Listen: [Beschreibung, Details, Preis])
-        posten = [[f"Bestellung: {b_gut}", f"{b_menge:,} Einheiten", f"{b_gesamt:,.2f} €"]]
-        
-        # Aufruf deiner bereits bestehenden Funktion
-        pdf_buffer = erstelle_universal_pdf(
-            "BESTELLSCHEIN", 
-            meta_text, 
-            posten, 
-            b_gesamt, 
-            "Hinweis: Bitte bei der Zentrale zur Abholung bereitstellen."
-        )
-        
-        # Speichern im Session State für den Download
-        st.session_state["pdf_bestellung"] = pdf_buffer
-        st.success("PDF wurde generiert!")
+        # 4. Button-Logik ohne st.rerun() direkt im Button
+        if st.button("📄 PDF-Bestellschein erstellen"):
+            meta_text = f"<b>Auftraggeber:</b> {HOF_MAPPING.get(b_hof, b_hof)}"
+            posten = [[f"Bestellung: {b_gut}", f"{b_menge:,} Einheiten", f"{b_gesamt:,.2f} €"]]
+            
+            # PDF-Generator aufrufen
+            pdf_buffer = erstelle_universal_pdf("BESTELLSCHEIN", meta_text, posten, b_gesamt, "Abholung bei Zentrale.")
+            st.session_state["pdf_bestellung"] = pdf_buffer
+            st.success("PDF bereit!")
 
-    # Download-Button (erscheint erst, wenn PDF erstellt wurde)
-    if "pdf_bestellung" in st.session_state:
-        st.download_button(
-            label="📥 PDF herunterladen", 
-            data=st.session_state["pdf_bestellung"], 
-            file_name=f"Bestellung_{b_gut}_{datetime.now().strftime('%H%M')}.pdf", 
-            mime="application/pdf"
-        )
+        # 5. Download-Button
+        if "pdf_bestellung" in st.session_state:
+            st.download_button(
+                label="📥 PDF herunterladen", 
+                data=st.session_state["pdf_bestellung"], 
+                file_name=f"Bestellung_{b_gut}.pdf", 
+                mime="application/pdf"
+            )
