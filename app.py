@@ -501,7 +501,7 @@ elif bereich == "💼 LU-Auftragsbuch":
     
     with col_a:
         kunde = st.selectbox("Auftraggeber:", KUNDEN_AUSWAHL, format_func=lambda x: KUNDEN_MAPPING.get(x, x))
-        lieferant = st.selectbox("Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING[x])
+        lieferant = st.selectbox("Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING(x, x))
     
     with col_b:
         beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
