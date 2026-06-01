@@ -554,7 +554,9 @@ elif bereich == "💼 LU-Auftragsbuch":
         speichere_globalen_speicher(db)
 
         # PDF Erstellung mit Formatierung ohne Tausenderpunkt
-        meta = f"<b>Verkäufer:</b> {lieferant}<br/><b>Kunde:</b> {KUNDEN_MAPPING.get(kunde, kunde)}"
+        lieferant_key = lieferant.split(" -")[0] # Stellt sicher, dass wir "Hof 1", "Hof 2" oder "Hof 3" haben
+        aktueller_name = db["hoefe"][lieferant_key]["name"]
+        meta = f"<b>Verkäufer:</b> {aktueller_name}<br/><b>Kunde:</b> {KUNDEN_MAPPING.get(kunde, kunde)}"
         
         # Preis-String: .2f für Dezimalstellen, replace für Komma statt Punkt, kein Tausendertrenner
         preis_str = f"{end_preis:.2f}".replace(".", ",")
