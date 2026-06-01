@@ -533,9 +533,14 @@ elif bereich == "💼 LU-Auftragsbuch":
         if rechnungs_typ != "Lohnauftrag (Maschinen)":
              stundensatz = st.number_input("Betrag (€):", min_value=0.0, value=0.0, step=1.0)
     # Abrechnungs-Formular
+   # Abrechnungs-Formular
     with st.form("rechnungs_form"):
         c1, c2 = st.columns(2)
-        menge = c1.number_input("Anzahl (Stunden / Menge):", min_value=0.1, step=0.1)
+        
+        # Dynamisches Label basierend auf der Auswahl
+        label_text = "Stunden" if rechnungs_typ == "Lohnauftrag (Maschinen)" else "Menge (Einheiten)"
+        
+        menge = c1.number_input(f"Anzahl ({label_text}):", min_value=0.1, step=0.1)
         preis_manuell = c2.number_input("Gesamtpreis (€):", min_value=0.0, step=0.1)
         
         submit_btn = st.form_submit_button("💰 Rechnung erstellen & PDF buchen")
