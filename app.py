@@ -506,20 +506,32 @@ elif bereich == "💼 LU-Auftragsbuch":
     with col_b:
         beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
         
+        # Initialisierung für den Stundensatz
+        stundensatz = 0.0 
+        
         if rechnungs_typ == "Lohnauftrag (Maschinen)":
-            # Hier greifen wir auf das Google Sheet zu, das Sie oben geladen haben
-            if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
-                verfuegbare_machines = df_sheet_masch['geraet'].dropna().tolist()
+            # Sicherstellen, dass das Sheet existiert
+            if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns and 'Preis' in df_sheet_masch.columns:
+                # 1. Mapping erstellen (Name -> Preis)
+                preis_mapping = dict(zip(df_sheet_masch['geraet'], df_sheet_masch['Preis']))
+                verfuegbare_machines = list(preis_mapping.keys())
+                
+                # 2. Auswahl
                 maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines)
+                
+                # 3. Summe berechnen
+                if maschinen:
+                    stundensatz = sum([preis_mapping.get(m, 0.0) for m in maschinen])
+                    st.info(f"Berechneter Stundensatz: **{stundensatz:,.2f} €/h**")
             else:
-                st.error("Maschinenliste aus Google Sheet nicht verfügbar!")
+                st.error("Maschinenliste oder Preisspalte nicht verfügbar!")
                 maschinen = []
-            
-            stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0, step=1.0)
         else:
             maschinen = []
-            stundensatz = 0.0
 
+        # Falls Warenlieferung, manuelle Eingabe erlauben (optional)
+        if rechnungs_typ != "Lohnauftrag (Maschinen)":
+             stundensatz = st.number_input("Betrag (€):", min_value=0.0, value=0.0, step=1.0)
     # Abrechnungs-Formular
     with st.form("rechnungs_form"):
         c1, c2 = st.columns(2)
