@@ -504,7 +504,7 @@ elif bereich == "💼 LU-Auftragsbuch":
         lieferant = st.selectbox("Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x))
     
     with col_b:
-    beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
+        beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
     
     if rechnungs_typ == "Lohnauftrag (Maschinen)":
         # HIER DIE KORREKTUR: Maschinenliste aus der DB holen
