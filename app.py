@@ -505,22 +505,20 @@ elif bereich == "💼 LU-Auftragsbuch":
     
     with col_b:
         beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
-    
-    if rechnungs_typ == "Lohnauftrag (Maschinen)":
-        # HIER DIE KORREKTUR: Maschinenliste aus der DB holen
-        # Stellen Sie sicher, dass 'db' Zugriff auf die Maschinen hat
-        verfuegbare_machines = list(db.get("maschinen", {}).keys())
         
-        if not verfuegbare_machines:
-            st.warning("Keine Maschinen in der Datenbank gefunden.")
-            maschinen = []
-        else:
-            maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines)
+        if rechnungs_typ == "Lohnauftrag (Maschinen)":
+            # Hier greifen wir auf das Google Sheet zu, das Sie oben geladen haben
+            if df_sheet_masch is not None and 'geraet' in df_sheet_masch.columns:
+                verfuegbare_machines = df_sheet_masch['geraet'].dropna().tolist()
+                maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines)
+            else:
+                st.error("Maschinenliste aus Google Sheet nicht verfügbar!")
+                maschinen = []
             
-        stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0, step=1.0)
-    else:
-        maschinen = []
-        stundensatz = 0.0
+            stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0, step=1.0)
+        else:
+            maschinen = []
+            stundensatz = 0.0
 
     # Abrechnungs-Formular
     with st.form("rechnungs_form"):
