@@ -504,14 +504,23 @@ elif bereich == "💼 LU-Auftragsbuch":
         lieferant = st.selectbox("Verkäufer:", ["Hof 1", "Hof 2", "Hof 3"], format_func=lambda x: HOF_MAPPING.get(x, x))
     
     with col_b:
-        beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
-        if rechnungs_typ == "Lohnauftrag (Maschinen)":
-            # Sicherstellen, dass verfuegbare_machines definiert ist
-            maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines if 'verfuegbare_machines' in locals() else [])
-            stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0, step=1.0)
-        else:
+    beschreibung = st.text_input("Beschreibung (z.B. Weizen-Lieferung oder Lohnarbeit)")
+    
+    if rechnungs_typ == "Lohnauftrag (Maschinen)":
+        # HIER DIE KORREKTUR: Maschinenliste aus der DB holen
+        # Stellen Sie sicher, dass 'db' Zugriff auf die Maschinen hat
+        verfuegbare_machines = list(db.get("maschinen", {}).keys())
+        
+        if not verfuegbare_machines:
+            st.warning("Keine Maschinen in der Datenbank gefunden.")
             maschinen = []
-            stundensatz = 0.0
+        else:
+            maschinen = st.multiselect("Genutzte Maschinen:", verfuegbare_machines)
+            
+        stundensatz = st.number_input("Stundensatz gesamt (€/h):", min_value=0.0, value=50.0, step=1.0)
+    else:
+        maschinen = []
+        stundensatz = 0.0
 
     # Abrechnungs-Formular
     with st.form("rechnungs_form"):
